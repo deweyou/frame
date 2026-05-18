@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test-build-package:
+    name: Test, Build, Package
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Swift Version
+        run: swift --version
+
+      - name: Test
+        run: swift test
+
+      - name: Build
+        run: swift build
+
+      - name: Package App
+        run: scripts/package-app.sh
+
+      - name: Verify App Bundle
+        run: |
+          test -d .build/app/Frame.app
+          test -x .build/app/Frame.app/Contents/MacOS/Frame
+          plutil -lint .build/app/Frame.app/Contents/Info.plist
+          codesign -dv .build/app/Frame.app
