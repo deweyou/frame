@@ -60,9 +60,6 @@ final class HotKeyController {
         }
     }
 
-    isolated deinit {
-        unregister()
-    }
 }
 
 enum HotKeyRegistrationError: Error, LocalizedError {

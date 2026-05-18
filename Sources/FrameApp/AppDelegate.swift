@@ -34,6 +34,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        hotKeyController?.unregister()
+    }
+
     @objc func onCapture() {
         startCaptureFlow()
     }
