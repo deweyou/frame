@@ -1,0 +1,3 @@
+import FrameApp
+
+FrameApplication.run()
