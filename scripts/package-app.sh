@@ -6,6 +6,7 @@ APP_DIR="$ROOT_DIR/.build/app/Frame.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 EXECUTABLE_PATH="$ROOT_DIR/.build/release/Frame"
+CODESIGN_IDENTITY="${FRAME_CODESIGN_IDENTITY:--}"
 
 cd "$ROOT_DIR"
 
@@ -44,6 +45,11 @@ PLIST
 cp "$EXECUTABLE_PATH" "$MACOS_DIR/Frame"
 chmod +x "$MACOS_DIR/Frame"
 
-codesign --force --sign - "$APP_DIR"
+codesign --force --sign "$CODESIGN_IDENTITY" "$APP_DIR"
 
 echo "Packaged $APP_DIR"
+if [[ "$CODESIGN_IDENTITY" == "-" ]]; then
+    echo "Signed with ad-hoc identity"
+else
+    echo "Signed with identity: $CODESIGN_IDENTITY"
+fi

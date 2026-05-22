@@ -27,7 +27,7 @@ swift build
 scripts/package-app.sh
 ```
 
-The packaging script creates `.build/app/Frame.app` and ad-hoc signs it for local testing.
+The packaging script creates `.build/app/Frame.app` and signs it for local testing. It uses ad-hoc signing by default, or `FRAME_CODESIGN_IDENTITY` when a stable local Code Signing identity is available.
 
 ## Knowledge Base
 
@@ -43,7 +43,7 @@ Keep durable implementation decisions in docs when they affect future agent work
 
 ## macOS Permission Notes
 
-Screen Recording permission is tied to the app identity and code signature. Local ad-hoc builds can require re-authorization after rebuilding because the binary signature changes. For repeat manual testing, copy a packaged app to a stable path such as `~/Applications/Frame.app`, authorize that exact app, and avoid rebuilding between authorization and smoke testing.
+Screen Recording permission is tied to the app identity and code signature. Local ad-hoc builds can require re-authorization after rebuilding because the binary signature changes. For repeat manual testing, prefer a stable local Code Signing identity such as `FRAME_CODESIGN_IDENTITY="Frame Local Dev CLI"`, copy the packaged app to a stable path such as `~/Applications/Frame.app`, and authorize that exact app. Keep this as the default local development path even after Apple signing certificates exist; reserve Apple Development or Developer ID identities for explicit signing-path or distribution tests.
 
 ## Git Hygiene
 
