@@ -1,14 +1,21 @@
 import Carbon
+import FrameCore
 
 @MainActor
 final class HotKeyController {
     var onScreenshot: (@MainActor () -> Void)?
 
+    private(set) var shortcut: ScreenshotShortcut
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandlerRef: EventHandlerRef?
 
-    func register() throws {
+    init(shortcut: ScreenshotShortcut = .default) {
+        self.shortcut = shortcut
+    }
+
+    func register(shortcut: ScreenshotShortcut? = nil) throws {
         unregister()
+        let shortcut = shortcut ?? self.shortcut
 
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
@@ -34,7 +41,7 @@ final class HotKeyController {
         )
 
         let registerStatus = RegisterEventHotKey(
-            UInt32(kVK_ANSI_A),
+            UInt32(shortcut.carbonKeyCode),
             UInt32(cmdKey | shiftKey),
             hotKeyID,
             GetApplicationEventTarget(),
@@ -46,6 +53,8 @@ final class HotKeyController {
             unregister()
             throw HotKeyRegistrationError.registerHotKeyFailed(registerStatus)
         }
+
+        self.shortcut = shortcut
     }
 
     func unregister() {
@@ -60,6 +69,21 @@ final class HotKeyController {
         }
     }
 
+}
+
+private extension ScreenshotShortcut {
+    var carbonKeyCode: Int {
+        switch self {
+        case .commandShiftA:
+            kVK_ANSI_A
+        case .commandShiftS:
+            kVK_ANSI_S
+        case .commandShiftD:
+            kVK_ANSI_D
+        case .commandShiftF:
+            kVK_ANSI_F
+        }
+    }
 }
 
 enum HotKeyRegistrationError: Error, LocalizedError {

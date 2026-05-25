@@ -5,6 +5,13 @@ import FrameCore
 
 struct FrameCoreTests {
     @Test
+    func testFrameVersionConstants() {
+        #expect(FrameVersion.shortVersion == "0.1.0")
+        #expect(FrameVersion.build == "1")
+        #expect(FrameVersion.displayName == "0.1.0 (1)")
+    }
+
+    @Test
     func testDefaultShortcutsMatchMvpDefaults() {
         #expect(KeyboardShortcut.defaultScreenshot.key == "a")
         #expect(KeyboardShortcut.defaultScreenshot.displayName == "Command+Shift+A")
@@ -12,6 +19,21 @@ struct FrameCoreTests {
         #expect(KeyboardShortcut.defaultRecording.displayName == "Command+Shift+R")
         #expect(KeyboardShortcut.defaultRecording.isReservedOnly)
         #expect(!KeyboardShortcut.defaultScreenshot.isReservedOnly)
+    }
+
+    @Test
+    func testScreenshotShortcutOptionsExposeDisplayNames() {
+        #expect(ScreenshotShortcut.commandShiftA.keyboardShortcut.displayName == "Command+Shift+A")
+        #expect(ScreenshotShortcut.commandShiftS.keyboardShortcut.displayName == "Command+Shift+S")
+        #expect(ScreenshotShortcut.commandShiftD.keyboardShortcut.displayName == "Command+Shift+D")
+        #expect(ScreenshotShortcut.commandShiftF.keyboardShortcut.displayName == "Command+Shift+F")
+    }
+
+    @Test
+    func testScreenshotShortcutPersistenceFallsBackToDefault() {
+        #expect(ScreenshotShortcut.persistedValue(for: "commandShiftS") == .commandShiftS)
+        #expect(ScreenshotShortcut.persistedValue(for: nil) == .commandShiftA)
+        #expect(ScreenshotShortcut.persistedValue(for: "unknown") == .commandShiftA)
     }
 
     @Test
