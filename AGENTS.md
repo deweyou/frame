@@ -6,7 +6,7 @@ This repository uses Dewey's personal agent workflow. Inspect `.agents/` before 
 
 ## Project Context
 
-Frame is a native macOS screenshot utility. v0.1 focuses on the local screenshot loop:
+Frame is a native macOS screenshot utility. The current implemented scope focuses on the local screenshot loop:
 
 - menu bar app with no main window
 - `Command+Shift+A` region screenshot shortcut
@@ -15,7 +15,7 @@ Frame is a native macOS screenshot utility. v0.1 focuses on the local screenshot
 - PNG capture
 - Quick Access actions for copy, save, and close
 
-Recording, annotation, OCR, history, cloud sync, and scrolling capture are intentionally out of scope for v0.1.
+Recording, annotation, OCR, history, cloud sync, and scrolling capture are future product areas unless a task explicitly brings them into scope.
 
 ## Commands
 
@@ -36,6 +36,7 @@ Use `docs/` as the project knowledge base:
 - `docs/architecture.md` explains runtime boundaries and core components.
 - `docs/development.md` explains local setup, verification, packaging, and CI expectations.
 - `docs/permissions.md` explains macOS Screen Recording/TCC behavior.
+- `DESIGN.md` explains durable interface principles and HUD/Quick Access behavior.
 - `docs/superpowers/specs/` stores approved product specs.
 - `docs/superpowers/plans/` stores implementation plans.
 

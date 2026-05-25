@@ -1,6 +1,6 @@
 # Architecture
 
-Frame v0.1 is a native macOS menu bar app. AppKit owns the runtime because the product depends on system-level behavior: status items, global hotkeys, Screen Recording permission, full-screen overlay windows, pasteboard access, and local file output.
+Frame is a native macOS menu bar app. AppKit owns the runtime because the product depends on system-level behavior: status items, global hotkeys, Screen Recording permission, full-screen overlay windows, pasteboard access, and local file output.
 
 ## Targets
 
@@ -11,17 +11,21 @@ Frame v0.1 is a native macOS menu bar app. AppKit owns the runtime because the p
 
 ## Runtime Flow
 
+See `DESIGN.md` for interface principles, including the native glass HUD,
+background-aware contrast, and direct-manipulation capture behavior.
+
 1. `FrameApplication` starts `NSApplication` with accessory activation policy.
-2. `AppDelegate` creates the menu bar item, hotkey controller, overlay controller, capture service, and output writers.
+2. `AppDelegate` creates the menu bar item, hotkey controller, overlay controller, capture service, active-screen resolver, and output writers.
 3. `StatusItemController` exposes menu commands for screenshot, permission check, and quit.
 4. `HotKeyController` registers `Command+Shift+A` through Carbon and routes it to the screenshot flow.
 5. `ScreenRecordingPermission` checks and requests macOS Screen Recording access.
 6. `SelectionOverlayController` creates one overlay per connected `NSScreen`.
-7. `SelectionOverlayWindow` shows a single active editable selection across displays, supports drag adjustment, follows it with one compact glass HUD for size and confirmation, and returns a global Cocoa screen rectangle only after explicit confirmation.
+7. `SelectionOverlayWindow` shows a single active editable selection across displays, supports drag adjustment, follows it with a compact native glass HUD for the active capture mode and size, and returns a global Cocoa screen rectangle after keyboard confirmation.
 8. `CaptureService` converts the selected Cocoa rectangle into a Quartz capture rectangle and returns PNG data plus `NSImage`.
-9. `QuickAccessPanelController` presents a fixed-size bottom-right screenshot preview with hover actions for copy, save, and close.
-10. `ClipboardWriter` writes the captured image to `NSPasteboard`.
-11. `ScreenshotFileWriter` saves PNG data to Desktop using `ScreenshotNaming`.
+9. `ActiveScreenResolver` resolves the active window rectangle, falling back to the mouse screen or main screen.
+10. `QuickAccessPanelController` presents fixed-size screenshot previews at the active screen's bottom-left corner, stacks multiple previews upward, follows active-screen changes while previews are visible, and exposes hover actions for copy, save, and close.
+11. `ClipboardWriter` writes the captured image to `NSPasteboard`.
+12. `ScreenshotFileWriter` saves PNG data to Desktop using `ScreenshotNaming`.
 
 ## Boundaries
 
