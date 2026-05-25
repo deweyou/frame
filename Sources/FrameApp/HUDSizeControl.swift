@@ -151,9 +151,6 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         editingOriginalValue = field.stringValue
         editingDimension = field === widthField ? .width : .height
         selectAll(in: field)
-        DispatchQueue.main.async {
-            self.selectAll(in: field)
-        }
     }
 
     func controlTextDidEndEditing(_ notification: Notification) {
