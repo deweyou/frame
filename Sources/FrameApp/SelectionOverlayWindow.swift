@@ -225,7 +225,13 @@ private final class SelectionOverlayView: NSView {
     }
 
     override func flagsChanged(with event: NSEvent) {
-        isShiftTemporarilyLocking = event.modifierFlags.contains(.shift)
+        let isShiftPressed = event.modifierFlags.contains(.shift)
+        if !isShiftPressed,
+           case let .create(startPoint, _) = dragOperation {
+            dragOperation = .create(startPoint: startPoint, ratio: nil)
+        }
+
+        isShiftTemporarilyLocking = isShiftPressed
         updateMetrics()
         super.flagsChanged(with: event)
     }
@@ -690,7 +696,7 @@ private final class SelectionOverlayView: NSView {
                 return
             }
 
-            if let ratio {
+            if let ratio, isShiftTemporarilyLocking {
                 selectionRect = SelectionSizing.fit(aspectRatio: ratio, inside: proposed)
             } else if isShiftTemporarilyLocking {
                 let capturedRatio = SelectionAspectRatio(width: proposed.width, height: proposed.height)
