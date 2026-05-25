@@ -388,17 +388,11 @@ private final class SelectionOverlayView: NSView {
 
         let dotSize = min(8, max(5, min(selectionRect.width, selectionRect.height) / 12))
         let dotRadius = dotSize / 2
-        let inset = dotRadius + 1
-        let rect = selectionRect.insetBy(dx: inset, dy: inset)
-        guard rect.width > 0, rect.height > 0 else {
-            return
-        }
-
         let points = [
-            CGPoint(x: rect.minX, y: rect.minY),
-            CGPoint(x: rect.maxX, y: rect.minY),
-            CGPoint(x: rect.minX, y: rect.maxY),
-            CGPoint(x: rect.maxX, y: rect.maxY),
+            CGPoint(x: selectionRect.minX, y: selectionRect.minY),
+            CGPoint(x: selectionRect.maxX, y: selectionRect.minY),
+            CGPoint(x: selectionRect.minX, y: selectionRect.maxY),
+            CGPoint(x: selectionRect.maxX, y: selectionRect.maxY),
         ]
 
         for point in points {
@@ -409,7 +403,7 @@ private final class SelectionOverlayView: NSView {
                 height: dotSize
             )
             let dotPath = NSBezierPath(ovalIn: dotRect)
-            let isBottomRight = point.x == rect.maxX && point.y == rect.minY
+            let isBottomRight = point.x == selectionRect.maxX && point.y == selectionRect.minY
             (isBottomRight ? NSColor.systemGreen : NSColor.white).withAlphaComponent(0.96).setFill()
             dotPath.fill()
         }
@@ -461,7 +455,7 @@ private final class SelectionOverlayView: NSView {
         guard let displayedLocalRect else {
             hudStackView.isHidden = !showsCenteredHUDWhenEmpty
             modeView.isHidden = !showsCenteredHUDWhenEmpty
-            sizeView.isHidden = true
+            sizeView.isHidden = !showsCenteredHUDWhenEmpty
             sizeLabel.stringValue = "0 x 0"
             positionHUD()
             return
@@ -477,7 +471,7 @@ private final class SelectionOverlayView: NSView {
 
     private func positionHUD() {
         let hasDisplayedSelection = displayedLocalRect != nil
-        let desiredHUDSize = hasDisplayedSelection ? hudSize : CGSize(width: 42, height: hudSize.height)
+        let desiredHUDSize = hasDisplayedSelection ? hudSize : hudSize
         let visibleSize = CGSize(width: min(desiredHUDSize.width, bounds.width - 24), height: desiredHUDSize.height)
         let fallbackOrigin = CGPoint(
             x: min(max(bounds.midX - visibleSize.width / 2, bounds.minX + 12), bounds.maxX - visibleSize.width - 12),
