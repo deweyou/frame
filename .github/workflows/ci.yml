@@ -18,6 +18,9 @@ jobs:
       - name: Show Swift Version
         run: swift --version
 
+      - name: AppKit Component E2E
+        run: swift test --filter HUDSizeControlTests
+
       - name: Test
         run: swift test
 

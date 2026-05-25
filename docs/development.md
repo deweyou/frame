@@ -152,6 +152,7 @@ Keep using the same `FRAME_CODESIGN_IDENTITY` and the same `~/Applications/Frame
 
 GitHub Actions runs on macOS and verifies:
 
+- AppKit component E2E with `swift test --filter HUDSizeControlTests`
 - `swift test`
 - `swift build`
 - `scripts/package-app.sh`
@@ -159,7 +160,7 @@ GitHub Actions runs on macOS and verifies:
 - generated `Info.plist` validity
 - generated app bundle signature metadata
 
-CI does not grant Screen Recording permission or run GUI smoke tests.
+CI does not grant Screen Recording permission or run full desktop GUI smoke tests. See `docs/testing.md` for the component E2E boundary and expectations for new interactive requirements.
 
 ## Local Permission Reset
 

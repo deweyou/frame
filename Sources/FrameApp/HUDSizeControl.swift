@@ -20,6 +20,7 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     private var foregroundColor = NSColor.white
     private var isFinishingEditing = false
     private var ignoresNextEndEditing = false
+    private var suppressesCommitAfterCancel = false
     private var lastWidthValue = "0"
     private var lastHeightValue = "0"
 
@@ -155,6 +156,7 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
 
         editingOriginalValue = field.stringValue
         editingDimension = field === widthField ? .width : .height
+        suppressesCommitAfterCancel = false
     }
 
     func controlTextDidEndEditing(_ notification: Notification) {
@@ -177,7 +179,9 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     ) -> Bool {
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
             ensureEditingDimension(for: control)
+            suppressesCommitAfterCancel = true
             finishEditing(.cancel)
+            ignoresNextEndEditing = true
             window?.makeFirstResponder(window?.contentView)
             return true
         }
@@ -235,7 +239,13 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         self.editingDimension = nil
 
         guard action == .commit else {
-            field.stringValue = editingOriginalValue
+            restore(field)
+            return
+        }
+
+        guard !suppressesCommitAfterCancel else {
+            restore(field)
+            suppressesCommitAfterCancel = false
             return
         }
 

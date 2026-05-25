@@ -157,6 +157,7 @@ struct HUDSizeControlTests {
 
         let editor = try #require(widthField.currentEditor() as? NSTextView)
         editor.replaceCharacters(in: editor.selectedRange, with: "640")
+        committedWidth = nil
         #expect(harness.control.control(
             widthField,
             textView: editor,
@@ -164,6 +165,42 @@ struct HUDSizeControlTests {
         ))
 
         #expect(committedWidth == 640)
+    }
+
+    @Test("height field commits editor text")
+    func heightFieldCommitsEditorText() throws {
+        let harness = HUDSizeControlHarness()
+        defer {
+            harness.close()
+        }
+
+        var committedHeight: Int?
+        harness.control.onHeightCommit = { value in
+            committedHeight = value
+        }
+
+        harness.control.update(
+            width: 1280,
+            height: 720,
+            maximumWidth: 4096,
+            maximumHeight: 2304,
+            isLocked: false,
+            foregroundColor: .labelColor
+        )
+
+        let heightField = try #require(harness.heightField)
+        #expect(harness.window.makeFirstResponder(heightField))
+        heightField.selectText(nil)
+
+        let editor = try #require(heightField.currentEditor() as? NSTextView)
+        editor.replaceCharacters(in: editor.selectedRange, with: "480")
+        #expect(harness.control.control(
+            heightField,
+            textView: editor,
+            doCommandBy: #selector(NSResponder.insertNewline(_:))
+        ))
+
+        #expect(committedHeight == 480)
     }
 
     @Test("width field allows values above screen maximum to be clamped by overlay")
@@ -273,6 +310,81 @@ struct HUDSizeControlTests {
 
         #expect(editor.string == "1")
     }
+
+    @Test("metrics refresh updates inactive dimension while preserving active editor")
+    func metricsRefreshUpdatesInactiveDimensionWhilePreservingActiveEditor() throws {
+        let harness = HUDSizeControlHarness()
+        defer {
+            harness.close()
+        }
+
+        harness.control.update(
+            width: 1280,
+            height: 720,
+            maximumWidth: 4096,
+            maximumHeight: 2304,
+            isLocked: false,
+            foregroundColor: .labelColor
+        )
+
+        let widthField = try #require(harness.widthField)
+        let heightField = try #require(harness.heightField)
+        #expect(harness.window.makeFirstResponder(widthField))
+        widthField.selectText(nil)
+
+        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        editor.replaceCharacters(in: editor.selectedRange, with: "1")
+
+        harness.control.update(
+            width: 0,
+            height: 600,
+            maximumWidth: 4096,
+            maximumHeight: 2304,
+            isLocked: false,
+            foregroundColor: .labelColor
+        )
+
+        #expect(editor.string == "1")
+        #expect(heightField.stringValue == "600")
+    }
+
+    @Test("lock button commits active edit before toggling")
+    func lockButtonCommitsActiveEditBeforeToggling() throws {
+        let harness = HUDSizeControlHarness()
+        defer {
+            harness.close()
+        }
+
+        var committedWidth: Int?
+        var toggled = false
+        harness.control.onWidthCommit = { value in
+            committedWidth = value
+        }
+        harness.control.onLockToggle = {
+            toggled = true
+        }
+
+        harness.control.update(
+            width: 1280,
+            height: 720,
+            maximumWidth: 4096,
+            maximumHeight: 2304,
+            isLocked: false,
+            foregroundColor: .labelColor
+        )
+
+        let widthField = try #require(harness.widthField)
+        #expect(harness.window.makeFirstResponder(widthField))
+        widthField.selectText(nil)
+
+        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        editor.replaceCharacters(in: editor.selectedRange, with: "640")
+        harness.linkButton?.performClick(nil)
+
+        #expect(committedWidth == 640)
+        #expect(toggled)
+    }
+
 }
 
 @MainActor
@@ -299,6 +411,16 @@ private final class HUDSizeControlHarness {
     var widthField: NSTextField? {
         control.subviews.compactMap { $0 as? NSTextField }
             .first { $0.identifier?.rawValue == "width" }
+    }
+
+    var heightField: NSTextField? {
+        control.subviews.compactMap { $0 as? NSTextField }
+            .first { $0.identifier?.rawValue == "height" }
+    }
+
+    var linkButton: NSButton? {
+        control.subviews.compactMap { $0 as? NSButton }
+            .first { $0.toolTip == "锁定比例" }
     }
 
     func close() {

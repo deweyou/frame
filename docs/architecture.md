@@ -8,6 +8,7 @@ Frame is a native macOS menu bar app. AppKit owns the runtime because the produc
 - `FrameApp`: AppKit adapters and user-facing capture flow.
 - `FrameCore`: deterministic helpers that can be tested without AppKit.
 - `FrameCoreTests`: unit tests for core behavior.
+- `FrameAppTests`: AppKit component E2E tests for stable HUD and interaction behavior.
 
 ## Runtime Flow
 
