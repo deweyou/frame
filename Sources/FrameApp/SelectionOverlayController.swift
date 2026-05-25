@@ -4,11 +4,12 @@ import FrameCore
 @MainActor
 final class SelectionOverlayController {
     private var overlayWindows: [SelectionOverlayWindow] = []
-    private var completion: ((CGRect?) -> Void)?
+    private var completion: ((SelectionCapture?) -> Void)?
     private var keyMonitor: Any?
     private var lastSelectedRect: CGRect?
+    private let windowCandidateProvider = WindowCandidateProvider()
 
-    func startSelection(completion: @escaping (CGRect?) -> Void) {
+    func startSelection(completion: @escaping (SelectionCapture?) -> Void) {
         finishSelection(with: nil)
 
         self.completion = completion
@@ -23,12 +24,14 @@ final class SelectionOverlayController {
         NSApp.activate(ignoringOtherApps: true)
 
         let initialRect = lastSelectedRect
+        let activeScreen = activeScreen(from: screens)
         var createdWindows: [SelectionOverlayWindow] = []
         for screen in screens {
             var createdWindow: SelectionOverlayWindow?
             let window = SelectionOverlayWindow(
                 screen: screen,
                 initialGlobalRect: initialRect,
+                showsCenteredHUDWhenEmpty: screen === activeScreen,
                 onInteraction: { [weak self] in
                     guard let createdWindow else {
                         return
@@ -36,8 +39,11 @@ final class SelectionOverlayController {
 
                     self?.activate(createdWindow)
                 },
-                onComplete: { [weak self] selectedRect in
-                    self?.finishSelection(with: selectedRect)
+                onWindowSelectionRequested: { [weak self] globalPoint in
+                    self?.windowCandidateProvider.candidate(at: globalPoint)
+                },
+                onComplete: { [weak self] selection in
+                    self?.finishSelection(with: selection)
                 }
             )
             createdWindow = window
@@ -55,12 +61,21 @@ final class SelectionOverlayController {
     private func activate(_ activeWindow: SelectionOverlayWindow) {
         for window in overlayWindows where window !== activeWindow {
             window.clearSelection()
+            window.setShowsCenteredHUDWhenEmpty(false)
         }
 
+        activeWindow.setShowsCenteredHUDWhenEmpty(true)
         activeWindow.makeKey()
     }
 
-    private func finishSelection(with selectedRect: CGRect?) {
+    private func activeScreen(from screens: [NSScreen]) -> NSScreen {
+        let mouseLocation = NSEvent.mouseLocation
+        return screens.first { $0.frame.contains(mouseLocation) }
+            ?? NSScreen.main
+            ?? screens[0]
+    }
+
+    private func finishSelection(with selection: SelectionCapture?) {
         guard let completion else {
             return
         }
@@ -68,8 +83,8 @@ final class SelectionOverlayController {
         self.completion = nil
         removeKeyMonitor()
 
-        if let selectedRect {
-            lastSelectedRect = selectedRect
+        if let selection {
+            lastSelectedRect = selection.rect
         }
 
         for window in overlayWindows {
@@ -78,21 +93,21 @@ final class SelectionOverlayController {
         }
         overlayWindows.removeAll()
 
-        completion(selectedRect)
+        completion(selection)
     }
 
     private func confirmCurrentSelection() {
-        guard let selectedRect = overlayWindows.first(where: { $0.hasSelection })?.selectedGlobalRect else {
+        guard let selection = overlayWindows.first(where: { $0.activeSelection != nil })?.activeSelection else {
             NSSound.beep()
             return
         }
 
-        guard SelectionGeometry.isValidSelection(selectedRect) else {
+        guard SelectionGeometry.isValidSelection(selection.rect) else {
             NSSound.beep()
             return
         }
 
-        finishSelection(with: selectedRect)
+        finishSelection(with: selection)
     }
 
     private func installKeyMonitor() {

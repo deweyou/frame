@@ -10,13 +10,17 @@ final class SelectionOverlayWindow {
     init(
         screen: NSScreen,
         initialGlobalRect: CGRect?,
+        showsCenteredHUDWhenEmpty: Bool,
         onInteraction: @escaping () -> Void,
-        onComplete: @escaping (CGRect?) -> Void
+        onWindowSelectionRequested: @escaping (CGPoint) -> WindowCandidate?,
+        onComplete: @escaping (SelectionCapture?) -> Void
     ) {
         overlayView = SelectionOverlayView(
             screen: screen,
             initialGlobalRect: initialGlobalRect,
+            showsCenteredHUDWhenEmpty: showsCenteredHUDWhenEmpty,
             onInteraction: onInteraction,
+            onWindowSelectionRequested: onWindowSelectionRequested,
             onComplete: onComplete
         )
 
@@ -58,8 +62,20 @@ final class SelectionOverlayWindow {
         overlayView.selectedGlobalRect
     }
 
+    var activeSelection: SelectionCapture? {
+        overlayView.activeSelection
+    }
+
     func clearSelection() {
         overlayView.clearSelection()
+    }
+
+    func setShowsCenteredHUDWhenEmpty(_ showsCenteredHUDWhenEmpty: Bool) {
+        overlayView.setShowsCenteredHUDWhenEmpty(showsCenteredHUDWhenEmpty)
+    }
+
+    func contains(globalPoint: CGPoint) -> Bool {
+        window.frame.contains(globalPoint)
     }
 
     func orderOut(_ sender: Any?) {
@@ -76,7 +92,8 @@ private final class SelectionOverlayView: NSView {
     private let hudSize = CGSize(width: 158, height: 42)
     private let screenFrame: CGRect
     private let onInteraction: () -> Void
-    private let onComplete: (CGRect?) -> Void
+    private let onWindowSelectionRequested: (CGPoint) -> WindowCandidate?
+    private let onComplete: (SelectionCapture?) -> Void
     private let hudStackView = NSStackView()
     private let modeView = NSVisualEffectView()
     private let sizeView = NSVisualEffectView()
@@ -84,17 +101,23 @@ private final class SelectionOverlayView: NSView {
     private var hudTheme: HUDTheme = .lightContent
 
     private var selectionRect: CGRect?
+    private var windowCandidate: WindowCandidate?
     private var dragOperation: SelectionDragOperation?
     private var hasCompleted = false
+    private var showsCenteredHUDWhenEmpty: Bool
 
     init(
         screen: NSScreen,
         initialGlobalRect: CGRect?,
+        showsCenteredHUDWhenEmpty: Bool,
         onInteraction: @escaping () -> Void,
-        onComplete: @escaping (CGRect?) -> Void
+        onWindowSelectionRequested: @escaping (CGPoint) -> WindowCandidate?,
+        onComplete: @escaping (SelectionCapture?) -> Void
     ) {
         self.screenFrame = screen.frame
+        self.showsCenteredHUDWhenEmpty = showsCenteredHUDWhenEmpty
         self.onInteraction = onInteraction
+        self.onWindowSelectionRequested = onWindowSelectionRequested
         self.onComplete = onComplete
 
         super.init(frame: CGRect(origin: .zero, size: screen.frame.size))
@@ -126,9 +149,28 @@ private final class SelectionOverlayView: NSView {
         return globalRect(fromLocalRect: selectionRect)
     }
 
+    var activeSelection: SelectionCapture? {
+        if let windowCandidate {
+            return SelectionCapture(rect: windowCandidate.bounds, kind: .window)
+        }
+
+        guard let selectedGlobalRect else {
+            return nil
+        }
+
+        return SelectionCapture(rect: selectedGlobalRect, kind: .region)
+    }
+
     func clearSelection() {
         selectionRect = nil
+        windowCandidate = nil
         dragOperation = nil
+        updateMetrics()
+        needsDisplay = true
+    }
+
+    func setShowsCenteredHUDWhenEmpty(_ showsCenteredHUDWhenEmpty: Bool) {
+        self.showsCenteredHUDWhenEmpty = showsCenteredHUDWhenEmpty
         updateMetrics()
         needsDisplay = true
     }
@@ -141,6 +183,7 @@ private final class SelectionOverlayView: NSView {
     override func layout() {
         super.layout()
         positionHUD()
+        scheduleHUDThemeUpdate()
     }
 
     override func resetCursorRects() {
@@ -148,8 +191,14 @@ private final class SelectionOverlayView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        onInteraction()
         let point = clampedPoint(event.locationInWindow)
+
+        if event.clickCount == 2 {
+            selectWindowCandidate(at: point)
+            return
+        }
+
+        onInteraction()
         dragOperation = dragOperation(startingAt: point)
         updateMetrics()
         needsDisplay = true
@@ -160,6 +209,7 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
+        windowCandidate = nil
         updateSelection(for: dragOperation, currentPoint: clampedPoint(event.locationInWindow))
         updateMetrics()
         needsDisplay = true
@@ -186,14 +236,14 @@ private final class SelectionOverlayView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        guard let selectionRect else {
+        guard let displayedLocalRect else {
             NSColor.black.withAlphaComponent(0.38).setFill()
             bounds.fill()
             return
         }
 
-        drawDimmedBackdrop(excluding: selectionRect)
-        drawSelectionChrome(selectionRect)
+        drawDimmedBackdrop(excluding: displayedLocalRect)
+        drawSelectionChrome(displayedLocalRect)
     }
 
     private func configureHUD() {
@@ -337,45 +387,36 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
-        let cornerLength = min(16, selectionRect.width / 3, selectionRect.height / 3)
-        let inset: CGFloat = 1.5
-        let rect = selectionRect.insetBy(dx: inset, dy: inset)
-        guard rect.width > 0, rect.height > 0 else {
-            return
+        let dotSize = min(8, max(5, min(selectionRect.width, selectionRect.height) / 12))
+        let dotRadius = dotSize / 2
+        let points = [
+            CGPoint(x: selectionRect.minX, y: selectionRect.minY),
+            CGPoint(x: selectionRect.maxX, y: selectionRect.minY),
+            CGPoint(x: selectionRect.minX, y: selectionRect.maxY),
+            CGPoint(x: selectionRect.maxX, y: selectionRect.maxY),
+        ]
+
+        for point in points {
+            let dotRect = CGRect(
+                x: point.x - dotRadius,
+                y: point.y - dotRadius,
+                width: dotSize,
+                height: dotSize
+            )
+            let dotPath = NSBezierPath(ovalIn: dotRect)
+            let isBottomRight = point.x == selectionRect.maxX && point.y == selectionRect.minY
+            (isBottomRight ? NSColor.systemGreen : NSColor.white).withAlphaComponent(0.96).setFill()
+            dotPath.fill()
         }
-
-        let path = NSBezierPath()
-
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY + cornerLength))
-        path.line(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.line(to: CGPoint(x: rect.minX + cornerLength, y: rect.minY))
-
-        path.move(to: CGPoint(x: rect.maxX - cornerLength, y: rect.minY))
-        path.line(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.line(to: CGPoint(x: rect.maxX, y: rect.minY + cornerLength))
-
-        path.move(to: CGPoint(x: rect.minX, y: rect.maxY - cornerLength))
-        path.line(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.line(to: CGPoint(x: rect.minX + cornerLength, y: rect.maxY))
-
-        path.move(to: CGPoint(x: rect.maxX - cornerLength, y: rect.maxY))
-        path.line(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.line(to: CGPoint(x: rect.maxX, y: rect.maxY - cornerLength))
-
-        NSColor.white.withAlphaComponent(0.96).setStroke()
-        path.lineWidth = 3
-        path.lineCapStyle = .round
-        path.lineJoinStyle = .round
-        path.stroke()
     }
 
-    private func completeSelection(with selectedRect: CGRect?) {
+    private func completeSelection(with selection: SelectionCapture?) {
         guard !hasCompleted else {
             return
         }
 
         hasCompleted = true
-        onComplete(selectedRect)
+        onComplete(selection)
     }
 
     @objc private func regionModeButtonClicked() {
@@ -383,53 +424,75 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func confirmSelection() {
-        guard let selectionRect,
-              SelectionGeometry.isValidSelection(selectionRect) else {
+        guard let activeSelection,
+              SelectionGeometry.isValidSelection(activeSelection.rect) else {
             NSSound.beep()
             return
         }
 
-        completeSelection(with: globalRect(fromLocalRect: selectionRect))
+        completeSelection(with: activeSelection)
+    }
+
+    private func selectWindowCandidate(at localPoint: CGPoint) {
+        guard !hudStackView.frame.contains(localPoint) else {
+            return
+        }
+
+        onInteraction()
+        dragOperation = nil
+
+        guard let candidate = onWindowSelectionRequested(globalPoint(fromLocalPoint: localPoint)) else {
+            clearSelection()
+            return
+        }
+
+        windowCandidate = candidate
+        selectionRect = localRect(fromGlobalRect: candidate.bounds)
+        updateMetrics()
+        needsDisplay = true
     }
 
     private func updateMetrics() {
-        guard let selectionRect else {
-            hudStackView.isHidden = true
-            modeView.isHidden = true
-            sizeView.isHidden = true
+        guard let displayedLocalRect else {
+            hudStackView.isHidden = !showsCenteredHUDWhenEmpty
+            modeView.isHidden = !showsCenteredHUDWhenEmpty
+            sizeView.isHidden = !showsCenteredHUDWhenEmpty
             sizeLabel.stringValue = "0 x 0"
             positionHUD()
+            scheduleHUDThemeUpdate()
             return
         }
 
         hudStackView.isHidden = false
         modeView.isHidden = false
         sizeView.isHidden = false
-        sizeLabel.stringValue = "\(Int(selectionRect.width.rounded())) x \(Int(selectionRect.height.rounded()))"
+        sizeLabel.stringValue = "\(Int(displayedLocalRect.width.rounded())) x \(Int(displayedLocalRect.height.rounded()))"
         positionHUD()
-        updateHUDTheme()
+        scheduleHUDThemeUpdate()
     }
 
     private func positionHUD() {
-        let visibleSize = CGSize(width: min(hudSize.width, bounds.width - 24), height: hudSize.height)
+        let hasDisplayedSelection = displayedLocalRect != nil
+        let desiredHUDSize = hasDisplayedSelection ? hudSize : hudSize
+        let visibleSize = CGSize(width: min(desiredHUDSize.width, bounds.width - 24), height: desiredHUDSize.height)
         let fallbackOrigin = CGPoint(
-            x: max(bounds.minX + 12, bounds.midX - visibleSize.width / 2),
-            y: bounds.minY + 34
+            x: min(max(bounds.midX - visibleSize.width / 2, bounds.minX + 12), bounds.maxX - visibleSize.width - 12),
+            y: min(max(bounds.midY - visibleSize.height / 2, bounds.minY + 18), bounds.maxY - visibleSize.height - 18)
         )
 
-        guard let selectionRect else {
+        guard let displayedLocalRect else {
             hudStackView.frame = CGRect(origin: fallbackOrigin, size: visibleSize)
             return
         }
 
         let inset: CGFloat = 10
         let spacing: CGFloat = 10
-        let horizontalCenter = selectionRect.midX - visibleSize.width / 2
-        let insideBottomY = selectionRect.minY + inset
-        let belowY = selectionRect.minY - visibleSize.height - spacing
-        let aboveY = selectionRect.maxY + spacing
+        let horizontalCenter = displayedLocalRect.midX - visibleSize.width / 2
+        let insideBottomY = displayedLocalRect.minY + inset
+        let belowY = displayedLocalRect.minY - visibleSize.height - spacing
+        let aboveY = displayedLocalRect.maxY + spacing
         let canFitBelow = belowY >= bounds.minY + 18
-        let canFitInside = selectionRect.height >= visibleSize.height + inset * 2
+        let canFitInside = displayedLocalRect.height >= visibleSize.height + inset * 2
         let canFitAbove = aboveY + visibleSize.height <= bounds.maxY - 18
         let y = if canFitBelow {
             belowY
@@ -452,6 +515,14 @@ private final class SelectionOverlayView: NSView {
         modeView.subviews.first as? HUDIconButton
     }
 
+    private var displayedLocalRect: CGRect? {
+        if let windowCandidate {
+            return localRect(fromGlobalRect: windowCandidate.bounds)
+        }
+
+        return selectionRect
+    }
+
     private func updateHUDTheme() {
         let sampleRect = globalRect(fromLocalRect: hudStackView.frame.insetBy(dx: -10, dy: -10))
         guard let luminance = ScreenLuminanceSampler.averageLuminance(in: sampleRect) else {
@@ -459,6 +530,22 @@ private final class SelectionOverlayView: NSView {
         }
 
         applyHUDTheme(luminance < 0.48 ? .lightContent : .darkContent)
+    }
+
+    private func updateVisibleHUDTheme() {
+        guard !hudStackView.isHidden else {
+            return
+        }
+
+        updateHUDTheme()
+    }
+
+    private func scheduleHUDThemeUpdate() {
+        updateVisibleHUDTheme()
+
+        DispatchQueue.main.async { [weak self] in
+            self?.updateVisibleHUDTheme()
+        }
     }
 
     private func clampedPoint(_ point: CGPoint) -> CGPoint {
@@ -525,6 +612,13 @@ private final class SelectionOverlayView: NSView {
             y: screenFrame.minY + localRect.minY,
             width: localRect.width,
             height: localRect.height
+        )
+    }
+
+    private func globalPoint(fromLocalPoint localPoint: CGPoint) -> CGPoint {
+        CGPoint(
+            x: screenFrame.minX + localPoint.x,
+            y: screenFrame.minY + localPoint.y
         )
     }
 

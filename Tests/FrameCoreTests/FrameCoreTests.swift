@@ -91,4 +91,13 @@ struct FrameCoreTests {
         #expect(!SelectionGeometry.isValidSelection(CGRect(x: 0, y: 0, width: 10, height: 4)))
         #expect(SelectionGeometry.isValidSelection(CGRect(x: 0, y: 0, width: 8, height: 8)))
     }
+
+    @Test
+    func testSelectionCaptureMarksWindowSelections() {
+        let rect = CGRect(x: 10, y: 20, width: 320, height: 240)
+        let capture = SelectionCapture(rect: rect, kind: .window)
+
+        #expect(capture.rect == rect)
+        #expect(capture.kind == .window)
+    }
 }

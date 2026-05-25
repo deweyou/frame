@@ -71,9 +71,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let quickAccessAnchor = ActiveScreenResolver.preferredQuickAccessAnchor()
 
-        selectionOverlayController.startSelection { [weak self] selectedRect in
+        selectionOverlayController.startSelection { [weak self] selection in
             guard let self,
-                  let selectedRect else {
+                  let selection else {
                 return
             }
 
@@ -83,8 +83,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 do {
-                    let screenshot = try captureService.capture(rect: selectedRect)
+                    let screenshot = try captureService.capture(rect: selection.rect)
                     showQuickAccess(for: screenshot, anchor: quickAccessAnchor)
+                    NSLog("Frame 截图选区类型：\(selection.kind)")
                 } catch {
                     showCaptureFailedAlert(error)
                 }

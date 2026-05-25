@@ -116,20 +116,22 @@ Expected output should include `Frame Local Dev CLI` and at least `1 valid ident
 
 ## Manual Smoke Test
 
-1. Build and package:
+1. Build and package with the stable local signing identity:
 
    ```sh
-   scripts/package-app.sh
+   FRAME_CODESIGN_IDENTITY="Frame Local Dev CLI" scripts/package-app.sh
    ```
 
-2. Copy to a stable local path for permission testing:
+2. Replace the stable local app path for permission testing:
 
    ```sh
    mkdir -p ~/Applications
    rm -rf ~/Applications/Frame.app
-   cp -R .build/app/Frame.app ~/Applications/Frame.app
+   ditto .build/app/Frame.app ~/Applications/Frame.app
    open ~/Applications/Frame.app
    ```
+
+Agents should use this stable-sign-and-replace flow whenever the user asks to run a local GUI build, replace the local app, or test screenshot behavior manually. Do not use a bare ad-hoc `scripts/package-app.sh` for repeated local GUI testing unless the task is specifically testing ad-hoc signing.
 
 3. Grant Screen Recording permission when prompted.
 4. Quit and reopen `~/Applications/Frame.app`.

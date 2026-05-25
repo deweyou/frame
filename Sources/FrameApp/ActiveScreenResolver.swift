@@ -42,41 +42,11 @@ enum ActiveScreenResolver {
         if let frontmostProcessID,
            let frontmostWindow = layerZeroWindows
                .first(where: { ($0[kCGWindowOwnerPID as String] as? pid_t) == frontmostProcessID }),
-           let rect = cocoaRect(forWindowInfo: frontmostWindow) {
+           let rect = WindowCandidateProvider.cocoaRect(forWindowInfo: frontmostWindow) {
             return rect
         }
 
-        return layerZeroWindows.compactMap(cocoaRect(forWindowInfo:)).first
-    }
-
-    private static func cocoaRect(forWindowInfo windowInfo: [String: Any]) -> CGRect? {
-        guard let bounds = windowInfo[kCGWindowBounds as String] as? [String: Any],
-              let x = bounds["X"] as? CGFloat,
-              let y = bounds["Y"] as? CGFloat,
-              let width = bounds["Width"] as? CGFloat,
-              let height = bounds["Height"] as? CGFloat else {
-            return nil
-        }
-
-        let quartzRect = CGRect(x: x, y: y, width: width, height: height)
-        return cocoaRect(fromQuartzWindowRect: quartzRect)
-    }
-
-    private static func cocoaRect(fromQuartzWindowRect quartzRect: CGRect) -> CGRect {
-        let screenUnion = NSScreen.screens.reduce(CGRect.null) { union, screen in
-            union.union(screen.frame)
-        }
-
-        guard !screenUnion.isNull else {
-            return quartzRect
-        }
-
-        return CGRect(
-            x: quartzRect.minX,
-            y: screenUnion.maxY - quartzRect.maxY + screenUnion.minY,
-            width: quartzRect.width,
-            height: quartzRect.height
-        )
+        return layerZeroWindows.compactMap(WindowCandidateProvider.cocoaRect(forWindowInfo:)).first
     }
 
     private static func mouseScreen() -> NSScreen? {
