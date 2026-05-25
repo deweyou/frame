@@ -22,7 +22,8 @@ let package = Package(
         ),
         .target(
             name: "FrameApp",
-            dependencies: ["FrameCore"]
+            dependencies: ["FrameCore"],
+            exclude: ["Resources"]
         ),
         .target(
             name: "FrameCore"

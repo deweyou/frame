@@ -1,4 +1,5 @@
 import AppKit
+import FrameCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -9,18 +10,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let quickAccessPanelController = QuickAccessPanelController()
     private let clipboardWriter = ClipboardWriter()
     private let screenshotFileWriter = ScreenshotFileWriter()
+    private let settingsWindowController = SettingsWindowController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItemController = StatusItemController(
             onCapture: { [weak self] in
                 self?.onCapture()
             },
-            onCheckPermission: { [weak self] in
-                self?.onCheckPermission()
+            onSettings: { [weak self] in
+                self?.onSettings()
             }
         )
 
-        let hotKeyController = HotKeyController()
+        let hotKeyController = HotKeyController(shortcut: SettingsStore.screenshotShortcut())
         hotKeyController.onScreenshot = { [weak self] in
             self?.startCaptureFlow()
         }
@@ -48,6 +50,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             ScreenRecordingPermission.showMissingPermissionAlert()
         }
+    }
+
+    @objc func onSettings() {
+        settingsWindowController.show(
+            onShortcutChange: { [weak self] shortcut in
+                self?.changeScreenshotShortcut(to: shortcut) ?? false
+            },
+            onCheckPermission: { [weak self] in
+                self?.onCheckPermission()
+            }
+        )
     }
 
     func startCaptureFlow() {
@@ -121,10 +134,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func changeScreenshotShortcut(to shortcut: ScreenshotShortcut) -> Bool {
+        guard let hotKeyController else {
+            SettingsStore.setScreenshotShortcut(shortcut)
+            return true
+        }
+
+        let previousShortcut = hotKeyController.shortcut
+
+        do {
+            try hotKeyController.register(shortcut: shortcut)
+            SettingsStore.setScreenshotShortcut(shortcut)
+            NSLog("Frame 截图快捷键已更新为 \(shortcut.keyboardShortcut.displayName)")
+            return true
+        } catch {
+            do {
+                try hotKeyController.register(shortcut: previousShortcut)
+            } catch {
+                NSLog("Frame 恢复原快捷键失败: \(error.localizedDescription)")
+            }
+
+            showHotKeyRegistrationFailedAlert(error)
+            return false
+        }
+    }
+
     private func showHotKeyRegistrationFailedAlert(_ error: Error) {
         let alert = NSAlert()
         alert.messageText = "Frame 快捷键注册失败"
-        alert.informativeText = "Command+Shift+A 暂时无法使用。你仍然可以通过菜单栏使用截图功能。\n\n\(error.localizedDescription)"
+        alert.informativeText = "截图快捷键暂时无法使用。你仍然可以通过菜单栏使用截图功能。\n\n\(error.localizedDescription)"
         alert.addButton(withTitle: "好")
         alert.runModal()
     }
@@ -140,7 +178,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showPermissionReadyAlert() {
         let alert = NSAlert()
         alert.messageText = "Frame 屏幕录制权限已开启"
-        alert.informativeText = "你可以使用 Command+Shift+A 或菜单栏截图入口开始区域截图。"
+        let shortcut = SettingsStore.screenshotShortcut().keyboardShortcut.displayName
+        alert.informativeText = "你可以使用 \(shortcut) 或菜单栏截图入口开始区域截图。"
         alert.addButton(withTitle: "好")
         alert.runModal()
     }

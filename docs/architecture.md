@@ -16,16 +16,18 @@ background-aware contrast, and direct-manipulation capture behavior.
 
 1. `FrameApplication` starts `NSApplication` with accessory activation policy.
 2. `AppDelegate` creates the menu bar item, hotkey controller, overlay controller, capture service, active-screen resolver, and output writers.
-3. `StatusItemController` exposes menu commands for screenshot, permission check, and quit.
-4. `HotKeyController` registers `Command+Shift+A` through Carbon and routes it to the screenshot flow.
-5. `ScreenRecordingPermission` checks and requests macOS Screen Recording access.
-6. `SelectionOverlayController` creates one overlay per connected `NSScreen`.
-7. `SelectionOverlayWindow` shows a single active editable selection across displays, supports drag adjustment, follows it with a compact native glass HUD for the active capture mode and size, and returns a global Cocoa screen rectangle after keyboard confirmation.
-8. `CaptureService` converts the selected Cocoa rectangle into a Quartz capture rectangle and returns PNG data plus `NSImage`.
-9. `ActiveScreenResolver` resolves the active window rectangle, falling back to the mouse screen or main screen.
-10. `QuickAccessPanelController` presents fixed-size screenshot previews at the active screen's bottom-left corner, stacks multiple previews upward, follows active-screen changes while previews are visible, and exposes hover actions for copy, save, and close.
-11. `ClipboardWriter` writes the captured image to `NSPasteboard`.
-12. `ScreenshotFileWriter` saves PNG data to Desktop using `ScreenshotNaming`.
+3. `StatusItemController` exposes menu commands for screenshot, settings, and quit.
+4. `SettingsWindowController` hosts the SwiftUI settings window, including screenshot shortcut selection, Screen Recording permission checks, and about/version details.
+5. `SettingsStore` persists user-facing app settings in `UserDefaults`.
+6. `HotKeyController` registers the selected screenshot shortcut through Carbon and routes it to the screenshot flow.
+7. `ScreenRecordingPermission` checks and requests macOS Screen Recording access.
+8. `SelectionOverlayController` creates one overlay per connected `NSScreen`.
+9. `SelectionOverlayWindow` shows a single active editable selection across displays, supports drag adjustment, follows it with a compact native glass HUD for the active capture mode and size, and returns a global Cocoa screen rectangle after keyboard confirmation.
+10. `CaptureService` converts the selected Cocoa rectangle into a Quartz capture rectangle and returns PNG data plus `NSImage`.
+11. `ActiveScreenResolver` resolves the active window rectangle, falling back to the mouse screen or main screen.
+12. `QuickAccessPanelController` presents fixed-size screenshot previews at the active screen's bottom-left corner, stacks multiple previews upward, follows active-screen changes while previews are visible, and exposes hover actions for copy, save, and close.
+13. `ClipboardWriter` writes the captured image to `NSPasteboard`.
+14. `ScreenshotFileWriter` saves PNG data to Desktop using `ScreenshotNaming`.
 
 ## Boundaries
 
