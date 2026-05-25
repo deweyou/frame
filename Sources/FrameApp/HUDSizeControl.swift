@@ -19,7 +19,6 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     private var maximumHeight = 9999
     private var foregroundColor = NSColor.white
     private var isFinishingEditing = false
-    private var hasEditedActiveField = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -151,7 +150,6 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
 
         editingOriginalValue = field.stringValue
         editingDimension = field === widthField ? .width : .height
-        hasEditedActiveField = false
         selectAll(in: field)
     }
 
@@ -161,14 +159,6 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         }
 
         finishEditing(.commit)
-    }
-
-    func controlTextDidChange(_ notification: Notification) {
-        guard let textView = notification.userInfo?["NSFieldEditor"] as? NSTextView else {
-            return
-        }
-
-        sanitize(textView)
     }
 
     func control(
@@ -247,6 +237,13 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
             return
         }
 
+        guard value > 0,
+              value <= maximumValue(for: editingDimension) else {
+            field.stringValue = editingOriginalValue
+            NSSound.beep()
+            return
+        }
+
         switch editingDimension {
         case .width:
             onWidthCommit?(value)
@@ -274,57 +271,18 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         finishEditing(.commit)
     }
 
-    private func sanitize(_ textView: NSTextView) {
-        let original = textView.string
-        var sanitized = String(original.filter(\.isNumber))
-
-        if !hasEditedActiveField {
-            sanitized = firstEditReplacement(from: sanitized)
-            hasEditedActiveField = true
-        }
-
-        if let value = Int(sanitized) {
-            sanitized = "\(value)"
-        }
-
-        if sanitized.count > 4 {
-            sanitized = String(sanitized.prefix(4))
-        }
-
-        if let value = Int(sanitized),
-           value > maximumValueForActiveDimension() {
-            sanitized = "\(maximumValueForActiveDimension())"
-        }
-
-        guard sanitized != original else {
-            return
-        }
-
-        textView.string = sanitized
-        textView.setSelectedRange(NSRange(location: sanitized.count, length: 0))
-    }
-
-    private func firstEditReplacement(from digits: String) -> String {
-        let originalDigits = String(editingOriginalValue.filter(\.isNumber))
-        guard !originalDigits.isEmpty,
-              digits.count > originalDigits.count else {
-            return digits
-        }
-
-        if digits.hasPrefix(originalDigits) {
-            return String(digits.dropFirst(originalDigits.count))
-        }
-
-        if digits.hasSuffix(originalDigits) {
-            return String(digits.dropLast(originalDigits.count))
-        }
-
-        return digits
-    }
-
     private func selectAll(in field: NSTextField) {
         field.selectText(nil)
         field.currentEditor()?.selectAll(nil)
+    }
+
+    private func maximumValue(for dimension: SelectionSizeDimension) -> Int {
+        switch dimension {
+        case .width:
+            maximumWidth
+        case .height:
+            maximumHeight
+        }
     }
 
     private func field(for dimension: SelectionSizeDimension) -> NSTextField {
