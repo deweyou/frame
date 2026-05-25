@@ -89,7 +89,7 @@ final class SelectionOverlayWindow {
 
 @MainActor
 private final class SelectionOverlayView: NSView {
-    private let hudSize = CGSize(width: 158, height: 42)
+    private let hudSize = CGSize(width: 177, height: 42)
     private let screenFrame: CGRect
     private let onInteraction: () -> Void
     private let onWindowSelectionRequested: (CGPoint) -> WindowCandidate?
@@ -97,7 +97,7 @@ private final class SelectionOverlayView: NSView {
     private let hudStackView = NSStackView()
     private let modeView = NSVisualEffectView()
     private let sizeView = NSVisualEffectView()
-    private let sizeLabel = NSTextField(labelWithString: "0 x 0")
+    private let sizeControl = HUDSizeControl()
     private var hudTheme: HUDTheme = .lightContent
 
     private var selectionRect: CGRect?
@@ -105,6 +105,8 @@ private final class SelectionOverlayView: NSView {
     private var dragOperation: SelectionDragOperation?
     private var hasCompleted = false
     private var showsCenteredHUDWhenEmpty: Bool
+    private var sizingMode: SelectionSizingMode = .unlocked
+    private var isShiftTemporarilyLocking = false
 
     init(
         screen: NSScreen,
@@ -259,8 +261,8 @@ private final class SelectionOverlayView: NSView {
 
         configureGlass(sizeView, cornerRadius: 21)
         sizeView.isHidden = true
-        sizeView.addSubview(sizeLabel)
-        configureSizeLabel()
+        sizeView.addSubview(sizeControl)
+        configureSizeControl()
 
         hudStackView.addArrangedSubview(modeView)
         hudStackView.addArrangedSubview(sizeView)
@@ -273,20 +275,21 @@ private final class SelectionOverlayView: NSView {
         NSLayoutConstraint.activate([
             modeView.widthAnchor.constraint(equalToConstant: 42),
             modeView.heightAnchor.constraint(equalToConstant: hudSize.height),
-            sizeView.widthAnchor.constraint(equalToConstant: 109),
+            sizeView.widthAnchor.constraint(equalToConstant: 128),
             sizeView.heightAnchor.constraint(equalToConstant: hudSize.height),
         ])
 
         modeButton.translatesAutoresizingMaskIntoConstraints = false
-        sizeLabel.translatesAutoresizingMaskIntoConstraints = false
+        sizeControl.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             modeButton.centerXAnchor.constraint(equalTo: modeView.centerXAnchor),
             modeButton.centerYAnchor.constraint(equalTo: modeView.centerYAnchor),
             modeButton.widthAnchor.constraint(equalToConstant: 42),
             modeButton.heightAnchor.constraint(equalToConstant: 42),
-            sizeLabel.leadingAnchor.constraint(equalTo: sizeView.leadingAnchor, constant: 12),
-            sizeLabel.trailingAnchor.constraint(equalTo: sizeView.trailingAnchor, constant: -12),
-            sizeLabel.centerYAnchor.constraint(equalTo: sizeView.centerYAnchor),
+            sizeControl.leadingAnchor.constraint(equalTo: sizeView.leadingAnchor),
+            sizeControl.trailingAnchor.constraint(equalTo: sizeView.trailingAnchor),
+            sizeControl.topAnchor.constraint(equalTo: sizeView.topAnchor),
+            sizeControl.bottomAnchor.constraint(equalTo: sizeView.bottomAnchor),
         ])
 
         positionHUD()
@@ -317,11 +320,19 @@ private final class SelectionOverlayView: NSView {
         return button
     }
 
-    private func configureSizeLabel() {
-        sizeLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-        sizeLabel.textColor = hudTheme.foregroundColor
-        sizeLabel.alignment = .center
-        sizeLabel.lineBreakMode = .byClipping
+    private func configureSizeControl() {
+        sizeControl.onWidthCommit = { [weak self] width in
+            self?.applySizeEdit(.width, value: width)
+        }
+        sizeControl.onHeightCommit = { [weak self] height in
+            self?.applySizeEdit(.height, value: height)
+        }
+        sizeControl.onLockToggle = { [weak self] in
+            self?.toggleRatioLock()
+        }
+        sizeControl.onRatioPreset = { [weak self] ratio in
+            self?.applyRatioPreset(ratio)
+        }
     }
 
     private func applyHUDTheme(_ theme: HUDTheme) {
@@ -332,7 +343,14 @@ private final class SelectionOverlayView: NSView {
         }
         modeButton?.contentTintColor = theme.foregroundColor
         modeButton?.hoverColor = theme.hoverColor
-        sizeLabel.textColor = theme.foregroundColor
+        if let displayedLocalRect {
+            updateSizeControl(
+                width: Int(displayedLocalRect.width.rounded()),
+                height: Int(displayedLocalRect.height.rounded())
+            )
+        } else {
+            updateSizeControl(width: 0, height: 0)
+        }
     }
 
     private func drawDimmedBackdrop(excluding selectionRect: CGRect) {
@@ -457,7 +475,7 @@ private final class SelectionOverlayView: NSView {
             hudStackView.isHidden = !showsCenteredHUDWhenEmpty
             modeView.isHidden = !showsCenteredHUDWhenEmpty
             sizeView.isHidden = !showsCenteredHUDWhenEmpty
-            sizeLabel.stringValue = "0 x 0"
+            updateSizeControl(width: 0, height: 0)
             positionHUD()
             scheduleHUDThemeUpdate()
             return
@@ -466,9 +484,21 @@ private final class SelectionOverlayView: NSView {
         hudStackView.isHidden = false
         modeView.isHidden = false
         sizeView.isHidden = false
-        sizeLabel.stringValue = "\(Int(displayedLocalRect.width.rounded())) x \(Int(displayedLocalRect.height.rounded()))"
+        updateSizeControl(
+            width: Int(displayedLocalRect.width.rounded()),
+            height: Int(displayedLocalRect.height.rounded())
+        )
         positionHUD()
         scheduleHUDThemeUpdate()
+    }
+
+    private func updateSizeControl(width: Int, height: Int) {
+        sizeControl.update(
+            width: width,
+            height: height,
+            isLocked: effectiveSizingMode != .unlocked,
+            foregroundColor: hudTheme.foregroundColor
+        )
     }
 
     private func positionHUD() {
@@ -522,6 +552,23 @@ private final class SelectionOverlayView: NSView {
 
         return selectionRect
     }
+
+    private var effectiveSizingMode: SelectionSizingMode {
+        if isShiftTemporarilyLocking,
+           let displayedLocalRect,
+           displayedLocalRect.width > 0,
+           displayedLocalRect.height > 0 {
+            return .locked(SelectionAspectRatio(width: displayedLocalRect.width, height: displayedLocalRect.height))
+        }
+
+        return sizingMode
+    }
+
+    private func applySizeEdit(_ dimension: SelectionSizeDimension, value: Int) {}
+
+    private func toggleRatioLock() {}
+
+    private func applyRatioPreset(_ ratio: SelectionAspectRatio) {}
 
     private func updateHUDTheme() {
         let sampleRect = globalRect(fromLocalRect: hudStackView.frame.insetBy(dx: -10, dy: -10))
