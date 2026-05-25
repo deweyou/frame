@@ -31,7 +31,7 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     }
 
     var isEditingSize: Bool {
-        editingDimension != nil
+        activeEditingDimension != nil
     }
 
     func update(
@@ -167,12 +167,14 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         doCommandBy commandSelector: Selector
     ) -> Bool {
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+            ensureEditingDimension(for: control)
             finishEditing(.cancel)
             window?.makeFirstResponder(window?.contentView)
             return true
         }
 
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            ensureEditingDimension(for: control)
             finishEditing(.commit)
             window?.makeFirstResponder(window?.contentView)
             return true
@@ -209,7 +211,7 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     }
 
     private func finishEditing(_ action: EditingFinishAction) {
-        guard let editingDimension else {
+        guard let editingDimension = activeEditingDimension else {
             cancelEditing()
             return
         }
@@ -253,7 +255,7 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     }
 
     private func maximumValueForActiveDimension() -> Int {
-        switch editingDimension {
+        switch activeEditingDimension {
         case .width:
             maximumWidth
         case .height:
@@ -264,11 +266,35 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     }
 
     private func finishActiveEditingBeforeControlAction() {
-        guard editingDimension != nil else {
+        guard activeEditingDimension != nil else {
             return
         }
 
         finishEditing(.commit)
+    }
+
+    private var activeEditingDimension: SelectionSizeDimension? {
+        if let editingDimension {
+            return editingDimension
+        }
+
+        if widthField.currentEditor() != nil {
+            return .width
+        }
+
+        if heightField.currentEditor() != nil {
+            return .height
+        }
+
+        return nil
+    }
+
+    private func ensureEditingDimension(for control: NSControl) {
+        if control === widthField {
+            editingDimension = .width
+        } else if control === heightField {
+            editingDimension = .height
+        }
     }
 
     private func selectAll(in field: NSTextField) {
@@ -314,8 +340,17 @@ private enum EditingFinishAction {
 }
 
 private final class HUDSizeTextField: NSTextField {
+    override var acceptsFirstResponder: Bool {
+        true
+    }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        super.mouseDown(with: event)
     }
 }
 
