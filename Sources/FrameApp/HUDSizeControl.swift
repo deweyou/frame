@@ -164,6 +164,14 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         finishEditing(.commit)
     }
 
+    func controlTextDidChange(_ notification: Notification) {
+        guard let textView = notification.userInfo?["NSFieldEditor"] as? NSTextView else {
+            return
+        }
+
+        sanitize(textView)
+    }
+
     func control(
         _ control: NSControl,
         textView: NSTextView,
@@ -187,45 +195,6 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         }
 
         return false
-    }
-
-    func control(
-        _ control: NSControl,
-        textView: NSTextView,
-        shouldChangeCharactersIn affectedCharRange: NSRange,
-        replacementString string: String?
-    ) -> Bool {
-        guard let string else {
-            return true
-        }
-
-        guard string.allSatisfy(\.isNumber) else {
-            return false
-        }
-
-        let currentString = textView.string as NSString
-        let proposed = currentString.replacingCharacters(in: affectedCharRange, with: string)
-        guard !proposed.isEmpty else {
-            return true
-        }
-
-        guard let value = Int(proposed) else {
-            return false
-        }
-
-        let normalized = "\(value)"
-        guard normalized.count <= 4,
-              value <= maximumValueForActiveDimension() else {
-            return false
-        }
-
-        if normalized != proposed {
-            textView.string = normalized
-            textView.setSelectedRange(NSRange(location: normalized.count, length: 0))
-            return false
-        }
-
-        return true
     }
 
     @objc private func toggleLock() {
@@ -304,6 +273,31 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         }
 
         finishEditing(.commit)
+    }
+
+    private func sanitize(_ textView: NSTextView) {
+        let original = textView.string
+        var sanitized = String(original.filter(\.isNumber))
+
+        if let value = Int(sanitized) {
+            sanitized = "\(value)"
+        }
+
+        if sanitized.count > 4 {
+            sanitized = String(sanitized.prefix(4))
+        }
+
+        if let value = Int(sanitized),
+           value > maximumValueForActiveDimension() {
+            sanitized = "\(maximumValueForActiveDimension())"
+        }
+
+        guard sanitized != original else {
+            return
+        }
+
+        textView.string = sanitized
+        textView.setSelectedRange(NSRange(location: sanitized.count, length: 0))
     }
 
     private func selectAll(in field: NSTextField) {
