@@ -183,6 +183,7 @@ private final class SelectionOverlayView: NSView {
     override func layout() {
         super.layout()
         positionHUD()
+        updateVisibleHUDTheme()
     }
 
     override func resetCursorRects() {
@@ -458,6 +459,7 @@ private final class SelectionOverlayView: NSView {
             sizeView.isHidden = !showsCenteredHUDWhenEmpty
             sizeLabel.stringValue = "0 x 0"
             positionHUD()
+            updateVisibleHUDTheme()
             return
         }
 
@@ -466,7 +468,7 @@ private final class SelectionOverlayView: NSView {
         sizeView.isHidden = false
         sizeLabel.stringValue = "\(Int(displayedLocalRect.width.rounded())) x \(Int(displayedLocalRect.height.rounded()))"
         positionHUD()
-        updateHUDTheme()
+        updateVisibleHUDTheme()
     }
 
     private func positionHUD() {
@@ -528,6 +530,14 @@ private final class SelectionOverlayView: NSView {
         }
 
         applyHUDTheme(luminance < 0.48 ? .lightContent : .darkContent)
+    }
+
+    private func updateVisibleHUDTheme() {
+        guard !hudStackView.isHidden else {
+            return
+        }
+
+        updateHUDTheme()
     }
 
     private func clampedPoint(_ point: CGPoint) -> CGPoint {
