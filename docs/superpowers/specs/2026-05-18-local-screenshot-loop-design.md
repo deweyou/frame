@@ -1,22 +1,22 @@
-# Frame v0.1 MVP Design
+# Frame Local Screenshot Loop Design
 
 ## Goal
 
-Frame v0.1 validates the core macOS local screenshot loop: a menu bar app can be invoked by a global shortcut, let the user adjust and confirm a region, capture that region as PNG, then offer copy, save, or close through a minimal preview panel.
+Frame validates the core macOS local screenshot loop: a menu bar app can be invoked by a global shortcut, let the user adjust and confirm a region, capture that region as PNG, then offer copy, save, or close through a minimal preview panel.
 
 ## Product Decisions
 
 - The app is a native macOS app.
 - The app runs without a main window and stays available from the menu bar.
 - The default screenshot shortcut is `Command+Shift+A`.
-- The default recording shortcut is `Command+Shift+R`, but v0.1 only reserves this setting and does not implement recording.
+- The default recording shortcut is `Command+Shift+R`, but this local screenshot loop only reserves this setting and does not implement recording.
 - Saved screenshots go to the user's Desktop by default.
 - Saved screenshot filenames use `Frame yyyy-MM-dd HH.mm.ss.png`.
-- UI is intentionally minimal. v0.1 prioritizes system capability, permission reliability, coordinate correctness, and output correctness over visual richness.
+- UI is intentionally minimal. The local screenshot loop prioritizes system capability, permission reliability, coordinate correctness, and output correctness over visual richness.
 
 ## Scope
 
-Frame v0.1 includes:
+The local screenshot loop includes:
 
 - macOS app target and app metadata.
 - Menu bar status item with screenshot, permission, and quit actions.
@@ -30,7 +30,7 @@ Frame v0.1 includes:
 - Desktop file writing.
 - Unit tests for deterministic core behavior.
 
-Frame v0.1 excludes:
+The local screenshot loop excludes:
 
 - Recording implementation.
 - Annotation editor.
@@ -43,14 +43,14 @@ Frame v0.1 excludes:
 
 ## Architecture
 
-Use AppKit as the primary runtime because v0.1 depends on macOS system behavior: menu bar lifecycle, global shortcuts, overlay windows, display coordinates, Screen Recording permission, pasteboard, and file output. SwiftUI can be used only for small local view content where it does not own system behavior.
+Use AppKit as the primary runtime because the local screenshot loop depends on macOS system behavior: menu bar lifecycle, global shortcuts, overlay windows, display coordinates, Screen Recording permission, pasteboard, and file output. SwiftUI can be used only for small local view content where it does not own system behavior.
 
 The app is decomposed into system-facing adapters and deterministic core helpers:
 
 - `FrameApp` starts the app and delegates lifecycle to `AppDelegate`.
 - `AppDelegate` wires menu bar actions, shortcuts, permission checks, capture flow, and Quick Access presentation.
 - `StatusItemController` owns the menu bar item and menu commands.
-- `HotKeyController` owns global shortcut registration and exposes screenshot trigger callbacks. It reserves a recording shortcut value without invoking recording in v0.1.
+- `HotKeyController` owns global shortcut registration and exposes screenshot trigger callbacks. It reserves a recording shortcut value without invoking recording in the local screenshot loop.
 - `ScreenRecordingPermission` wraps permission checks and opens System Settings when access is missing.
 - `SelectionOverlayController` creates one borderless overlay window per screen, seeds the editable selection from the last session selection or the main screen, and reports the final selection after explicit confirmation.
 - `CaptureService` captures the selected rectangle and returns PNG data plus an image suitable for preview and pasteboard use.
@@ -79,7 +79,7 @@ The app is decomposed into system-facing adapters and deterministic core helpers
 
 ## UI Design
 
-The product does not need a rich interface in v0.1. The interface should feel native, quiet, and operational:
+The local screenshot loop does not need a rich interface. The interface should feel native, quiet, and operational:
 
 - Menu bar item: simple Frame label or symbol with Screenshot, Check Permission, and Quit menu actions.
 - Selection overlay: dimmed transparent screen outside the selected region, an undimmed selected region, visible selection rectangle, and a compact native glass HUD with the active capture mode on the left and persistent size readout on the right. Enter confirms the capture; confirmation is not a persistent HUD button.
@@ -101,7 +101,7 @@ Use neutral surfaces, border-first separation, and emerald only for the primary 
 Unit tests cover deterministic core behavior:
 
 - Default screenshot shortcut is `Command+Shift+A`.
-- Default recording shortcut is `Command+Shift+R` and is marked reserved for v0.1.
+- Default recording shortcut is `Command+Shift+R` and is marked reserved for future recording support.
 - Screenshot filenames follow `Frame yyyy-MM-dd HH.mm.ss.png`.
 - Desktop save path is built from the user's Desktop directory and generated filename.
 - Drag rectangles normalize correctly when dragged in any direction.

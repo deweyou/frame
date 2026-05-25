@@ -7,8 +7,9 @@ Frame is a macOS screenshot utility for quickly selecting an area, then copying 
 - [Architecture](docs/architecture.md)
 - [Development](docs/development.md)
 - [macOS Permissions](docs/permissions.md)
-- [v0.1 MVP Spec](docs/superpowers/specs/2026-05-18-v0-1-mvp-design.md)
-- [v0.1 Implementation Plan](docs/superpowers/plans/2026-05-18-v0-1-mvp.md)
+- [Design](DESIGN.md)
+- [Local Screenshot Loop Spec](docs/superpowers/specs/2026-05-18-local-screenshot-loop-design.md)
+- [Local Screenshot Loop Implementation Plan](docs/superpowers/plans/2026-05-18-local-screenshot-loop.md)
 
 ## Development
 

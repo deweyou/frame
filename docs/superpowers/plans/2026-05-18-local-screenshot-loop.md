@@ -1,8 +1,8 @@
-# Frame v0.1 MVP Implementation Plan
+# Frame Local Screenshot Loop Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the first native macOS Frame MVP: a menu bar app that captures a selected screen region and offers copy, save, or close.
+**Goal:** Build the first native macOS Frame local screenshot loop: a menu bar app that captures a selected screen region and offers copy, save, or close.
 
 **Architecture:** Use a Swift Package as the source of truth, with an executable AppKit target for the menu bar runtime and a library target for deterministic core behavior. Keep system adapters thin and isolate testable logic in `FrameCore`, then add a small packaging script that assembles a runnable `.app` bundle from `swift build` output.
 
@@ -585,4 +585,3 @@ Expected: all commands exit 0 and `.build/app/Frame.app` exists.
 - Spec coverage: package/app skeleton, menu bar, shortcut, permissions, overlay, capture, Quick Access, copy, save, tests, and packaging are covered.
 - Placeholder scan: no `TBD`, `TODO`, or intentionally deferred implementation placeholders are present.
 - Type consistency: core types are `KeyboardShortcut`, `ScreenshotNaming`, and `SelectionGeometry`; app adapters are named consistently with the spec.
-
