@@ -91,4 +91,117 @@ struct FrameCoreTests {
         #expect(!SelectionGeometry.isValidSelection(CGRect(x: 0, y: 0, width: 10, height: 4)))
         #expect(SelectionGeometry.isValidSelection(CGRect(x: 0, y: 0, width: 8, height: 8)))
     }
+
+    @Test
+    func testWindowHoverActivatesAfterDelayForSameCandidate() {
+        let candidate = WindowCandidate(
+            id: 42,
+            ownerProcessID: 100,
+            bounds: CGRect(x: 10, y: 20, width: 320, height: 240)
+        )
+        var selector = WindowHoverSelection(activationDelay: 0.35, movementTolerance: 6)
+
+        #expect(selector.update(
+            candidate: candidate,
+            mouseLocation: CGPoint(x: 40, y: 60),
+            isOverHUD: false,
+            timestamp: 1.0
+        ) == nil)
+        #expect(selector.update(
+            candidate: candidate,
+            mouseLocation: CGPoint(x: 42, y: 61),
+            isOverHUD: false,
+            timestamp: 1.34
+        ) == nil)
+        #expect(selector.update(
+            candidate: candidate,
+            mouseLocation: CGPoint(x: 42, y: 61),
+            isOverHUD: false,
+            timestamp: 1.35
+        ) == candidate)
+    }
+
+    @Test
+    func testWindowHoverCancelsWhenMouseEntersHUD() {
+        let candidate = WindowCandidate(
+            id: 8,
+            ownerProcessID: 100,
+            bounds: CGRect(x: 0, y: 0, width: 200, height: 120)
+        )
+        var selector = WindowHoverSelection(activationDelay: 0.35, movementTolerance: 6)
+
+        _ = selector.update(
+            candidate: candidate,
+            mouseLocation: CGPoint(x: 10, y: 10),
+            isOverHUD: false,
+            timestamp: 2.0
+        )
+        #expect(selector.update(
+            candidate: candidate,
+            mouseLocation: CGPoint(x: 10, y: 10),
+            isOverHUD: true,
+            timestamp: 2.4
+        ) == nil)
+        #expect(selector.activeCandidate == nil)
+    }
+
+    @Test
+    func testWindowHoverRestartsForDifferentCandidate() {
+        let first = WindowCandidate(
+            id: 1,
+            ownerProcessID: 100,
+            bounds: CGRect(x: 0, y: 0, width: 200, height: 200)
+        )
+        let second = WindowCandidate(
+            id: 2,
+            ownerProcessID: 101,
+            bounds: CGRect(x: 220, y: 0, width: 200, height: 200)
+        )
+        var selector = WindowHoverSelection(activationDelay: 0.35, movementTolerance: 6)
+
+        _ = selector.update(
+            candidate: first,
+            mouseLocation: CGPoint(x: 20, y: 20),
+            isOverHUD: false,
+            timestamp: 1.0
+        )
+        #expect(selector.update(
+            candidate: second,
+            mouseLocation: CGPoint(x: 230, y: 20),
+            isOverHUD: false,
+            timestamp: 1.4
+        ) == nil)
+        #expect(selector.update(
+            candidate: second,
+            mouseLocation: CGPoint(x: 230, y: 20),
+            isOverHUD: false,
+            timestamp: 1.75
+        ) == second)
+    }
+
+    @Test
+    func testRegionEditingDisablesAutomaticHoverForSession() {
+        let candidate = WindowCandidate(
+            id: 3,
+            ownerProcessID: 100,
+            bounds: CGRect(x: 0, y: 0, width: 200, height: 200)
+        )
+        var selector = WindowHoverSelection(activationDelay: 0.35, movementTolerance: 6)
+
+        selector.lockRegionEditingForSession()
+
+        #expect(selector.update(
+            candidate: candidate,
+            mouseLocation: CGPoint(x: 20, y: 20),
+            isOverHUD: false,
+            timestamp: 1.0
+        ) == nil)
+        #expect(selector.update(
+            candidate: candidate,
+            mouseLocation: CGPoint(x: 20, y: 20),
+            isOverHUD: false,
+            timestamp: 2.0
+        ) == nil)
+        #expect(selector.isRegionLockedForSession)
+    }
 }
