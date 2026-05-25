@@ -340,6 +340,17 @@ private final class HUDSizeTextField: NSTextField {
         window?.makeFirstResponder(self)
         super.mouseDown(with: event)
     }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command),
+              event.charactersIgnoringModifiers?.lowercased() == "a",
+              let editor = currentEditor() else {
+            return super.performKeyEquivalent(with: event)
+        }
+
+        editor.selectAll(nil)
+        return true
+    }
 }
 
 private final class HUDSizeButton: NSButton {

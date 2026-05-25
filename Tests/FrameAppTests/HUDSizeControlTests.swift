@@ -92,6 +92,44 @@ struct HUDSizeControlTests {
         #expect(editor.string == "9")
     }
 
+    @Test("command A key equivalent selects all text")
+    func commandAKeyEquivalentSelectsAllText() throws {
+        let harness = HUDSizeControlHarness()
+        defer {
+            harness.close()
+        }
+
+        harness.control.update(
+            width: 1280,
+            height: 720,
+            maximumWidth: 4096,
+            maximumHeight: 2304,
+            isLocked: false,
+            foregroundColor: .labelColor
+        )
+
+        let widthField = try #require(harness.widthField)
+        #expect(harness.window.makeFirstResponder(widthField))
+
+        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        editor.setSelectedRange(NSRange(location: 2, length: 0))
+        let event = try #require(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: .command,
+            timestamp: 0,
+            windowNumber: harness.window.windowNumber,
+            context: nil,
+            characters: "a",
+            charactersIgnoringModifiers: "a",
+            isARepeat: false,
+            keyCode: 0
+        ))
+
+        #expect(widthField.performKeyEquivalent(with: event))
+        #expect(editor.selectedRange == NSRange(location: 0, length: 4))
+    }
+
     @Test("width field commits editor text")
     func widthFieldCommitsEditorText() throws {
         let harness = HUDSizeControlHarness()
