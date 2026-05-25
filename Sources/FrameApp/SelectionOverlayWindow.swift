@@ -591,8 +591,6 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func applyRatioPreset(_ ratio: SelectionAspectRatio) {
-        sizingMode = .locked(ratio)
-
         let nextRect: CGRect
         if let displayedLocalRect {
             nextRect = SelectionSizing.fit(aspectRatio: ratio, inside: displayedLocalRect)
@@ -606,6 +604,7 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
+        sizingMode = .locked(ratio)
         selectionRect = clampedRect(nextRect)
         windowCandidate = nil
         updateMetrics()
@@ -686,10 +685,17 @@ private final class SelectionOverlayView: NSView {
         switch operation {
         case let .create(startPoint, ratio):
             let proposed = SelectionGeometry.normalizedRect(from: startPoint, to: currentPoint)
-            if let ratio,
-               proposed.width > 0,
-               proposed.height > 0 {
+            guard proposed.width > 0, proposed.height > 0 else {
+                selectionRect = proposed
+                return
+            }
+
+            if let ratio {
                 selectionRect = SelectionSizing.fit(aspectRatio: ratio, inside: proposed)
+            } else if isShiftTemporarilyLocking {
+                let capturedRatio = SelectionAspectRatio(width: proposed.width, height: proposed.height)
+                dragOperation = .create(startPoint: startPoint, ratio: capturedRatio)
+                selectionRect = SelectionSizing.fit(aspectRatio: capturedRatio, inside: proposed)
             } else {
                 selectionRect = proposed
             }

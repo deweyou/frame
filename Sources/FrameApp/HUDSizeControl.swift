@@ -2,7 +2,7 @@ import AppKit
 import FrameCore
 
 @MainActor
-final class HUDSizeControl: NSView {
+final class HUDSizeControl: NSView, NSTextFieldDelegate {
     var onWidthCommit: ((Int) -> Void)?
     var onHeightCommit: ((Int) -> Void)?
     var onLockToggle: (() -> Void)?
@@ -15,6 +15,7 @@ final class HUDSizeControl: NSView {
     private let editor = NSTextField()
     private var editingDimension: SelectionSizeDimension?
     private var foregroundColor = NSColor.white
+    private var isFinishingEditing = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -110,8 +111,7 @@ final class HUDSizeControl: NSView {
         editor.isHidden = true
         editor.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
         editor.alignment = .center
-        editor.target = self
-        editor.action = #selector(commitEditor)
+        editor.delegate = self
         addSubview(editor)
     }
 
@@ -134,6 +134,34 @@ final class HUDSizeControl: NSView {
         onRatioPreset?(ratio)
     }
 
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard !isFinishingEditing else {
+            return
+        }
+
+        finishEditing(.commit)
+    }
+
+    func control(
+        _ control: NSControl,
+        textView: NSTextView,
+        doCommandBy commandSelector: Selector
+    ) -> Bool {
+        if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+            finishEditing(.cancel)
+            window?.makeFirstResponder(window?.contentView)
+            return true
+        }
+
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            finishEditing(.commit)
+            window?.makeFirstResponder(window?.contentView)
+            return true
+        }
+
+        return false
+    }
+
     private func startEditing(_ dimension: SelectionSizeDimension, from button: NSButton) {
         editingDimension = dimension
         editor.stringValue = button.title
@@ -144,15 +172,28 @@ final class HUDSizeControl: NSView {
         editor.selectText(nil)
     }
 
-    @objc private func commitEditor() {
-        guard let editingDimension,
-              let value = Int(editor.stringValue) else {
+    private func finishEditing(_ action: EditingFinishAction) {
+        guard let editingDimension else {
             cancelEditing()
             return
         }
 
+        isFinishingEditing = true
+        defer {
+            isFinishingEditing = false
+        }
+
         editor.isHidden = true
         self.editingDimension = nil
+
+        guard action == .commit else {
+            return
+        }
+
+        guard let value = Int(editor.stringValue) else {
+            NSSound.beep()
+            return
+        }
 
         switch editingDimension {
         case .width:
@@ -166,4 +207,9 @@ final class HUDSizeControl: NSView {
         editor.isHidden = true
         editingDimension = nil
     }
+}
+
+private enum EditingFinishAction {
+    case commit
+    case cancel
 }
