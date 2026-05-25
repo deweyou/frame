@@ -8,12 +8,12 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     var onLockToggle: (() -> Void)?
     var onRatioPreset: ((SelectionAspectRatio) -> Void)?
 
-    private let widthButton = NSButton(title: "0", target: nil, action: nil)
-    private let lockButton = NSButton()
-    private let heightButton = NSButton(title: "0", target: nil, action: nil)
+    private let widthField = NSTextField(string: "0")
+    private let linkButton = NSButton()
+    private let heightField = NSTextField(string: "0")
     private let menuButton = NSPopUpButton(frame: .zero, pullsDown: true)
-    private let editor = NSTextField()
     private var editingDimension: SelectionSizeDimension?
+    private var editingOriginalValue = ""
     private var foregroundColor = NSColor.white
     private var isFinishingEditing = false
 
@@ -33,13 +33,19 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
 
     func update(width: Int, height: Int, isLocked: Bool, foregroundColor: NSColor) {
         self.foregroundColor = foregroundColor
-        widthButton.title = "\(width)"
-        heightButton.title = "\(height)"
-        lockButton.image = NSImage(
-            systemSymbolName: isLocked ? "lock.fill" : "lock.open",
-            accessibilityDescription: isLocked ? "锁定比例" : "自由比例"
-        )
-        [widthButton, lockButton, heightButton, menuButton].forEach {
+
+        if editingDimension != .width {
+            widthField.stringValue = "\(width)"
+        }
+        if editingDimension != .height {
+            heightField.stringValue = "\(height)"
+        }
+
+        linkButton.image = linkImage(isLocked: isLocked)
+        [widthField, heightField].forEach { field in
+            field.textColor = foregroundColor
+        }
+        [linkButton, menuButton].forEach {
             $0.contentTintColor = foregroundColor
         }
     }
@@ -47,53 +53,61 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     private func configure() {
         wantsLayer = true
 
-        [widthButton, lockButton, heightButton].forEach { button in
-            button.isBordered = false
-            button.bezelStyle = .regularSquare
-            button.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-            button.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(button)
+        [widthField, heightField].forEach { field in
+            field.isBordered = false
+            field.isBezeled = false
+            field.drawsBackground = false
+            field.isEditable = true
+            field.isSelectable = true
+            field.focusRingType = .none
+            field.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+            field.alignment = .center
+            field.lineBreakMode = .byClipping
+            field.maximumNumberOfLines = 1
+            field.delegate = self
+            field.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(field)
         }
 
-        widthButton.target = self
-        widthButton.action = #selector(editWidth)
-        widthButton.alignment = .right
+        widthField.identifier = NSUserInterfaceItemIdentifier("width")
+        heightField.identifier = NSUserInterfaceItemIdentifier("height")
 
-        lockButton.target = self
-        lockButton.action = #selector(toggleLock)
-        lockButton.toolTip = "锁定比例"
-
-        heightButton.target = self
-        heightButton.action = #selector(editHeight)
-        heightButton.alignment = .left
+        linkButton.target = self
+        linkButton.action = #selector(toggleLock)
+        linkButton.toolTip = "锁定比例"
+        linkButton.isBordered = false
+        linkButton.bezelStyle = .regularSquare
+        linkButton.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(linkButton)
 
         configureMenu()
-        configureEditor()
 
         NSLayoutConstraint.activate([
-            widthButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
-            widthButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            widthButton.widthAnchor.constraint(equalToConstant: 28),
+            widthField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            widthField.centerYAnchor.constraint(equalTo: centerYAnchor),
+            widthField.widthAnchor.constraint(equalToConstant: 32),
 
-            lockButton.leadingAnchor.constraint(equalTo: widthButton.trailingAnchor, constant: 1),
-            lockButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            lockButton.widthAnchor.constraint(equalToConstant: 19),
-            lockButton.heightAnchor.constraint(equalToConstant: 30),
+            linkButton.leadingAnchor.constraint(equalTo: widthField.trailingAnchor, constant: 1),
+            linkButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            linkButton.widthAnchor.constraint(equalToConstant: 17),
+            linkButton.heightAnchor.constraint(equalToConstant: 30),
 
-            heightButton.leadingAnchor.constraint(equalTo: lockButton.trailingAnchor, constant: 1),
-            heightButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            heightButton.widthAnchor.constraint(equalToConstant: 28),
+            heightField.leadingAnchor.constraint(equalTo: linkButton.trailingAnchor, constant: 1),
+            heightField.centerYAnchor.constraint(equalTo: centerYAnchor),
+            heightField.widthAnchor.constraint(equalToConstant: 32),
 
-            menuButton.leadingAnchor.constraint(equalTo: heightButton.trailingAnchor, constant: 1),
-            menuButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            menuButton.leadingAnchor.constraint(equalTo: heightField.trailingAnchor, constant: 1),
+            menuButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
             menuButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            menuButton.widthAnchor.constraint(equalToConstant: 18),
+            menuButton.widthAnchor.constraint(equalToConstant: 15),
         ])
     }
 
     private func configureMenu() {
         menuButton.translatesAutoresizingMaskIntoConstraints = false
         menuButton.isBordered = false
+        menuButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "比例预设")
+        menuButton.imagePosition = .imageOnly
         menuButton.menu?.removeAllItems()
         menuButton.addItem(withTitle: "")
         addRatioItem(title: "1:1", ratio: .square)
@@ -111,31 +125,13 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         menuButton.menu?.addItem(item)
     }
 
-    private func configureEditor() {
-        editor.isHidden = true
-        editor.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-        editor.alignment = .center
-        editor.delegate = self
-        addSubview(editor)
-    }
-
-    @objc private func editWidth() {
-        startEditing(.width, from: widthButton)
-    }
-
-    @objc private func editHeight() {
-        startEditing(.height, from: heightButton)
-    }
-
-    @objc private func toggleLock() {
-        onLockToggle?()
-    }
-
-    @objc private func selectRatio(_ sender: NSMenuItem) {
-        guard let ratio = sender.representedObject as? SelectionAspectRatio else {
+    func controlTextDidBeginEditing(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField else {
             return
         }
-        onRatioPreset?(ratio)
+
+        editingOriginalValue = field.stringValue
+        editingDimension = field === widthField ? .width : .height
     }
 
     func controlTextDidEndEditing(_ notification: Notification) {
@@ -166,14 +162,15 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         return false
     }
 
-    private func startEditing(_ dimension: SelectionSizeDimension, from button: NSButton) {
-        editingDimension = dimension
-        editor.stringValue = button.title
-        editor.frame = button.frame
-        editor.textColor = foregroundColor
-        editor.isHidden = false
-        window?.makeFirstResponder(editor)
-        editor.selectText(nil)
+    @objc private func toggleLock() {
+        onLockToggle?()
+    }
+
+    @objc private func selectRatio(_ sender: NSMenuItem) {
+        guard let ratio = sender.representedObject as? SelectionAspectRatio else {
+            return
+        }
+        onRatioPreset?(ratio)
     }
 
     private func finishEditing(_ action: EditingFinishAction) {
@@ -182,19 +179,22 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
             return
         }
 
+        let field = field(for: editingDimension)
+
         isFinishingEditing = true
         defer {
             isFinishingEditing = false
         }
 
-        editor.isHidden = true
         self.editingDimension = nil
 
         guard action == .commit else {
+            field.stringValue = editingOriginalValue
             return
         }
 
-        guard let value = Int(editor.stringValue) else {
+        guard let value = Int(field.stringValue) else {
+            field.stringValue = editingOriginalValue
             NSSound.beep()
             return
         }
@@ -207,8 +207,25 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         }
     }
 
+    private func field(for dimension: SelectionSizeDimension) -> NSTextField {
+        switch dimension {
+        case .width:
+            widthField
+        case .height:
+            heightField
+        }
+    }
+
+    private func linkImage(isLocked: Bool) -> NSImage? {
+        let symbolName = isLocked ? "link.circle.fill" : "link.circle"
+        return NSImage(systemSymbolName: symbolName, accessibilityDescription: isLocked ? "比例联动" : "自由比例")
+            ?? NSImage(systemSymbolName: "link", accessibilityDescription: nil)
+    }
+
     func cancelEditing() {
-        editor.isHidden = true
+        if let editingDimension {
+            field(for: editingDimension).stringValue = editingOriginalValue
+        }
         editingDimension = nil
     }
 }

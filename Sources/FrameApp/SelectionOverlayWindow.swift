@@ -242,6 +242,7 @@ private final class SelectionOverlayView: NSView {
 
         let isShiftPressed = event.modifierFlags.contains(.shift)
         if !isShiftPressed,
+           activeRatio == nil,
            case let .create(startPoint, _) = dragOperation {
             dragOperation = .create(startPoint: startPoint, ratio: nil)
         }
@@ -427,6 +428,35 @@ private final class SelectionOverlayView: NSView {
         roundedSelection.lineWidth = 1
         roundedSelection.stroke()
 
+        drawCornerHandles(in: selectionRect)
+    }
+
+    private func drawCornerHandles(in selectionRect: CGRect) {
+        guard selectionRect.width >= 4, selectionRect.height >= 4 else {
+            return
+        }
+
+        let dotSize = min(8, max(5, min(selectionRect.width, selectionRect.height) / 12))
+        let dotRadius = dotSize / 2
+        let points = [
+            CGPoint(x: selectionRect.minX, y: selectionRect.minY),
+            CGPoint(x: selectionRect.maxX, y: selectionRect.minY),
+            CGPoint(x: selectionRect.minX, y: selectionRect.maxY),
+            CGPoint(x: selectionRect.maxX, y: selectionRect.maxY),
+        ]
+
+        for point in points {
+            let dotRect = CGRect(
+                x: point.x - dotRadius,
+                y: point.y - dotRadius,
+                width: dotSize,
+                height: dotSize
+            )
+            let dotPath = NSBezierPath(ovalIn: dotRect)
+            let isBottomRight = point.x == selectionRect.maxX && point.y == selectionRect.minY
+            (isBottomRight ? NSColor.systemGreen : NSColor.white).withAlphaComponent(0.96).setFill()
+            dotPath.fill()
+        }
     }
 
     private func completeSelection(with selection: SelectionCapture?) {
@@ -673,6 +703,10 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func ratioForCreateDrag(modifiers: NSEvent.ModifierFlags) -> SelectionAspectRatio? {
+        if activeRatio != nil {
+            return nil
+        }
+
         guard modifiers.contains(.shift) else {
             return nil
         }
@@ -686,9 +720,29 @@ private final class SelectionOverlayView: NSView {
         return nil
     }
 
+    private func ratioForResizeDrag(startRect: CGRect, modifiers: NSEvent.ModifierFlags) -> SelectionAspectRatio? {
+        if let activeRatio {
+            return activeRatio
+        }
+
+        guard modifiers.contains(.shift) else {
+            return nil
+        }
+
+        return SelectionAspectRatio(width: startRect.width, height: startRect.height)
+    }
+
     private func dragOperation(startingAt point: CGPoint, modifiers: NSEvent.ModifierFlags) -> SelectionDragOperation {
         guard let selectionRect else {
             return .create(startPoint: point, ratio: ratioForCreateDrag(modifiers: modifiers))
+        }
+
+        if let handle = SelectionHandle.hitTest(point: point, in: selectionRect) {
+            return .resize(
+                handle: handle,
+                startRect: selectionRect,
+                ratio: ratioForResizeDrag(startRect: selectionRect, modifiers: modifiers)
+            )
         }
 
         if selectionRect.isNearlyEqual(to: bounds) {
@@ -711,13 +765,15 @@ private final class SelectionOverlayView: NSView {
                 return
             }
 
-            if let ratio, isShiftTemporarilyLocking {
-                selectionRect = SelectionSizing.fit(aspectRatio: ratio, inside: proposed)
+            if let activeRatio {
+                selectionRect = ratioConstrainedRect(from: startPoint, to: currentPoint, aspectRatio: activeRatio)
+            } else if let ratio, isShiftTemporarilyLocking {
+                selectionRect = ratioConstrainedRect(from: startPoint, to: currentPoint, aspectRatio: ratio)
             } else if isShiftTemporarilyLocking,
                       SelectionGeometry.isValidSelection(proposed) {
                 let capturedRatio = SelectionAspectRatio(width: proposed.width, height: proposed.height)
                 dragOperation = .create(startPoint: startPoint, ratio: capturedRatio)
-                selectionRect = SelectionSizing.fit(aspectRatio: capturedRatio, inside: proposed)
+                selectionRect = ratioConstrainedRect(from: startPoint, to: currentPoint, aspectRatio: capturedRatio)
             } else {
                 selectionRect = proposed
             }
@@ -731,7 +787,36 @@ private final class SelectionOverlayView: NSView {
                     height: startRect.height
                 )
             )
+        case let .resize(handle, startRect, ratio):
+            let rect = handle.resizedRect(from: startRect, to: currentPoint, aspectRatio: activeRatio ?? ratio)
+            selectionRect = clampedRect(rect)
         }
+    }
+
+    private func ratioConstrainedRect(
+        from fixedPoint: CGPoint,
+        to movingPoint: CGPoint,
+        aspectRatio: SelectionAspectRatio
+    ) -> CGRect {
+        let delta = CGPoint(x: movingPoint.x - fixedPoint.x, y: movingPoint.y - fixedPoint.y)
+        let proposedWidth = abs(delta.x)
+        let proposedHeight = abs(delta.y)
+        guard proposedWidth > 0, proposedHeight > 0 else {
+            return SelectionGeometry.normalizedRect(from: fixedPoint, to: movingPoint)
+        }
+
+        let fittedSize = SelectionSizing.sizeThatFits(
+            aspectRatio: aspectRatio,
+            inside: CGSize(width: proposedWidth, height: proposedHeight)
+        )
+        let xDirection: CGFloat = delta.x < 0 ? -1 : 1
+        let yDirection: CGFloat = delta.y < 0 ? -1 : 1
+        let fittedPoint = CGPoint(
+            x: fixedPoint.x + fittedSize.width * xDirection,
+            y: fixedPoint.y + fittedSize.height * yDirection
+        )
+
+        return SelectionGeometry.normalizedRect(from: fixedPoint, to: fittedPoint)
     }
 
     private func clampedRect(_ rect: CGRect) -> CGRect {
@@ -786,6 +871,68 @@ private let keypadEnterKeyCode: UInt16 = 76
 private enum SelectionDragOperation {
     case create(startPoint: CGPoint, ratio: SelectionAspectRatio?)
     case move(startRect: CGRect, startPoint: CGPoint)
+    case resize(handle: SelectionHandle, startRect: CGRect, ratio: SelectionAspectRatio?)
+}
+
+private enum SelectionHandle {
+    case topLeft
+    case topRight
+    case bottomLeft
+    case bottomRight
+
+    static func hitTest(point: CGPoint, in rect: CGRect) -> SelectionHandle? {
+        let hitSize: CGFloat = 18
+        let handles: [(SelectionHandle, CGRect)] = [
+            (.bottomLeft, CGRect(x: rect.minX - hitSize / 2, y: rect.minY - hitSize / 2, width: hitSize, height: hitSize)),
+            (.bottomRight, CGRect(x: rect.maxX - hitSize / 2, y: rect.minY - hitSize / 2, width: hitSize, height: hitSize)),
+            (.topLeft, CGRect(x: rect.minX - hitSize / 2, y: rect.maxY - hitSize / 2, width: hitSize, height: hitSize)),
+            (.topRight, CGRect(x: rect.maxX - hitSize / 2, y: rect.maxY - hitSize / 2, width: hitSize, height: hitSize)),
+        ]
+
+        return handles.first { _, hitRect in
+            hitRect.contains(point)
+        }?.0
+    }
+
+    func resizedRect(from rect: CGRect, to movingPoint: CGPoint, aspectRatio: SelectionAspectRatio?) -> CGRect {
+        let fixedPoint = fixedPoint(for: rect)
+        guard let aspectRatio else {
+            return SelectionGeometry.normalizedRect(from: fixedPoint, to: movingPoint)
+        }
+
+        let delta = CGPoint(x: movingPoint.x - fixedPoint.x, y: movingPoint.y - fixedPoint.y)
+        let proposedWidth = abs(delta.x)
+        let proposedHeight = abs(delta.y)
+        guard proposedWidth > 0, proposedHeight > 0 else {
+            return SelectionGeometry.normalizedRect(from: fixedPoint, to: movingPoint)
+        }
+
+        let fittedSize = SelectionSizing.sizeThatFits(
+            aspectRatio: aspectRatio,
+            inside: CGSize(width: proposedWidth, height: proposedHeight)
+        )
+        let xDirection: CGFloat = delta.x < 0 ? -1 : 1
+        let yDirection: CGFloat = delta.y < 0 ? -1 : 1
+        let fittedPoint = CGPoint(
+            x: fixedPoint.x + fittedSize.width * xDirection,
+            y: fixedPoint.y + fittedSize.height * yDirection
+        )
+
+        return SelectionGeometry.normalizedRect(from: fixedPoint, to: fittedPoint)
+    }
+
+    private func fixedPoint(for rect: CGRect) -> CGPoint {
+        switch self {
+        case .topLeft:
+            CGPoint(x: rect.maxX, y: rect.minY)
+        case .topRight:
+            CGPoint(x: rect.minX, y: rect.minY)
+        case .bottomLeft:
+            CGPoint(x: rect.maxX, y: rect.maxY)
+        case .bottomRight:
+            CGPoint(x: rect.minX, y: rect.maxY)
+        }
+    }
 }
 
 private final class HUDIconButton: NSButton {

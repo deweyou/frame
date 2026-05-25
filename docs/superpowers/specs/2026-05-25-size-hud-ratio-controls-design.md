@@ -2,14 +2,14 @@
 
 ## Goal
 
-Frame should keep the screenshot HUD compact while allowing precise selection sizing. Users can still drag to create and move a selection, but width and height changes are made through the HUD size controls. Ratio locking and common ratio presets should be available without making the HUD wider or visually busy.
+Frame should keep the screenshot HUD compact while allowing precise selection sizing. Users can drag to create, move, and corner-resize a selection, and can also enter exact width and height values through the HUD size controls. Ratio locking and common ratio presets should be available without making the HUD wider or visually busy.
 
 ## Product Decisions
 
 - The HUD width must stay fixed across read, edit, lock, unlock, and ratio menu states.
-- Dragging still creates a new region and moves an existing region.
-- Ordinary drag resizing through corner handles is removed for this iteration; precise size changes happen through HUD width and height editing.
-- The size readout replaces the `x` separator with a lock icon that can be clicked.
+- Dragging still creates a new region, moves an existing region, and resizes from corner handles.
+- Corner resizing anchors the opposite corner. For example, dragging the top-right handle keeps the bottom-left corner fixed.
+- The size readout replaces the `x` separator with a link-style ratio icon that can be clicked.
 - A fixed chevron icon sits after the height value and opens a ratio preset menu.
 - Ratio presets are concrete ratios only: `1:1`, `4:3`, `3:2`, `16:9`, and `9:16`.
 - The ratio menu does not include `Free` or `Current ratio`; the lock icon already owns those concepts.
@@ -20,11 +20,12 @@ Frame should keep the screenshot HUD compact while allowing precise selection si
 
 This feature includes:
 
-- A fixed-width HUD size control with width text, lock icon, height text, and ratio chevron.
+- A fixed-width HUD size control with width input, link-style ratio icon, height input, and ratio chevron.
 - Width and height editing by clicking a numeric value.
 - Applying numeric edits on Enter or focus loss.
 - Esc canceling an in-progress numeric edit and restoring the displayed value.
-- Center-anchored size application that expands or shrinks equally around the current center.
+- Center-anchored numeric size application that expands or shrinks equally around the current center.
+- Opposite-corner anchored drag resizing.
 - Persistent ratio lock toggled by the lock icon.
 - Ratio preset selection from the chevron menu.
 - Empty-selection ratio preset behavior that creates a centered default selection on the active screen.
@@ -44,14 +45,14 @@ This feature excludes:
 The HUD remains two fixed segments:
 
 ```text
-[mode icon] [1280 lock 720 chevron]
+[mode icon] [1280 link 720 chevron]
 ```
 
-The size segment has a fixed width. Numeric values are rendered with monospaced digits and clipped if needed rather than expanding the HUD. The lock and chevron occupy fixed positions. The lock icon replaces the previous `x` separator. The chevron is an icon button at the trailing edge of the size segment.
+The size segment has a fixed width. Width and height are fixed-width text fields sized for four digits, rendered with monospaced digits, and clipped if needed rather than expanding the HUD. The link icon and chevron occupy fixed positions. The link icon replaces the previous `x` separator. The chevron is an icon button at the trailing edge of the size segment.
 
 The HUD has two size display states:
 
-- Read state: width and height are text-like controls, the lock icon shows persistent or temporary lock state, and the chevron opens the ratio menu.
+- Read state: width and height are editable numeric controls, the link icon shows persistent or temporary lock state, and the chevron opens the ratio menu.
 - Numeric edit state: clicking width or height lets that number receive keyboard input without changing the HUD's outer width. Enter or focus loss applies the value. Esc cancels the edit.
 
 ## Ratio State
@@ -62,7 +63,7 @@ Frame tracks a persistent sizing mode:
 - Locked to current ratio: toggled by clicking the lock icon when a selection exists. The ratio is captured from the current selection at the moment locking is enabled.
 - Locked to preset ratio: set by choosing a preset from the chevron menu.
 
-The lock icon reflects persistent lock state when Shift is not pressed. During Shift-drag, the icon temporarily shows locked. When Shift is released, the icon returns to the persistent state.
+The link icon reflects persistent lock state when Shift is not pressed. During Shift-drag, the icon temporarily shows locked. When Shift is released, the icon returns to the persistent state.
 
 Choosing a ratio preset always turns persistent lock on and stores the chosen ratio.
 
@@ -116,8 +117,7 @@ Shift is a temporary ratio lock for drag interactions.
 - Shift does not mutate the persistent lock setting.
 - Releasing Shift restores the lock icon to the persistent state.
 - Moving a selection with Shift held behaves like ordinary movement; ratio locking only affects create or resize operations.
-
-Because this iteration removes ordinary drag resizing through corner handles, Shift primarily affects drag creation. If resize handles return in a later iteration, the same temporary ratio rule should apply to handle resizing.
+- Resizing a selection with a persistent ratio lock or temporary Shift lock keeps the opposite corner fixed while constraining the moving corner to the active ratio.
 
 ## Error Handling
 
@@ -146,11 +146,12 @@ Manual smoke tests should cover AppKit behavior:
 - Preset selection immediately adjusts the selection and turns lock on.
 - Empty-selection preset selection creates a centered selection.
 - Holding Shift during drag shows temporary lock state and restores the previous state after release.
+- Dragging a corner with ratio lock enabled keeps the opposite corner fixed.
 
 ## Acceptance Criteria
 
 - The HUD remains fixed width in all new size-control states.
-- Users can create and move selections by dragging.
+- Users can create, move, and corner-resize selections by dragging.
 - Users change selection width and height through HUD numeric input.
 - Center-fixed numeric sizing works with and without ratio locking.
 - The lock icon replaces the `x` separator and toggles current-ratio locking.
@@ -158,9 +159,9 @@ Manual smoke tests should cover AppKit behavior:
 - Preset selection applies immediately and does not enlarge an existing selection.
 - Empty-state preset selection creates a centered default selection.
 - Shift-drag temporarily locks ratio without changing persistent lock state.
+- Ratio-constrained resize keeps the opposite corner anchored.
 
 ## Open Follow-Ups
 
 - Consider user-defined custom ratios after the fixed HUD interaction has proven comfortable.
 - Consider pixel-size presets in a separate command surface rather than the compact HUD.
-- Revisit handle-based resizing only if users miss direct edge or corner resize.

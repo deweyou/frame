@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add fixed-width HUD size controls with numeric width/height editing, ratio locking, preset ratios, and Shift temporary ratio drag behavior.
+**Goal:** Add fixed-width HUD size controls with numeric width/height editing, ratio locking, preset ratios, anchored corner resizing, and Shift temporary ratio drag behavior.
 
-**Architecture:** Put deterministic sizing math in `FrameCore` so center resizing, ratio fitting, and default preset creation can be unit tested without AppKit. Add a focused AppKit HUD control in `FrameApp` for the fixed-width size UI, then integrate it into `SelectionOverlayWindow` while keeping capture and Quick Access unchanged.
+**Architecture:** Put deterministic sizing math in `FrameCore` so center resizing, ratio fitting, and default preset creation can be unit tested without AppKit. Add a focused AppKit HUD control in `FrameApp` for the fixed-width size UI, then integrate it into `SelectionOverlayWindow` while keeping capture and Quick Access unchanged. Corner resize remains owned by the overlay view because it depends on AppKit pointer hit testing and opposite-corner anchoring.
 
 **Tech Stack:** Swift 6.1, AppKit, CoreGraphics, Swift Testing, existing `FrameCore` and `FrameApp` package targets.
 
@@ -15,7 +15,7 @@
 - Create `Sources/FrameCore/SelectionSizing.swift` for `SelectionAspectRatio`, `SelectionSizingMode`, and deterministic rectangle sizing helpers.
 - Modify `Tests/FrameCoreTests/FrameCoreTests.swift` with unit tests for center resize, ratio fitting, default preset selection, and clamping.
 - Create `Sources/FrameApp/HUDSizeControl.swift` for the fixed-width width/lock/height/chevron HUD control.
-- Modify `Sources/FrameApp/SelectionOverlayWindow.swift` to replace `sizeLabel` with `HUDSizeControl`, remove corner resize hit-testing for ordinary drag, apply numeric sizing and presets, and implement Shift temporary ratio lock during drag.
+- Modify `Sources/FrameApp/SelectionOverlayWindow.swift` to replace `sizeLabel` with `HUDSizeControl`, restore corner resize hit-testing, apply numeric sizing and presets, and implement Shift temporary ratio lock during create and resize drags.
 - Modify `docs/architecture.md` after implementation to record the durable sizing boundary.
 
 ## Tasks
@@ -571,9 +571,9 @@ Expected: build succeeds after resolving any naming/import issues introduced by 
 - Modify: `Sources/FrameApp/SelectionOverlayWindow.swift`
 - Modify: `Sources/FrameApp/HUDSizeControl.swift` if AppKit focus handling needs a small adjustment
 
-- [ ] **Step 1: Disable ordinary corner resize hit testing**
+- [x] **Step 1: Restore corner resize hit testing**
 
-In `dragOperation(startingAt:)`, remove the `SelectionHandle.hitTest` branch so ordinary drags only create or move:
+`dragOperation(startingAt:)` checks corner handles before move or create so the existing selection can be resized directly:
 
 ```swift
 private func dragOperation(startingAt point: CGPoint, modifiers: NSEvent.ModifierFlags) -> SelectionDragOperation {
@@ -581,24 +581,25 @@ private func dragOperation(startingAt point: CGPoint, modifiers: NSEvent.Modifie
         return .create(startPoint: point, ratio: ratioForCreateDrag(modifiers: modifiers))
     }
 
-    if selectionRect.isNearlyEqual(to: bounds) {
-        return .create(startPoint: point, ratio: ratioForCreateDrag(modifiers: modifiers))
+    if let handle = SelectionHandle.hitTest(point: point, in: selectionRect) {
+        return .resize(
+            handle: handle,
+            startRect: selectionRect,
+            ratio: ratioForResizeDrag(startRect: selectionRect, modifiers: modifiers)
+        )
     }
 
-    if selectionRect.contains(point) {
-        return .move(startRect: selectionRect, startPoint: point)
-    }
-
-    return .create(startPoint: point, ratio: ratioForCreateDrag(modifiers: modifiers))
+    ...
 }
 ```
 
-Change `SelectionDragOperation` to:
+`SelectionDragOperation` includes resize:
 
 ```swift
 private enum SelectionDragOperation {
     case create(startPoint: CGPoint, ratio: SelectionAspectRatio?)
     case move(startRect: CGRect, startPoint: CGPoint)
+    case resize(handle: SelectionHandle, startRect: CGRect, ratio: SelectionAspectRatio?)
 }
 ```
 
@@ -647,20 +648,22 @@ private func ratioForCreateDrag(modifiers: NSEvent.ModifierFlags) -> SelectionAs
 }
 ```
 
-- [ ] **Step 3: Apply ratio to create drags**
+- [x] **Step 3: Apply anchored ratios to create and resize drags**
 
-Replace the `.create` branch in `updateSelection(for:currentPoint:)` with:
+Use the drag start point, or the handle's opposite corner, as the fixed point. The ratio-constrained rectangle fits inside the pointer's proposed box without recentering, so dragging the top-right handle keeps the bottom-left corner fixed:
 
 ```swift
 case let .create(startPoint, ratio):
     let proposed = SelectionGeometry.normalizedRect(from: startPoint, to: currentPoint)
-    if let ratio,
-       proposed.width > 0,
-       proposed.height > 0 {
-        selectionRect = SelectionSizing.fit(aspectRatio: ratio, inside: proposed)
+    if let activeRatio {
+        selectionRect = ratioConstrainedRect(from: startPoint, to: currentPoint, aspectRatio: activeRatio)
+    } else if let ratio, isShiftTemporarilyLocking {
+        selectionRect = ratioConstrainedRect(from: startPoint, to: currentPoint, aspectRatio: ratio)
     } else {
         selectionRect = proposed
     }
+case let .resize(handle, startRect, ratio):
+    selectionRect = clampedRect(handle.resizedRect(from: startRect, to: currentPoint, aspectRatio: activeRatio ?? ratio))
 ```
 
 - [ ] **Step 4: Implement lock, size edits, and presets**
@@ -782,7 +785,7 @@ Expected: tests and build pass.
 In `docs/architecture.md`, update the `SelectionOverlayWindow` runtime component description to mention:
 
 ```text
-SelectionOverlayWindow shows a fixed-width HUD whose size segment supports numeric width and height input, ratio locking, preset ratios, and temporary Shift ratio locking while preserving the compact overlay shape.
+SelectionOverlayWindow shows a fixed-width HUD whose size segment supports numeric width and height input, ratio locking, preset ratios, opposite-corner anchored resize, and temporary Shift ratio locking while preserving the compact overlay shape.
 ```
 
 - [ ] **Step 2: Run the required verification commands**
@@ -826,7 +829,8 @@ Authority=Frame Local Dev CLI
 
 - [ ] Start screenshot and confirm the HUD width does not change from empty state to selected state.
 - [ ] Drag to create a region and confirm the region can be moved by dragging inside it.
-- [ ] Confirm corner/edge drag no longer resizes the region.
+- [ ] Confirm corner drag resizes the region.
+- [ ] Confirm locked or Shift corner drag preserves ratio and anchors the opposite corner.
 - [ ] Click width, enter a number, press Enter, and confirm the selection resizes around its center.
 - [ ] Click height, enter a number, press Enter, and confirm the selection resizes around its center.
 - [ ] Toggle the lock icon and confirm editing width derives height from the locked ratio.
