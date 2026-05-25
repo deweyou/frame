@@ -68,6 +68,41 @@ struct HUDSizeControlTests {
 
         #expect(committedWidth == 640)
     }
+
+    @Test("metrics refresh does not overwrite active editor text")
+    func metricsRefreshDoesNotOverwriteActiveEditorText() throws {
+        let harness = HUDSizeControlHarness()
+        defer {
+            harness.close()
+        }
+
+        harness.control.update(
+            width: 1280,
+            height: 720,
+            maximumWidth: 4096,
+            maximumHeight: 2304,
+            isLocked: false,
+            foregroundColor: .labelColor
+        )
+
+        let widthField = try #require(harness.widthField)
+        #expect(harness.window.makeFirstResponder(widthField))
+        widthField.selectText(nil)
+
+        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        editor.replaceCharacters(in: editor.selectedRange, with: "1")
+
+        harness.control.update(
+            width: 0,
+            height: 0,
+            maximumWidth: 4096,
+            maximumHeight: 2304,
+            isLocked: false,
+            foregroundColor: .labelColor
+        )
+
+        #expect(editor.string == "1")
+    }
 }
 
 @MainActor

@@ -46,10 +46,10 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         self.maximumWidth = min(maximumWidth, 9999)
         self.maximumHeight = min(maximumHeight, 9999)
 
-        if editingDimension != .width {
+        if !isEditing(.width) {
             widthField.stringValue = "\(width)"
         }
-        if editingDimension != .height {
+        if !isEditing(.height) {
             heightField.stringValue = "\(height)"
         }
 
@@ -318,6 +318,10 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         case .height:
             heightField
         }
+    }
+
+    private func isEditing(_ dimension: SelectionSizeDimension) -> Bool {
+        activeEditingDimension == dimension
     }
 
     private func linkImage(isLocked: Bool) -> NSImage? {
