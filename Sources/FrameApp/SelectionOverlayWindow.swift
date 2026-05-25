@@ -537,6 +537,8 @@ private final class SelectionOverlayView: NSView {
         sizeControl.update(
             width: width,
             height: height,
+            maximumWidth: Int(bounds.width.rounded(.down)),
+            maximumHeight: Int(bounds.height.rounded(.down)),
             isLocked: effectiveSizingMode != .unlocked,
             foregroundColor: hudTheme.foregroundColor
         )
@@ -660,13 +662,13 @@ private final class SelectionOverlayView: NSView {
     private func toggleRatioLock() {
         switch sizingMode {
         case .unlocked:
-            guard let displayedLocalRect,
-                  displayedLocalRect.width > 0,
-                  displayedLocalRect.height > 0 else {
-                NSSound.beep()
-                return
+            if let displayedLocalRect,
+               displayedLocalRect.width > 0,
+               displayedLocalRect.height > 0 {
+                sizingMode = .locked(SelectionAspectRatio(width: displayedLocalRect.width, height: displayedLocalRect.height))
+            } else {
+                sizingMode = .locked(.square)
             }
-            sizingMode = .locked(SelectionAspectRatio(width: displayedLocalRect.width, height: displayedLocalRect.height))
         case .locked:
             sizingMode = .unlocked
         }

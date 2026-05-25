@@ -15,6 +15,8 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     private let ratioMenu = NSMenu()
     private var editingDimension: SelectionSizeDimension?
     private var editingOriginalValue = ""
+    private var maximumWidth = 9999
+    private var maximumHeight = 9999
     private var foregroundColor = NSColor.white
     private var isFinishingEditing = false
 
@@ -32,8 +34,17 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         editingDimension != nil
     }
 
-    func update(width: Int, height: Int, isLocked: Bool, foregroundColor: NSColor) {
+    func update(
+        width: Int,
+        height: Int,
+        maximumWidth: Int,
+        maximumHeight: Int,
+        isLocked: Bool,
+        foregroundColor: NSColor
+    ) {
         self.foregroundColor = foregroundColor
+        self.maximumWidth = min(maximumWidth, 9999)
+        self.maximumHeight = min(maximumHeight, 9999)
 
         if editingDimension != .width {
             widthField.stringValue = "\(width)"
@@ -139,6 +150,9 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
 
         editingOriginalValue = field.stringValue
         editingDimension = field === widthField ? .width : .height
+        DispatchQueue.main.async {
+            field.currentEditor()?.selectAll(nil)
+        }
     }
 
     func controlTextDidEndEditing(_ notification: Notification) {
@@ -179,14 +193,43 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
             return true
         }
 
-        return string.allSatisfy(\.isNumber)
+        guard string.allSatisfy(\.isNumber) else {
+            return false
+        }
+
+        let currentString = textView.string as NSString
+        let proposed = currentString.replacingCharacters(in: affectedCharRange, with: string)
+        guard !proposed.isEmpty else {
+            return true
+        }
+
+        guard let value = Int(proposed) else {
+            return false
+        }
+
+        let normalized = "\(value)"
+        guard normalized.count <= 4,
+              value <= maximumValueForActiveDimension() else {
+            return false
+        }
+
+        if normalized != proposed {
+            textView.string = normalized
+            textView.setSelectedRange(NSRange(location: normalized.count, length: 0))
+            return false
+        }
+
+        return true
     }
 
     @objc private func toggleLock() {
+        finishActiveEditingBeforeControlAction()
         onLockToggle?()
     }
 
     @objc private func showRatioMenu() {
+        finishActiveEditingBeforeControlAction()
+        window?.makeFirstResponder(window?.contentView)
         ratioMenu.popUp(
             positioning: nil,
             at: CGPoint(x: menuButton.bounds.minX, y: menuButton.bounds.maxY + 4),
@@ -233,6 +276,25 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         case .height:
             onHeightCommit?(value)
         }
+    }
+
+    private func maximumValueForActiveDimension() -> Int {
+        switch editingDimension {
+        case .width:
+            maximumWidth
+        case .height:
+            maximumHeight
+        case nil:
+            9999
+        }
+    }
+
+    private func finishActiveEditingBeforeControlAction() {
+        guard editingDimension != nil else {
+            return
+        }
+
+        finishEditing(.commit)
     }
 
     private func field(for dimension: SelectionSizeDimension) -> NSTextField {

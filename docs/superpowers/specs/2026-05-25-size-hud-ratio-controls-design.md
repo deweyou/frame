@@ -61,6 +61,7 @@ Frame tracks a persistent sizing mode:
 
 - Unlocked: width and height edits are independent.
 - Locked to current ratio: toggled by clicking the lock icon when a selection exists. The ratio is captured from the current selection at the moment locking is enabled.
+- Locked from an empty or `0 x 0` HUD state: toggled by clicking the lock icon and defaults to `1:1`.
 - Locked to preset ratio: set by choosing a preset from the chevron menu.
 
 The link icon reflects persistent lock state when Shift is not pressed. During Shift-drag, the icon temporarily shows locked. When Shift is released, the icon returns to the persistent state.
@@ -75,8 +76,11 @@ When the user applies an edit:
 
 - Empty, non-numeric, zero, negative, or below-minimum values are rejected and the display returns to the previous value.
 - Non-digit characters are blocked during text entry.
+- Numeric entry is capped during typing to four digits and the active overlay screen's matching dimension.
+- Leading zeroes are normalized during typing, so entering `1` into `0` becomes `1`, not `01`.
 - Values larger than the active overlay screen's width or height are rejected for the corresponding dimension.
 - In locked mode, edits that would derive an opposite dimension larger than the active overlay screen are rejected.
+- Opening the ratio menu or toggling the lock ends any active numeric edit first.
 - Unlocked mode changes only the edited dimension.
 - Locked mode changes the edited dimension and derives the other dimension from the active ratio.
 - The updated rectangle keeps the previous center fixed.
