@@ -2,7 +2,7 @@ import CoreGraphics
 
 public enum SelectionCaptureKind: Equatable {
     case region
-    case window
+    case window(id: UInt32)
 }
 
 public struct SelectionCapture: Equatable {

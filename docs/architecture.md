@@ -38,12 +38,12 @@ background-aware contrast, and direct-manipulation capture behavior.
 - screenshot filename generation
 - Desktop save URL composition
 - selection rectangle normalization and validation
-- selection capture kind metadata for region and window selections
+- selection capture metadata for region selections and window selections with window IDs
 
 AppKit-specific code stays in `FrameApp`. Keep permission, capture, pasteboard, panels, window metadata, and window behavior behind narrow adapters so future ScreenCaptureKit migration or UI changes are local.
 
 ## Current Tradeoffs
 
-- `CaptureService` uses `CGWindowListCreateImage`, which is deprecated on macOS 14+. It is isolated in one adapter so a future ScreenCaptureKit migration is contained.
+- `CaptureService` uses `CGWindowListCreateImage`, which is deprecated on macOS 14+. Region captures use rectangular on-screen pixels. Window captures use the selected window ID with bounds framing ignored so saved window screenshots do not include macOS shadow ornamentation. The adapter is isolated so a future ScreenCaptureKit migration is contained.
 - Local development should use a stable self-signed Code Signing identity through `FRAME_CODESIGN_IDENTITY` to reduce TCC permission churn.
 - Screen Recording permission is sensitive to bundle identity, path, and signature. Keep local testing on a stable app path such as `~/Applications/Frame.app`.

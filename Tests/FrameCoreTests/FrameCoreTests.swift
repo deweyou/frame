@@ -95,9 +95,9 @@ struct FrameCoreTests {
     @Test
     func testSelectionCaptureMarksWindowSelections() {
         let rect = CGRect(x: 10, y: 20, width: 320, height: 240)
-        let capture = SelectionCapture(rect: rect, kind: .window)
+        let capture = SelectionCapture(rect: rect, kind: .window(id: 42))
 
         #expect(capture.rect == rect)
-        #expect(capture.kind == .window)
+        #expect(capture.kind == .window(id: 42))
     }
 }

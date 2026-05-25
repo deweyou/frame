@@ -151,7 +151,7 @@ private final class SelectionOverlayView: NSView {
 
     var activeSelection: SelectionCapture? {
         if let windowCandidate {
-            return SelectionCapture(rect: windowCandidate.bounds, kind: .window)
+            return SelectionCapture(rect: windowCandidate.bounds, kind: .window(id: windowCandidate.id))
         }
 
         guard let selectedGlobalRect else {
