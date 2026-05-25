@@ -22,7 +22,7 @@ final class SelectionOverlayController {
         installKeyMonitor()
         NSApp.activate(ignoringOtherApps: true)
 
-        let initialRect = lastSelectedRect ?? (NSScreen.main ?? screens[0]).frame
+        let initialRect = lastSelectedRect
         var createdWindows: [SelectionOverlayWindow] = []
         for screen in screens {
             var createdWindow: SelectionOverlayWindow?

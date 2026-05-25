@@ -187,7 +187,7 @@ private final class SelectionOverlayView: NSView {
         super.draw(dirtyRect)
 
         guard let selectionRect else {
-            NSColor.black.withAlphaComponent(0.26).setFill()
+            NSColor.black.withAlphaComponent(0.38).setFill()
             bounds.fill()
             return
         }
@@ -286,7 +286,7 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func drawDimmedBackdrop(excluding selectionRect: CGRect) {
-        NSColor.black.withAlphaComponent(0.28).setFill()
+        NSColor.black.withAlphaComponent(0.42).setFill()
 
         let topRect = CGRect(
             x: bounds.minX,
