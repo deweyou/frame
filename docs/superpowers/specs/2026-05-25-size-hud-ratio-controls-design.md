@@ -48,7 +48,7 @@ The HUD remains two fixed segments:
 [mode icon] [1280 link 720 chevron]
 ```
 
-The size segment has a fixed width. Width and height are fixed-width text fields sized for four digits, rendered with monospaced digits, and clipped if needed rather than expanding the HUD. The link icon and chevron occupy fixed positions. The link icon replaces the previous `x` separator. The chevron is an icon button at the trailing edge of the size segment.
+The size segment has a fixed width and enough internal padding to keep the controls from feeling cramped. Width and height are fixed-width text fields sized for four digits, rendered with monospaced digits, and clipped if needed rather than expanding the HUD. The link icon and chevron occupy fixed positions. The link icon replaces the previous `x` separator. The chevron is an icon button at the trailing edge of the size segment. HUD icon buttons use a pointing-hand cursor on hover.
 
 The HUD has two size display states:
 
@@ -74,6 +74,9 @@ Clicking a width or height value starts numeric editing for that value.
 When the user applies an edit:
 
 - Empty, non-numeric, zero, negative, or below-minimum values are rejected and the display returns to the previous value.
+- Non-digit characters are blocked during text entry.
+- Values larger than the active overlay screen's width or height are rejected for the corresponding dimension.
+- In locked mode, edits that would derive an opposite dimension larger than the active overlay screen are rejected.
 - Unlocked mode changes only the edited dimension.
 - Locked mode changes the edited dimension and derives the other dimension from the active ratio.
 - The updated rectangle keeps the previous center fixed.

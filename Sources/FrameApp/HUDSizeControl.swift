@@ -87,23 +87,23 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         configureMenu()
 
         NSLayoutConstraint.activate([
-            widthField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            widthField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             widthField.centerYAnchor.constraint(equalTo: centerYAnchor),
-            widthField.widthAnchor.constraint(equalToConstant: 32),
+            widthField.widthAnchor.constraint(equalToConstant: 34),
 
-            linkButton.leadingAnchor.constraint(equalTo: widthField.trailingAnchor, constant: 1),
+            linkButton.leadingAnchor.constraint(equalTo: widthField.trailingAnchor, constant: 3),
             linkButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             linkButton.widthAnchor.constraint(equalToConstant: 17),
             linkButton.heightAnchor.constraint(equalToConstant: 30),
 
-            heightField.leadingAnchor.constraint(equalTo: linkButton.trailingAnchor, constant: 1),
+            heightField.leadingAnchor.constraint(equalTo: linkButton.trailingAnchor, constant: 3),
             heightField.centerYAnchor.constraint(equalTo: centerYAnchor),
-            heightField.widthAnchor.constraint(equalToConstant: 32),
+            heightField.widthAnchor.constraint(equalToConstant: 34),
 
-            menuButton.leadingAnchor.constraint(equalTo: heightField.trailingAnchor, constant: 1),
-            menuButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            menuButton.leadingAnchor.constraint(equalTo: heightField.trailingAnchor, constant: 3),
+            menuButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             menuButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            menuButton.widthAnchor.constraint(equalToConstant: 15),
+            menuButton.widthAnchor.constraint(equalToConstant: 17),
         ])
     }
 
@@ -167,6 +167,19 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         }
 
         return false
+    }
+
+    func control(
+        _ control: NSControl,
+        textView: NSTextView,
+        shouldChangeCharactersIn affectedCharRange: NSRange,
+        replacementString string: String?
+    ) -> Bool {
+        guard let string else {
+            return true
+        }
+
+        return string.allSatisfy(\.isNumber)
     }
 
     @objc private func toggleLock() {
@@ -259,5 +272,10 @@ private final class HUDSizeTextField: NSTextField {
 private final class HUDSizeButton: NSButton {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
     }
 }

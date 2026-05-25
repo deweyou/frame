@@ -103,7 +103,7 @@ private final class SelectionOverlayNativeWindow: NSWindow {
 
 @MainActor
 private final class SelectionOverlayView: NSView {
-    private let hudSize = CGSize(width: 158, height: 42)
+    private let hudSize = CGSize(width: 176, height: 42)
     private let screenFrame: CGRect
     private let onInteraction: () -> Void
     private let onWindowSelectionRequested: (CGPoint) -> WindowCandidate?
@@ -316,7 +316,7 @@ private final class SelectionOverlayView: NSView {
         NSLayoutConstraint.activate([
             modeView.widthAnchor.constraint(equalToConstant: 42),
             modeView.heightAnchor.constraint(equalToConstant: hudSize.height),
-            sizeView.widthAnchor.constraint(equalToConstant: 109),
+            sizeView.widthAnchor.constraint(equalToConstant: 127),
             sizeView.heightAnchor.constraint(equalToConstant: hudSize.height),
         ])
 
@@ -606,7 +606,8 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func applySizeEdit(_ dimension: SelectionSizeDimension, value: Int) {
-        guard value >= Int(SelectionGeometry.minimumSelectionSize) else {
+        guard value >= Int(SelectionGeometry.minimumSelectionSize),
+              value <= maximumSizeEditValue(for: dimension) else {
             NSSound.beep()
             updateMetrics()
             return
@@ -623,6 +624,12 @@ private final class SelectionOverlayView: NSView {
             mode: sizingMode
         )
 
+        guard isValidRequestedSize(requestedSize) else {
+            NSSound.beep()
+            updateMetrics()
+            return
+        }
+
         selectionRect = SelectionSizing.centeredRect(
             around: currentRect.center,
             size: requestedSize,
@@ -632,6 +639,22 @@ private final class SelectionOverlayView: NSView {
         windowCandidate = nil
         updateMetrics()
         needsDisplay = true
+    }
+
+    private func maximumSizeEditValue(for dimension: SelectionSizeDimension) -> Int {
+        switch dimension {
+        case .width:
+            Int(bounds.width.rounded(.down))
+        case .height:
+            Int(bounds.height.rounded(.down))
+        }
+    }
+
+    private func isValidRequestedSize(_ size: CGSize) -> Bool {
+        size.width >= SelectionGeometry.minimumSelectionSize
+            && size.height >= SelectionGeometry.minimumSelectionSize
+            && size.width <= bounds.width
+            && size.height <= bounds.height
     }
 
     private func toggleRatioLock() {
@@ -1014,6 +1037,11 @@ private final class HUDIconButton: NSButton {
         )
         addTrackingArea(newTrackingArea)
         trackingArea = newTrackingArea
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
     }
 
     override func mouseEntered(with event: NSEvent) {
