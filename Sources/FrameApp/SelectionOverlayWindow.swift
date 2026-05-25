@@ -698,7 +698,8 @@ private final class SelectionOverlayView: NSView {
 
             if let ratio, isShiftTemporarilyLocking {
                 selectionRect = SelectionSizing.fit(aspectRatio: ratio, inside: proposed)
-            } else if isShiftTemporarilyLocking {
+            } else if isShiftTemporarilyLocking,
+                      SelectionGeometry.isValidSelection(proposed) {
                 let capturedRatio = SelectionAspectRatio(width: proposed.width, height: proposed.height)
                 dragOperation = .create(startPoint: startPoint, ratio: capturedRatio)
                 selectionRect = SelectionSizing.fit(aspectRatio: capturedRatio, inside: proposed)
