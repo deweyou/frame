@@ -128,6 +128,42 @@ struct HUDSizeControlTests {
         #expect(committedWidth == 640)
     }
 
+    @Test("width field allows values above screen maximum to be clamped by overlay")
+    func widthFieldAllowsValuesAboveScreenMaximumToBeClampedByOverlay() throws {
+        let harness = HUDSizeControlHarness()
+        defer {
+            harness.close()
+        }
+
+        var committedWidth: Int?
+        harness.control.onWidthCommit = { value in
+            committedWidth = value
+        }
+
+        harness.control.update(
+            width: 1280,
+            height: 720,
+            maximumWidth: 100,
+            maximumHeight: 100,
+            isLocked: false,
+            foregroundColor: .labelColor
+        )
+
+        let widthField = try #require(harness.widthField)
+        #expect(harness.window.makeFirstResponder(widthField))
+        widthField.selectText(nil)
+
+        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        editor.replaceCharacters(in: editor.selectedRange, with: "999")
+        #expect(harness.control.control(
+            widthField,
+            textView: editor,
+            doCommandBy: #selector(NSResponder.insertNewline(_:))
+        ))
+
+        #expect(committedWidth == 999)
+    }
+
     @Test("metrics refresh does not overwrite active editor text")
     func metricsRefreshDoesNotOverwriteActiveEditorText() throws {
         let harness = HUDSizeControlHarness()

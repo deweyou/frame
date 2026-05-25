@@ -608,12 +608,7 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func applySizeEdit(_ dimension: SelectionSizeDimension, value: Int) {
-        guard value >= Int(SelectionGeometry.minimumSelectionSize),
-              value <= maximumSizeEditValue(for: dimension) else {
-            NSSound.beep()
-            updateMetrics()
-            return
-        }
+        let clampedValue = CGFloat(clampedSizeEditValue(value, for: dimension))
 
         let currentRect = displayedLocalRect ?? SelectionSizing.defaultSelection(
             aspectRatio: activeRatio ?? .sixteenNine,
@@ -621,26 +616,25 @@ private final class SelectionOverlayView: NSView {
         )
         let requestedSize = SelectionSizing.size(
             editing: dimension,
-            value: CGFloat(value),
+            value: clampedValue,
             currentSize: currentRect.size,
             mode: sizingMode
         )
-
-        guard isValidRequestedSize(requestedSize) else {
-            NSSound.beep()
-            updateMetrics()
-            return
-        }
+        let finalSize = clampedRequestedSize(requestedSize, preserving: activeRatio)
 
         selectionRect = SelectionSizing.centeredRect(
             around: currentRect.center,
-            size: requestedSize,
+            size: finalSize,
             inside: bounds,
             preserving: activeRatio
         )
         windowCandidate = nil
         updateMetrics()
         needsDisplay = true
+    }
+
+    private func clampedSizeEditValue(_ value: Int, for dimension: SelectionSizeDimension) -> Int {
+        min(max(value, Int(SelectionGeometry.minimumSelectionSize)), maximumSizeEditValue(for: dimension))
     }
 
     private func maximumSizeEditValue(for dimension: SelectionSizeDimension) -> Int {
@@ -652,11 +646,22 @@ private final class SelectionOverlayView: NSView {
         }
     }
 
-    private func isValidRequestedSize(_ size: CGSize) -> Bool {
-        size.width >= SelectionGeometry.minimumSelectionSize
-            && size.height >= SelectionGeometry.minimumSelectionSize
-            && size.width <= bounds.width
-            && size.height <= bounds.height
+    private func clampedRequestedSize(_ size: CGSize, preserving ratio: SelectionAspectRatio?) -> CGSize {
+        let minimum = SelectionGeometry.minimumSelectionSize
+        let size = CGSize(
+            width: max(size.width, minimum),
+            height: max(size.height, minimum)
+        )
+
+        guard size.width > bounds.width || size.height > bounds.height else {
+            return size
+        }
+
+        if let ratio {
+            return SelectionSizing.sizeThatFits(aspectRatio: ratio, inside: bounds.size)
+        }
+
+        return CGSize(width: min(size.width, bounds.width), height: min(size.height, bounds.height))
     }
 
     private func toggleRatioLock() {

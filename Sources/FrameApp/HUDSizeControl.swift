@@ -238,8 +238,7 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
             return
         }
 
-        guard value > 0,
-              value <= maximumValue(for: editingDimension) else {
+        guard value > 0 else {
             field.stringValue = editingOriginalValue
             NSSound.beep()
             return
@@ -293,15 +292,6 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
             editingDimension = .width
         } else if control === heightField {
             editingDimension = .height
-        }
-    }
-
-    private func maximumValue(for dimension: SelectionSizeDimension) -> Int {
-        switch dimension {
-        case .width:
-            maximumWidth
-        case .height:
-            maximumHeight
         }
     }
 
