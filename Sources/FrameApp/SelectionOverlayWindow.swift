@@ -11,16 +11,14 @@ final class SelectionOverlayWindow {
         screen: NSScreen,
         initialGlobalRect: CGRect?,
         onInteraction: @escaping () -> Void,
-        onMouseMoved: @escaping (CGPoint, Bool) -> Void,
-        onRegionEditingStarted: @escaping () -> Void,
-        onComplete: @escaping (CGRect?) -> Void
+        onWindowSelectionRequested: @escaping (CGPoint) -> WindowCandidate?,
+        onComplete: @escaping (SelectionCapture?) -> Void
     ) {
         overlayView = SelectionOverlayView(
             screen: screen,
             initialGlobalRect: initialGlobalRect,
             onInteraction: onInteraction,
-            onMouseMoved: onMouseMoved,
-            onRegionEditingStarted: onRegionEditingStarted,
+            onWindowSelectionRequested: onWindowSelectionRequested,
             onComplete: onComplete
         )
 
@@ -62,16 +60,12 @@ final class SelectionOverlayWindow {
         overlayView.selectedGlobalRect
     }
 
-    var activeGlobalRect: CGRect? {
-        overlayView.activeGlobalRect
+    var activeSelection: SelectionCapture? {
+        overlayView.activeSelection
     }
 
     func clearSelection() {
         overlayView.clearSelection()
-    }
-
-    func showWindowCandidate(_ candidate: WindowCandidate?) {
-        overlayView.showWindowCandidate(candidate)
     }
 
     func contains(globalPoint: CGPoint) -> Bool {
@@ -92,9 +86,8 @@ private final class SelectionOverlayView: NSView {
     private let hudSize = CGSize(width: 158, height: 42)
     private let screenFrame: CGRect
     private let onInteraction: () -> Void
-    private let onMouseMoved: (CGPoint, Bool) -> Void
-    private let onRegionEditingStarted: () -> Void
-    private let onComplete: (CGRect?) -> Void
+    private let onWindowSelectionRequested: (CGPoint) -> WindowCandidate?
+    private let onComplete: (SelectionCapture?) -> Void
     private let hudStackView = NSStackView()
     private let modeView = NSVisualEffectView()
     private let sizeView = NSVisualEffectView()
@@ -110,14 +103,12 @@ private final class SelectionOverlayView: NSView {
         screen: NSScreen,
         initialGlobalRect: CGRect?,
         onInteraction: @escaping () -> Void,
-        onMouseMoved: @escaping (CGPoint, Bool) -> Void,
-        onRegionEditingStarted: @escaping () -> Void,
-        onComplete: @escaping (CGRect?) -> Void
+        onWindowSelectionRequested: @escaping (CGPoint) -> WindowCandidate?,
+        onComplete: @escaping (SelectionCapture?) -> Void
     ) {
         self.screenFrame = screen.frame
         self.onInteraction = onInteraction
-        self.onMouseMoved = onMouseMoved
-        self.onRegionEditingStarted = onRegionEditingStarted
+        self.onWindowSelectionRequested = onWindowSelectionRequested
         self.onComplete = onComplete
 
         super.init(frame: CGRect(origin: .zero, size: screen.frame.size))
@@ -149,24 +140,22 @@ private final class SelectionOverlayView: NSView {
         return globalRect(fromLocalRect: selectionRect)
     }
 
-    var activeGlobalRect: CGRect? {
+    var activeSelection: SelectionCapture? {
         if let windowCandidate {
-            return windowCandidate.bounds
+            return SelectionCapture(rect: windowCandidate.bounds, kind: .window)
         }
 
-        return selectedGlobalRect
+        guard let selectedGlobalRect else {
+            return nil
+        }
+
+        return SelectionCapture(rect: selectedGlobalRect, kind: .region)
     }
 
     func clearSelection() {
         selectionRect = nil
         windowCandidate = nil
         dragOperation = nil
-        updateMetrics()
-        needsDisplay = true
-    }
-
-    func showWindowCandidate(_ candidate: WindowCandidate?) {
-        windowCandidate = candidate
         updateMetrics()
         needsDisplay = true
     }
@@ -186,18 +175,18 @@ private final class SelectionOverlayView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        let point = clampedPoint(event.locationInWindow)
+
+        if event.clickCount == 2 {
+            selectWindowCandidate(at: point)
+            return
+        }
+
         onInteraction()
         windowCandidate = nil
-        onRegionEditingStarted()
-        let point = clampedPoint(event.locationInWindow)
         dragOperation = dragOperation(startingAt: point)
         updateMetrics()
         needsDisplay = true
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        let point = clampedPoint(event.locationInWindow)
-        onMouseMoved(globalPoint(fromLocalPoint: point), hudStackView.frame.contains(point))
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -414,13 +403,13 @@ private final class SelectionOverlayView: NSView {
         path.stroke()
     }
 
-    private func completeSelection(with selectedRect: CGRect?) {
+    private func completeSelection(with selection: SelectionCapture?) {
         guard !hasCompleted else {
             return
         }
 
         hasCompleted = true
-        onComplete(selectedRect)
+        onComplete(selection)
     }
 
     @objc private func regionModeButtonClicked() {
@@ -428,19 +417,26 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func confirmSelection() {
-        if let windowCandidate,
-           SelectionGeometry.isValidSelection(windowCandidate.bounds) {
-            completeSelection(with: windowCandidate.bounds)
-            return
-        }
-
-        guard let selectionRect,
-              SelectionGeometry.isValidSelection(selectionRect) else {
+        guard let activeSelection,
+              SelectionGeometry.isValidSelection(activeSelection.rect) else {
             NSSound.beep()
             return
         }
 
-        completeSelection(with: globalRect(fromLocalRect: selectionRect))
+        completeSelection(with: activeSelection)
+    }
+
+    private func selectWindowCandidate(at localPoint: CGPoint) {
+        guard !hudStackView.frame.contains(localPoint),
+              let candidate = onWindowSelectionRequested(globalPoint(fromLocalPoint: localPoint)) else {
+            return
+        }
+
+        onInteraction()
+        dragOperation = nil
+        windowCandidate = candidate
+        updateMetrics()
+        needsDisplay = true
     }
 
     private func updateMetrics() {

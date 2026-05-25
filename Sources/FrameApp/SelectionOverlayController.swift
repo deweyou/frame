@@ -4,17 +4,15 @@ import FrameCore
 @MainActor
 final class SelectionOverlayController {
     private var overlayWindows: [SelectionOverlayWindow] = []
-    private var completion: ((CGRect?) -> Void)?
+    private var completion: ((SelectionCapture?) -> Void)?
     private var keyMonitor: Any?
     private var lastSelectedRect: CGRect?
-    private var hoverSelection = WindowHoverSelection()
     private let windowCandidateProvider = WindowCandidateProvider()
 
-    func startSelection(completion: @escaping (CGRect?) -> Void) {
+    func startSelection(completion: @escaping (SelectionCapture?) -> Void) {
         finishSelection(with: nil)
 
         self.completion = completion
-        hoverSelection.reset()
 
         let screens = NSScreen.screens
         guard !screens.isEmpty else {
@@ -39,14 +37,11 @@ final class SelectionOverlayController {
 
                     self?.activate(createdWindow)
                 },
-                onMouseMoved: { [weak self] globalPoint, isOverHUD in
-                    self?.updateWindowHover(globalPoint: globalPoint, isOverHUD: isOverHUD)
+                onWindowSelectionRequested: { [weak self] globalPoint in
+                    self?.windowCandidateProvider.candidate(at: globalPoint)
                 },
-                onRegionEditingStarted: { [weak self] in
-                    self?.lockRegionEditingForSession()
-                },
-                onComplete: { [weak self] selectedRect in
-                    self?.finishSelection(with: selectedRect)
+                onComplete: { [weak self] selection in
+                    self?.finishSelection(with: selection)
                 }
             )
             createdWindow = window
@@ -69,36 +64,7 @@ final class SelectionOverlayController {
         activeWindow.makeKey()
     }
 
-    private func updateWindowHover(globalPoint: CGPoint, isOverHUD: Bool) {
-        let candidate = isOverHUD ? nil : windowCandidateProvider.candidate(at: globalPoint)
-        let activeCandidate = hoverSelection.update(
-            candidate: candidate,
-            mouseLocation: globalPoint,
-            isOverHUD: isOverHUD,
-            timestamp: ProcessInfo.processInfo.systemUptime
-        )
-
-        for window in overlayWindows {
-            window.showWindowCandidate(activeCandidate)
-        }
-
-        guard let activeCandidate,
-              let activeWindow = overlayWindows.first(where: { $0.contains(globalPoint: globalPoint) })
-                ?? overlayWindows.first(where: { $0.contains(globalPoint: activeCandidate.bounds.origin) }) else {
-            return
-        }
-
-        activate(activeWindow)
-    }
-
-    private func lockRegionEditingForSession() {
-        hoverSelection.lockRegionEditingForSession()
-        for window in overlayWindows {
-            window.showWindowCandidate(nil)
-        }
-    }
-
-    private func finishSelection(with selectedRect: CGRect?) {
+    private func finishSelection(with selection: SelectionCapture?) {
         guard let completion else {
             return
         }
@@ -106,8 +72,8 @@ final class SelectionOverlayController {
         self.completion = nil
         removeKeyMonitor()
 
-        if let selectedRect {
-            lastSelectedRect = selectedRect
+        if let selection {
+            lastSelectedRect = selection.rect
         }
 
         for window in overlayWindows {
@@ -116,21 +82,21 @@ final class SelectionOverlayController {
         }
         overlayWindows.removeAll()
 
-        completion(selectedRect)
+        completion(selection)
     }
 
     private func confirmCurrentSelection() {
-        guard let selectedRect = overlayWindows.first(where: { $0.activeGlobalRect != nil })?.activeGlobalRect else {
+        guard let selection = overlayWindows.first(where: { $0.activeSelection != nil })?.activeSelection else {
             NSSound.beep()
             return
         }
 
-        guard SelectionGeometry.isValidSelection(selectedRect) else {
+        guard SelectionGeometry.isValidSelection(selection.rect) else {
             NSSound.beep()
             return
         }
 
-        finishSelection(with: selectedRect)
+        finishSelection(with: selection)
     }
 
     private func installKeyMonitor() {

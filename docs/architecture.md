@@ -21,8 +21,8 @@ background-aware contrast, and direct-manipulation capture behavior.
 5. `SettingsStore` persists user-facing app settings in `UserDefaults`.
 6. `HotKeyController` registers the selected screenshot shortcut through Carbon and routes it to the screenshot flow.
 7. `ScreenRecordingPermission` checks and requests macOS Screen Recording access.
-8. `SelectionOverlayController` creates one overlay per connected `NSScreen`, owns automatic window-hover timing, and disables automatic window hover once the user starts region editing in the current session.
-9. `SelectionOverlayWindow` shows a single active editable selection across displays, supports drag adjustment, can temporarily display an eligible hovered application window as a candidate, follows the active rectangle with a compact native glass HUD, and returns a global Cocoa screen rectangle after keyboard confirmation.
+8. `SelectionOverlayController` creates one overlay per connected `NSScreen`, owns window candidate lookup, and stores the last confirmed selection rectangle.
+9. `SelectionOverlayWindow` shows a single active editable selection across displays, supports drag adjustment, can switch to an eligible double-clicked application window as a marked window selection, follows the active rectangle with a compact native glass HUD, and returns a global Cocoa screen rectangle after keyboard confirmation.
 10. `WindowCandidateProvider` adapts CoreGraphics window-list metadata into eligible ordinary application window candidates while excluding Frame's own windows and obvious non-application surfaces.
 11. `CaptureService` converts the selected Cocoa rectangle into a Quartz capture rectangle and returns PNG data plus `NSImage`.
 12. `ActiveScreenResolver` resolves the active window rectangle, falling back to the mouse screen or main screen.
@@ -38,7 +38,7 @@ background-aware contrast, and direct-manipulation capture behavior.
 - screenshot filename generation
 - Desktop save URL composition
 - selection rectangle normalization and validation
-- automatic window-hover state and timing
+- selection capture kind metadata for region and window selections
 
 AppKit-specific code stays in `FrameApp`. Keep permission, capture, pasteboard, panels, window metadata, and window behavior behind narrow adapters so future ScreenCaptureKit migration or UI changes are local.
 
