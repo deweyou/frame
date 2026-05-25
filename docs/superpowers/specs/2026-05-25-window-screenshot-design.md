@@ -52,7 +52,7 @@ When the user triggers an interactive screenshot, Frame starts in `RegionEditing
 Double-click handling:
 
 - If the double-click is on the HUD, Frame ignores it.
-- If the double-click is over no eligible window, Frame ignores it.
+- If the double-click is over no eligible window, Frame clears the current selection.
 - If the double-click is over an eligible ordinary application window, Frame changes the active selection to that window's bounds and marks it as `.window`.
 - Double-click works regardless of whether the point is inside or outside the previous region selection.
 - Dragging, moving, or resizing a region clears any window candidate and returns the session to `.region`.
@@ -98,14 +98,16 @@ AppKit and CoreGraphics behavior should be verified with focused manual smoke te
 - Double-click a normal app window and confirm the active selection changes to that window bounds.
 - Press Enter after window selection and confirm the captured image uses that window's full bounds.
 - Cover part of the target window with another window and confirm the obstruction appears in the screenshot.
-- Double-click empty desktop, HUD, and common system UI surfaces and confirm the current selection remains unchanged.
+- Double-click empty desktop or common system UI surfaces and confirm the current selection clears while the active screen keeps a centered HUD.
+- Double-click the HUD and confirm the current selection remains unchanged.
 - Drag or resize the region after a window selection and confirm the session returns to region selection.
 
 ## Acceptance Criteria
 
 - Interactive screenshot still starts with the previous selection when one exists.
 - Double-clicking an eligible ordinary application window updates the active selection to that window bounds.
-- Double-clicking HUD, empty space, or ineligible surfaces does not disturb the current selection.
+- Double-clicking HUD does not disturb the current selection.
+- Double-clicking empty space or ineligible surfaces clears the current selection and leaves a centered HUD on the active screen.
 - Enter captures a marked window selection as a rectangular screen-pixel capture.
 - Region editing remains available and clears the window selection.
 - Selection results carry `.region` or `.window` metadata for future specialized handling.

@@ -24,12 +24,14 @@ final class SelectionOverlayController {
         NSApp.activate(ignoringOtherApps: true)
 
         let initialRect = lastSelectedRect
+        let activeScreen = activeScreen(from: screens)
         var createdWindows: [SelectionOverlayWindow] = []
         for screen in screens {
             var createdWindow: SelectionOverlayWindow?
             let window = SelectionOverlayWindow(
                 screen: screen,
                 initialGlobalRect: initialRect,
+                showsCenteredHUDWhenEmpty: screen === activeScreen,
                 onInteraction: { [weak self] in
                     guard let createdWindow else {
                         return
@@ -59,9 +61,18 @@ final class SelectionOverlayController {
     private func activate(_ activeWindow: SelectionOverlayWindow) {
         for window in overlayWindows where window !== activeWindow {
             window.clearSelection()
+            window.setShowsCenteredHUDWhenEmpty(false)
         }
 
+        activeWindow.setShowsCenteredHUDWhenEmpty(true)
         activeWindow.makeKey()
+    }
+
+    private func activeScreen(from screens: [NSScreen]) -> NSScreen {
+        let mouseLocation = NSEvent.mouseLocation
+        return screens.first { $0.frame.contains(mouseLocation) }
+            ?? NSScreen.main
+            ?? screens[0]
     }
 
     private func finishSelection(with selection: SelectionCapture?) {

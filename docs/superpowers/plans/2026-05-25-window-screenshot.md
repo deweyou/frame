@@ -26,7 +26,10 @@
 - [x] Remove automatic hover state and tests.
 - [x] Keep window candidate filtering behind `WindowCandidateProvider`.
 - [x] Wire overlay double-click to query a candidate at the clicked global point.
-- [x] Ignore double-clicks on HUD or ineligible surfaces.
+- [x] Ignore double-clicks on HUD.
+- [x] Clear the current selection when double-clicking empty space or ineligible surfaces.
+- [x] Show a centered HUD on the active screen when no selection exists.
+- [x] Render four dot handles with a green bottom-right dot.
 - [x] Confirm window selections as `.window` and region selections as `.region`.
 - [x] Update specs and architecture docs.
 - [ ] Run `swift test`, `swift build`, and `scripts/package-app.sh`.
@@ -37,6 +40,6 @@
 - Start screenshot with a previous region and confirm it is still visible.
 - Double-click a normal app window and confirm the active selection changes to that window bounds.
 - Press Enter after window selection and confirm the captured image uses that window's full bounds.
-- Double-click HUD, desktop, and common system UI surfaces and confirm selection remains unchanged.
+- Double-click HUD and confirm selection remains unchanged.
+- Double-click desktop and common system UI surfaces and confirm selection clears, with the HUD centered on the active screen.
 - Drag or resize a region after selecting a window and confirm region editing takes over.
-

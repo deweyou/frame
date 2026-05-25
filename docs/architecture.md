@@ -22,7 +22,7 @@ background-aware contrast, and direct-manipulation capture behavior.
 6. `HotKeyController` registers the selected screenshot shortcut through Carbon and routes it to the screenshot flow.
 7. `ScreenRecordingPermission` checks and requests macOS Screen Recording access.
 8. `SelectionOverlayController` creates one overlay per connected `NSScreen`, owns window candidate lookup, and stores the last confirmed selection rectangle.
-9. `SelectionOverlayWindow` shows a single active editable selection across displays, supports drag adjustment, can switch to an eligible double-clicked application window as a marked window selection, follows the active rectangle with a compact native glass HUD, and returns a global Cocoa screen rectangle after keyboard confirmation.
+9. `SelectionOverlayWindow` shows a single active editable selection across displays, supports drag adjustment, can switch to an eligible double-clicked application window as a marked window selection, clears selection on empty double-clicks, shows a centered HUD on the active screen when no selection exists, and returns a global Cocoa screen rectangle after keyboard confirmation.
 10. `WindowCandidateProvider` adapts CoreGraphics window-list metadata into eligible ordinary application window candidates while excluding Frame's own windows and obvious non-application surfaces.
 11. `CaptureService` converts the selected Cocoa rectangle into a Quartz capture rectangle and returns PNG data plus `NSImage`.
 12. `ActiveScreenResolver` resolves the active window rectangle, falling back to the mouse screen or main screen.
