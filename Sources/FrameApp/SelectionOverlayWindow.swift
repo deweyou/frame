@@ -89,7 +89,7 @@ final class SelectionOverlayWindow {
 
 @MainActor
 private final class SelectionOverlayView: NSView {
-    private let hudSize = CGSize(width: 177, height: 42)
+    private let hudSize = CGSize(width: 158, height: 42)
     private let screenFrame: CGRect
     private let onInteraction: () -> Void
     private let onWindowSelectionRequested: (CGPoint) -> WindowCandidate?
@@ -275,7 +275,7 @@ private final class SelectionOverlayView: NSView {
         NSLayoutConstraint.activate([
             modeView.widthAnchor.constraint(equalToConstant: 42),
             modeView.heightAnchor.constraint(equalToConstant: hudSize.height),
-            sizeView.widthAnchor.constraint(equalToConstant: 128),
+            sizeView.widthAnchor.constraint(equalToConstant: 109),
             sizeView.heightAnchor.constraint(equalToConstant: hudSize.height),
         ])
 

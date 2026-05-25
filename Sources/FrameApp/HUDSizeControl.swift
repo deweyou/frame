@@ -68,23 +68,23 @@ final class HUDSizeControl: NSView {
         configureEditor()
 
         NSLayoutConstraint.activate([
-            widthButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 7),
+            widthButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
             widthButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            widthButton.widthAnchor.constraint(equalToConstant: 34),
+            widthButton.widthAnchor.constraint(equalToConstant: 28),
 
-            lockButton.leadingAnchor.constraint(equalTo: widthButton.trailingAnchor, constant: 2),
+            lockButton.leadingAnchor.constraint(equalTo: widthButton.trailingAnchor, constant: 1),
             lockButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            lockButton.widthAnchor.constraint(equalToConstant: 22),
+            lockButton.widthAnchor.constraint(equalToConstant: 19),
             lockButton.heightAnchor.constraint(equalToConstant: 30),
 
-            heightButton.leadingAnchor.constraint(equalTo: lockButton.trailingAnchor, constant: 2),
+            heightButton.leadingAnchor.constraint(equalTo: lockButton.trailingAnchor, constant: 1),
             heightButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            heightButton.widthAnchor.constraint(equalToConstant: 34),
+            heightButton.widthAnchor.constraint(equalToConstant: 28),
 
-            menuButton.leadingAnchor.constraint(equalTo: heightButton.trailingAnchor, constant: 2),
-            menuButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
+            menuButton.leadingAnchor.constraint(equalTo: heightButton.trailingAnchor, constant: 1),
+            menuButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             menuButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            menuButton.widthAnchor.constraint(equalToConstant: 20),
+            menuButton.widthAnchor.constraint(equalToConstant: 18),
         ])
     }
 
