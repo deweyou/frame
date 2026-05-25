@@ -150,7 +150,6 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
 
         editingOriginalValue = field.stringValue
         editingDimension = field === widthField ? .width : .height
-        selectAll(in: field)
     }
 
     func controlTextDidEndEditing(_ notification: Notification) {
@@ -295,11 +294,6 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         } else if control === heightField {
             editingDimension = .height
         }
-    }
-
-    private func selectAll(in field: NSTextField) {
-        field.selectText(nil)
-        field.currentEditor()?.selectAll(nil)
     }
 
     private func maximumValue(for dimension: SelectionSizeDimension) -> Int {
