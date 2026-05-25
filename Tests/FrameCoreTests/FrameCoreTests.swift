@@ -100,4 +100,100 @@ struct FrameCoreTests {
         #expect(capture.rect == rect)
         #expect(capture.kind == .window(id: 42))
     }
+
+    @Test
+    func testCenterResizePreservesCenter() {
+        let original = CGRect(x: 100, y: 120, width: 200, height: 100)
+        let resized = SelectionSizing.centeredRect(
+            around: original.center,
+            size: CGSize(width: 120, height: 80),
+            inside: CGRect(x: 0, y: 0, width: 500, height: 400)
+        )
+
+        #expect(resized.midX == original.midX)
+        #expect(resized.midY == original.midY)
+        #expect(resized.size == CGSize(width: 120, height: 80))
+    }
+
+    @Test
+    func testLockedWidthEditDerivesHeight() {
+        let size = SelectionSizing.size(
+            editing: .width,
+            value: 160,
+            currentSize: CGSize(width: 100, height: 50),
+            mode: .locked(SelectionAspectRatio(width: 16, height: 9))
+        )
+
+        #expect(size == CGSize(width: 160, height: 90))
+    }
+
+    @Test
+    func testLockedHeightEditDerivesWidth() {
+        let size = SelectionSizing.size(
+            editing: .height,
+            value: 90,
+            currentSize: CGSize(width: 100, height: 50),
+            mode: .locked(SelectionAspectRatio(width: 16, height: 9))
+        )
+
+        #expect(size == CGSize(width: 160, height: 90))
+    }
+
+    @Test
+    func testPresetFitDoesNotEnlargeCurrentSelection() {
+        let current = CGRect(x: 0, y: 0, width: 1200, height: 800)
+        let fitted = SelectionSizing.fit(
+            aspectRatio: SelectionAspectRatio(width: 16, height: 9),
+            inside: current
+        )
+
+        #expect(fitted.width == 1200)
+        #expect(fitted.height == 675)
+        #expect(fitted.midX == current.midX)
+        #expect(fitted.midY == current.midY)
+    }
+
+    @Test
+    func testTallPresetFitDoesNotEnlargeCurrentSelection() {
+        let current = CGRect(x: 0, y: 0, width: 800, height: 1200)
+        let fitted = SelectionSizing.fit(
+            aspectRatio: SelectionAspectRatio(width: 16, height: 9),
+            inside: current
+        )
+
+        #expect(fitted.width == 800)
+        #expect(fitted.height == 450)
+        #expect(fitted.midX == current.midX)
+        #expect(fitted.midY == current.midY)
+    }
+
+    @Test
+    func testDefaultPresetSelectionFitsInsideSixtyPercentScreenBox() {
+        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let selection = SelectionSizing.defaultSelection(
+            aspectRatio: SelectionAspectRatio(width: 16, height: 9),
+            screenBounds: screen
+        )
+
+        #expect(selection.width == 864)
+        #expect(selection.height == 486)
+        #expect(selection.midX == screen.midX)
+        #expect(selection.midY == screen.midY)
+    }
+
+    @Test
+    func testLockedOversizedSelectionClampsWhilePreservingRatio() {
+        let screen = CGRect(x: 0, y: 0, width: 1000, height: 1000)
+        let selection = SelectionSizing.centeredRect(
+            around: screen.center,
+            size: CGSize(width: 2000, height: 1125),
+            inside: screen,
+            preserving: SelectionAspectRatio(width: 16, height: 9)
+        )
+
+        #expect(selection.width == 1000)
+        #expect(selection.height == 562.5)
+        #expect(selection.midX == screen.midX)
+        #expect(selection.midY == screen.midY)
+    }
 }
