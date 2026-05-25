@@ -150,8 +150,9 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
 
         editingOriginalValue = field.stringValue
         editingDimension = field === widthField ? .width : .height
+        selectAll(in: field)
         DispatchQueue.main.async {
-            field.currentEditor()?.selectAll(nil)
+            self.selectAll(in: field)
         }
     }
 
@@ -177,6 +178,11 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
             finishEditing(.commit)
             window?.makeFirstResponder(window?.contentView)
+            return true
+        }
+
+        if commandSelector == #selector(NSResponder.selectAll(_:)) {
+            textView.selectAll(nil)
             return true
         }
 
@@ -264,7 +270,10 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
             return
         }
 
-        guard let value = Int(field.stringValue) else {
+        let rawValue = field.currentEditor()?.string ?? field.stringValue
+        field.stringValue = rawValue
+
+        guard let value = Int(rawValue) else {
             field.stringValue = editingOriginalValue
             NSSound.beep()
             return
@@ -295,6 +304,11 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         }
 
         finishEditing(.commit)
+    }
+
+    private func selectAll(in field: NSTextField) {
+        field.selectText(nil)
+        field.currentEditor()?.selectAll(nil)
     }
 
     private func field(for dimension: SelectionSizeDimension) -> NSTextField {
