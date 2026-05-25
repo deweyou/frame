@@ -1,6 +1,6 @@
 .superpowers/
+.worktrees/
 .build/
 DerivedData/
 *.xcuserstate
 xcuserdata/
-
