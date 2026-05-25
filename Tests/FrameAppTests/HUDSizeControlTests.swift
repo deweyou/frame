@@ -202,6 +202,43 @@ struct HUDSizeControlTests {
         #expect(committedWidth == 999)
     }
 
+    @Test("empty width edit restores without commit")
+    func emptyWidthEditRestoresWithoutCommit() throws {
+        let harness = HUDSizeControlHarness()
+        defer {
+            harness.close()
+        }
+
+        var committedWidth: Int?
+        harness.control.onWidthCommit = { value in
+            committedWidth = value
+        }
+
+        harness.control.update(
+            width: 1280,
+            height: 720,
+            maximumWidth: 4096,
+            maximumHeight: 2304,
+            isLocked: false,
+            foregroundColor: .labelColor
+        )
+
+        let widthField = try #require(harness.widthField)
+        #expect(harness.window.makeFirstResponder(widthField))
+
+        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        editor.setSelectedRange(NSRange(location: 0, length: editor.string.count))
+        editor.replaceCharacters(in: editor.selectedRange, with: "")
+        #expect(harness.control.control(
+            widthField,
+            textView: editor,
+            doCommandBy: #selector(NSResponder.insertNewline(_:))
+        ))
+
+        #expect(committedWidth == nil)
+        #expect(widthField.stringValue == "1280")
+    }
+
     @Test("metrics refresh does not overwrite active editor text")
     func metricsRefreshDoesNotOverwriteActiveEditorText() throws {
         let harness = HUDSizeControlHarness()

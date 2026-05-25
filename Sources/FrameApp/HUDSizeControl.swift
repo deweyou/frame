@@ -19,6 +19,9 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     private var maximumHeight = 9999
     private var foregroundColor = NSColor.white
     private var isFinishingEditing = false
+    private var ignoresNextEndEditing = false
+    private var lastWidthValue = "0"
+    private var lastHeightValue = "0"
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -45,6 +48,8 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         self.foregroundColor = foregroundColor
         self.maximumWidth = min(maximumWidth, 9999)
         self.maximumHeight = min(maximumHeight, 9999)
+        lastWidthValue = "\(width)"
+        lastHeightValue = "\(height)"
 
         if !isEditing(.width) {
             widthField.stringValue = "\(width)"
@@ -153,6 +158,11 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     }
 
     func controlTextDidEndEditing(_ notification: Notification) {
+        guard !ignoresNextEndEditing else {
+            ignoresNextEndEditing = false
+            return
+        }
+
         guard !isFinishingEditing else {
             return
         }
@@ -233,14 +243,12 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         field.stringValue = rawValue
 
         guard let value = Int(rawValue) else {
-            field.stringValue = editingOriginalValue
-            NSSound.beep()
+            restore(field)
             return
         }
 
         guard value > 0 else {
-            field.stringValue = editingOriginalValue
-            NSSound.beep()
+            restore(field)
             return
         }
 
@@ -290,8 +298,14 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     private func ensureEditingDimension(for control: NSControl) {
         if control === widthField {
             editingDimension = .width
+            if editingOriginalValue.isEmpty {
+                editingOriginalValue = lastWidthValue
+            }
         } else if control === heightField {
             editingDimension = .height
+            if editingOriginalValue.isEmpty {
+                editingOriginalValue = lastHeightValue
+            }
         }
     }
 
@@ -302,6 +316,13 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         case .height:
             heightField
         }
+    }
+
+    private func restore(_ field: NSTextField) {
+        ignoresNextEndEditing = true
+        field.currentEditor()?.string = editingOriginalValue
+        field.abortEditing()
+        field.stringValue = editingOriginalValue
     }
 
     private func isEditing(_ dimension: SelectionSizeDimension) -> Bool {
