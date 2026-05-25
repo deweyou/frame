@@ -22,7 +22,7 @@ background-aware contrast, and direct-manipulation capture behavior.
 6. `HotKeyController` registers the selected screenshot shortcut through Carbon and routes it to the screenshot flow.
 7. `ScreenRecordingPermission` checks and requests macOS Screen Recording access.
 8. `SelectionOverlayController` creates one overlay per connected `NSScreen`, owns window candidate lookup, and stores the last confirmed selection rectangle.
-9. `SelectionOverlayWindow` shows a single active editable selection across displays, supports drag adjustment, can switch to an eligible double-clicked application window as a marked window selection, clears selection on empty double-clicks, shows a centered HUD on the active screen when no selection exists, and returns a global Cocoa screen rectangle after keyboard confirmation.
+9. `SelectionOverlayWindow` shows a single active editable selection across displays, supports drag create/move interactions, can switch to an eligible double-clicked application window as a marked window selection, clears selection on empty double-clicks, and returns a global Cocoa screen rectangle after keyboard confirmation. Its fixed-width HUD includes numeric width/height editing, current-ratio locking, preset ratios, and temporary Shift ratio locking without changing the HUD width.
 10. `WindowCandidateProvider` adapts CoreGraphics window-list metadata into eligible ordinary application window candidates while excluding Frame's own windows and obvious non-application surfaces.
 11. `CaptureService` converts the selected Cocoa rectangle into a Quartz capture rectangle and returns PNG data plus `NSImage`.
 12. `ActiveScreenResolver` resolves the active window rectangle, falling back to the mouse screen or main screen.
@@ -38,6 +38,7 @@ background-aware contrast, and direct-manipulation capture behavior.
 - screenshot filename generation
 - Desktop save URL composition
 - selection rectangle normalization and validation
+- deterministic selection sizing, ratio fitting, and center-preserving rectangle adjustment
 - selection capture metadata for region selections and window selections with window IDs
 
 AppKit-specific code stays in `FrameApp`. Keep permission, capture, pasteboard, panels, window metadata, and window behavior behind narrow adapters so future ScreenCaptureKit migration or UI changes are local.
