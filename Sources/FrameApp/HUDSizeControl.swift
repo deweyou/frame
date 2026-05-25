@@ -14,7 +14,6 @@ final class HUDSizeControl: NSView {
     private let menuButton = NSPopUpButton(frame: .zero, pullsDown: true)
     private let editor = NSTextField()
     private var editingDimension: SelectionSizeDimension?
-    private var isLocked = false
     private var foregroundColor = NSColor.white
 
     override init(frame frameRect: NSRect) {
@@ -28,7 +27,6 @@ final class HUDSizeControl: NSView {
     }
 
     func update(width: Int, height: Int, isLocked: Bool, foregroundColor: NSColor) {
-        self.isLocked = isLocked
         self.foregroundColor = foregroundColor
         widthButton.title = "\(width)"
         heightButton.title = "\(height)"
@@ -114,7 +112,6 @@ final class HUDSizeControl: NSView {
         editor.alignment = .center
         editor.target = self
         editor.action = #selector(commitEditor)
-        editor.translatesAutoresizingMaskIntoConstraints = false
         addSubview(editor)
     }
 
