@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import FrameCore
 
 @MainActor
@@ -72,14 +73,15 @@ final class SelectionOverlayWindow {
 
 @MainActor
 private final class SelectionOverlayView: NSView {
-    private let hudSize = CGSize(width: 174, height: 48)
+    private let hudSize = CGSize(width: 158, height: 42)
     private let screenFrame: CGRect
     private let onInteraction: () -> Void
     private let onComplete: (CGRect?) -> Void
     private let hudStackView = NSStackView()
-    private let metricsView = NSVisualEffectView()
-    private let widthValueLabel = NSTextField(labelWithString: "0")
-    private let heightValueLabel = NSTextField(labelWithString: "0")
+    private let modeView = NSVisualEffectView()
+    private let sizeView = NSVisualEffectView()
+    private let sizeLabel = NSTextField(labelWithString: "0 x 0")
+    private var hudTheme: HUDTheme = .lightContent
 
     private var selectionRect: CGRect?
     private var dragOperation: SelectionDragOperation?
@@ -197,31 +199,45 @@ private final class SelectionOverlayView: NSView {
     private func configureHUD() {
         hudStackView.orientation = .horizontal
         hudStackView.alignment = .centerY
-        hudStackView.distribution = .gravityAreas
-        hudStackView.spacing = 0
+        hudStackView.distribution = .fill
+        hudStackView.spacing = 7
         hudStackView.translatesAutoresizingMaskIntoConstraints = true
 
-        configureGlass(metricsView, cornerRadius: 16)
-        metricsView.isHidden = true
-        metricsView.addSubview(makeMetricsStack())
-        let metricsStack = metricsView.subviews.compactMap { $0 as? NSStackView }.first
-        metricsStack?.translatesAutoresizingMaskIntoConstraints = false
+        configureGlass(modeView, cornerRadius: 21)
+        modeView.isHidden = true
+        modeView.addSubview(makeRegionModeButton())
 
-        hudStackView.addArrangedSubview(metricsView)
+        configureGlass(sizeView, cornerRadius: 21)
+        sizeView.isHidden = true
+        sizeView.addSubview(sizeLabel)
+        configureSizeLabel()
+
+        hudStackView.addArrangedSubview(modeView)
+        hudStackView.addArrangedSubview(sizeView)
         addSubview(hudStackView)
 
+        guard let modeButton = modeView.subviews.first else {
+            return
+        }
+
         NSLayoutConstraint.activate([
-            metricsView.widthAnchor.constraint(equalToConstant: hudSize.width),
-            metricsView.heightAnchor.constraint(equalToConstant: hudSize.height),
+            modeView.widthAnchor.constraint(equalToConstant: 42),
+            modeView.heightAnchor.constraint(equalToConstant: hudSize.height),
+            sizeView.widthAnchor.constraint(equalToConstant: 109),
+            sizeView.heightAnchor.constraint(equalToConstant: hudSize.height),
         ])
 
-        if let metricsStack {
-            NSLayoutConstraint.activate([
-                metricsStack.leadingAnchor.constraint(equalTo: metricsView.leadingAnchor, constant: 10),
-                metricsStack.trailingAnchor.constraint(equalTo: metricsView.trailingAnchor, constant: -10),
-                metricsStack.centerYAnchor.constraint(equalTo: metricsView.centerYAnchor),
-            ])
-        }
+        modeButton.translatesAutoresizingMaskIntoConstraints = false
+        sizeLabel.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            modeButton.centerXAnchor.constraint(equalTo: modeView.centerXAnchor),
+            modeButton.centerYAnchor.constraint(equalTo: modeView.centerYAnchor),
+            modeButton.widthAnchor.constraint(equalToConstant: 42),
+            modeButton.heightAnchor.constraint(equalToConstant: 42),
+            sizeLabel.leadingAnchor.constraint(equalTo: sizeView.leadingAnchor, constant: 12),
+            sizeLabel.trailingAnchor.constraint(equalTo: sizeView.trailingAnchor, constant: -12),
+            sizeLabel.centerYAnchor.constraint(equalTo: sizeView.centerYAnchor),
+        ])
 
         positionHUD()
     }
@@ -235,64 +251,38 @@ private final class SelectionOverlayView: NSView {
         view.layer?.cornerCurve = .continuous
         view.layer?.masksToBounds = true
         view.layer?.borderWidth = 0.5
-        view.layer?.borderColor = NSColor.white.withAlphaComponent(0.24).cgColor
-        view.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.12).cgColor
+        view.layer?.borderColor = NSColor.white.withAlphaComponent(0.38).cgColor
+        view.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.04).cgColor
     }
 
-    private func makeMetricsStack() -> NSStackView {
-        let stackView = NSStackView()
-        stackView.orientation = .horizontal
-        stackView.alignment = .centerY
-        stackView.spacing = 6
-
-        stackView.addArrangedSubview(makeMetricValueLabel(widthValueLabel))
-        stackView.addArrangedSubview(makeMetricSeparator("x"))
-        stackView.addArrangedSubview(makeMetricValueLabel(heightValueLabel))
-        stackView.addArrangedSubview(makeConfirmButton())
-
-        return stackView
-    }
-
-    private func makeConfirmButton() -> NSButton {
-        let button = NSButton(title: "", target: self, action: #selector(confirmButtonClicked))
-        button.bezelStyle = .texturedRounded
-        button.controlSize = .regular
-        button.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "确认截图")
-        button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
-        button.contentTintColor = .white
-        button.translatesAutoresizingMaskIntoConstraints = false
-
-        NSLayoutConstraint.activate([
-            button.widthAnchor.constraint(equalToConstant: 28),
-            button.heightAnchor.constraint(equalToConstant: 26),
-        ])
-
+    private func makeRegionModeButton() -> NSButton {
+        let button = HUDIconButton(
+            symbolName: "rectangle.dashed",
+            accessibilityDescription: "区域截图"
+        )
+        button.target = self
+        button.action = #selector(regionModeButtonClicked)
+        button.toolTip = "区域截图"
+        button.contentTintColor = hudTheme.foregroundColor
         return button
     }
 
-    private func makeMetricValueLabel(_ label: NSTextField) -> NSView {
-        label.font = .monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
-        label.textColor = .white.withAlphaComponent(0.94)
-        label.alignment = .center
-        label.wantsLayer = true
-        label.layer?.cornerRadius = 7
-        label.layer?.cornerCurve = .continuous
-        label.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.22).cgColor
-        label.translatesAutoresizingMaskIntoConstraints = false
-
-        NSLayoutConstraint.activate([
-            label.widthAnchor.constraint(equalToConstant: 38),
-            label.heightAnchor.constraint(equalToConstant: 28),
-        ])
-
-        return label
+    private func configureSizeLabel() {
+        sizeLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        sizeLabel.textColor = hudTheme.foregroundColor
+        sizeLabel.alignment = .center
+        sizeLabel.lineBreakMode = .byClipping
     }
 
-    private func makeMetricSeparator(_ value: String) -> NSTextField {
-        let label = NSTextField(labelWithString: value)
-        label.font = .systemFont(ofSize: 11, weight: .medium)
-        label.textColor = .white.withAlphaComponent(0.55)
-        return label
+    private func applyHUDTheme(_ theme: HUDTheme) {
+        hudTheme = theme
+        [modeView, sizeView].forEach { view in
+            view.layer?.borderColor = theme.borderColor.cgColor
+            view.layer?.backgroundColor = theme.backgroundColor.cgColor
+        }
+        modeButton?.contentTintColor = theme.foregroundColor
+        modeButton?.hoverColor = theme.hoverColor
+        sizeLabel.textColor = theme.foregroundColor
     }
 
     private func drawDimmedBackdrop(excluding selectionRect: CGRect) {
@@ -334,9 +324,6 @@ private final class SelectionOverlayView: NSView {
 
     private func drawSelectionChrome(_ selectionRect: CGRect) {
         let roundedSelection = NSBezierPath(roundedRect: selectionRect, xRadius: 7, yRadius: 7)
-
-        NSColor.systemCyan.withAlphaComponent(0.20).setFill()
-        roundedSelection.fill()
 
         NSColor.white.withAlphaComponent(0.42).setStroke()
         roundedSelection.lineWidth = 1
@@ -391,7 +378,7 @@ private final class SelectionOverlayView: NSView {
         onComplete(selectedRect)
     }
 
-    @objc private func confirmButtonClicked() {
+    @objc private func regionModeButtonClicked() {
         confirmSelection()
     }
 
@@ -408,18 +395,19 @@ private final class SelectionOverlayView: NSView {
     private func updateMetrics() {
         guard let selectionRect else {
             hudStackView.isHidden = true
-            metricsView.isHidden = true
-            widthValueLabel.stringValue = "0"
-            heightValueLabel.stringValue = "0"
+            modeView.isHidden = true
+            sizeView.isHidden = true
+            sizeLabel.stringValue = "0 x 0"
             positionHUD()
             return
         }
 
         hudStackView.isHidden = false
-        metricsView.isHidden = false
-        widthValueLabel.stringValue = String(Int(selectionRect.width.rounded()))
-        heightValueLabel.stringValue = String(Int(selectionRect.height.rounded()))
+        modeView.isHidden = false
+        sizeView.isHidden = false
+        sizeLabel.stringValue = "\(Int(selectionRect.width.rounded())) x \(Int(selectionRect.height.rounded()))"
         positionHUD()
+        updateHUDTheme()
     }
 
     private func positionHUD() {
@@ -434,21 +422,43 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
-        let spacing: CGFloat = 14
+        let inset: CGFloat = 10
+        let spacing: CGFloat = 10
         let horizontalCenter = selectionRect.midX - visibleSize.width / 2
-        var origin = CGPoint(
-            x: horizontalCenter,
-            y: selectionRect.minY - visibleSize.height - spacing
-        )
-
-        if origin.y < bounds.minY + 18 {
-            origin.y = selectionRect.maxY + spacing
+        let insideBottomY = selectionRect.minY + inset
+        let belowY = selectionRect.minY - visibleSize.height - spacing
+        let aboveY = selectionRect.maxY + spacing
+        let canFitBelow = belowY >= bounds.minY + 18
+        let canFitInside = selectionRect.height >= visibleSize.height + inset * 2
+        let canFitAbove = aboveY + visibleSize.height <= bounds.maxY - 18
+        let y = if canFitBelow {
+            belowY
+        } else if canFitInside {
+            insideBottomY
+        } else if canFitAbove {
+            aboveY
+        } else {
+            belowY
         }
+        var origin = CGPoint(x: horizontalCenter, y: y)
 
         origin.x = min(max(origin.x, bounds.minX + 12), bounds.maxX - visibleSize.width - 12)
         origin.y = min(max(origin.y, bounds.minY + 18), bounds.maxY - visibleSize.height - 18)
 
         hudStackView.frame = CGRect(origin: origin, size: visibleSize)
+    }
+
+    private var modeButton: HUDIconButton? {
+        modeView.subviews.first as? HUDIconButton
+    }
+
+    private func updateHUDTheme() {
+        let sampleRect = globalRect(fromLocalRect: hudStackView.frame.insetBy(dx: -10, dy: -10))
+        guard let luminance = ScreenLuminanceSampler.averageLuminance(in: sampleRect) else {
+            return
+        }
+
+        applyHUDTheme(luminance < 0.48 ? .lightContent : .darkContent)
     }
 
     private func clampedPoint(_ point: CGPoint) -> CGPoint {
@@ -544,6 +554,240 @@ private enum SelectionDragOperation {
     case create(startPoint: CGPoint)
     case move(startRect: CGRect, startPoint: CGPoint)
     case resize(handle: SelectionHandle, startRect: CGRect, startPoint: CGPoint)
+}
+
+private final class HUDIconButton: NSButton {
+    private let hoverLayer = CALayer()
+    private var trackingArea: NSTrackingArea?
+    var hoverColor: NSColor = HUDTheme.lightContent.hoverColor {
+        didSet {
+            hoverLayer.backgroundColor = hoverColor.cgColor
+        }
+    }
+    private var isHovering = false {
+        didSet {
+            updateHoverAppearance()
+        }
+    }
+
+    init(symbolName: String, accessibilityDescription: String) {
+        super.init(frame: .zero)
+
+        title = ""
+        image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription)
+        imagePosition = .imageOnly
+        symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
+        bezelStyle = .regularSquare
+        isBordered = false
+        setButtonType(.momentaryChange)
+        focusRingType = .none
+        wantsLayer = true
+        layer?.masksToBounds = false
+        hoverLayer.backgroundColor = hoverColor.cgColor
+        hoverLayer.opacity = 0
+        layer?.insertSublayer(hoverLayer, at: 0)
+        setAccessibilityLabel(accessibilityDescription)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func layout() {
+        super.layout()
+
+        let hoverDiameter: CGFloat = 32
+        hoverLayer.cornerRadius = hoverDiameter / 2
+        hoverLayer.bounds = CGRect(
+            x: 0,
+            y: 0,
+            width: hoverDiameter,
+            height: hoverDiameter
+        )
+        hoverLayer.position = CGPoint(
+            x: bounds.midX,
+            y: bounds.midY
+        )
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+
+        let newTrackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect],
+            owner: self
+        )
+        addTrackingArea(newTrackingArea)
+        trackingArea = newTrackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        animateHoverLayer(opacity: 0.16)
+        super.mouseDown(with: event)
+        updateHoverAppearance()
+    }
+
+    private func updateHoverAppearance() {
+        animateHoverLayer(opacity: isHovering ? 1 : 0)
+    }
+
+    private func animateHoverLayer(opacity: Float) {
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = hoverLayer.presentation()?.opacity ?? hoverLayer.opacity
+        animation.toValue = opacity
+        animation.duration = 0.14
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        hoverLayer.opacity = opacity
+        hoverLayer.add(animation, forKey: "opacity")
+    }
+}
+
+private enum HUDTheme {
+    case lightContent
+    case darkContent
+
+    var foregroundColor: NSColor {
+        switch self {
+        case .lightContent:
+            .white.withAlphaComponent(0.92)
+        case .darkContent:
+            .labelColor.withAlphaComponent(0.86)
+        }
+    }
+
+    var backgroundColor: NSColor {
+        switch self {
+        case .lightContent:
+            .black.withAlphaComponent(0.10)
+        case .darkContent:
+            .white.withAlphaComponent(0.04)
+        }
+    }
+
+    var borderColor: NSColor {
+        switch self {
+        case .lightContent:
+            .white.withAlphaComponent(0.22)
+        case .darkContent:
+            .white.withAlphaComponent(0.38)
+        }
+    }
+
+    var hoverColor: NSColor {
+        switch self {
+        case .lightContent:
+            .white.withAlphaComponent(0.14)
+        case .darkContent:
+            .labelColor.withAlphaComponent(0.08)
+        }
+    }
+}
+
+private enum ScreenLuminanceSampler {
+    static func averageLuminance(in cocoaRect: CGRect) -> CGFloat? {
+        guard SelectionGeometry.isValidSelection(cocoaRect) else {
+            return nil
+        }
+
+        let sampleRect = quartzCaptureRect(for: cocoaRect)
+        guard !sampleRect.isEmpty,
+              let image = CGWindowListCreateImage(
+                sampleRect,
+                .optionOnScreenOnly,
+                kCGNullWindowID,
+                [.bestResolution]
+              ) else {
+            return nil
+        }
+
+        return averageLuminance(in: image)
+    }
+
+    private static func quartzCaptureRect(for cocoaRect: CGRect) -> CGRect {
+        guard let screen = screen(for: cocoaRect),
+              let displayNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+            return cocoaRect
+        }
+
+        let displayID = CGDirectDisplayID(displayNumber.uint32Value)
+        let displayBounds = CGDisplayBounds(displayID)
+        let flippedY = displayBounds.maxY - (cocoaRect.maxY - screen.frame.minY)
+
+        return CGRect(
+            x: cocoaRect.minX - screen.frame.minX + displayBounds.minX,
+            y: flippedY,
+            width: cocoaRect.width,
+            height: cocoaRect.height
+        ).integral
+    }
+
+    private static func screen(for rect: CGRect) -> NSScreen? {
+        let rectCenter = CGPoint(x: rect.midX, y: rect.midY)
+        if let containingScreen = NSScreen.screens.first(where: { $0.frame.contains(rectCenter) }) {
+            return containingScreen
+        }
+
+        return NSScreen.screens.max { firstScreen, secondScreen in
+            intersectionArea(firstScreen.frame, rect) < intersectionArea(secondScreen.frame, rect)
+        }
+    }
+
+    private static func intersectionArea(_ firstRect: CGRect, _ secondRect: CGRect) -> CGFloat {
+        let intersection = firstRect.intersection(secondRect)
+        guard !intersection.isNull else {
+            return 0
+        }
+
+        return intersection.width * intersection.height
+    }
+
+    private static func averageLuminance(in image: CGImage) -> CGFloat? {
+        let sampleWidth = 16
+        let sampleHeight = 8
+        let bytesPerPixel = 4
+        let bytesPerRow = sampleWidth * bytesPerPixel
+        var pixels = [UInt8](repeating: 0, count: sampleHeight * bytesPerRow)
+
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                data: &pixels,
+                width: sampleWidth,
+                height: sampleHeight,
+                bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              ) else {
+            return nil
+        }
+
+        context.interpolationQuality = .low
+        context.draw(image, in: CGRect(x: 0, y: 0, width: sampleWidth, height: sampleHeight))
+
+        var luminance: CGFloat = 0
+        for index in stride(from: 0, to: pixels.count, by: bytesPerPixel) {
+            let red = CGFloat(pixels[index]) / 255
+            let green = CGFloat(pixels[index + 1]) / 255
+            let blue = CGFloat(pixels[index + 2]) / 255
+            luminance += 0.2126 * red + 0.7152 * green + 0.0722 * blue
+        }
+
+        return luminance / CGFloat(sampleWidth * sampleHeight)
+    }
 }
 
 private enum SelectionHandle {

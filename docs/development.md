@@ -134,11 +134,13 @@ Expected output should include `Frame Local Dev CLI` and at least `1 valid ident
 5. Use `Frame -> 截图` or `Command+Shift+A`.
 6. Confirm an initial selection appears immediately. The first run should select the main screen; later runs should reuse the last confirmed selection from the current app session.
 7. Drag to create, move, or resize the region.
-8. Press Enter or click the confirm button to capture.
-9. Confirm the `180x120` preview appears at the main screen bottom-right.
-10. Hover the preview and confirm `保存`, `复制`, and `关闭` appear.
-11. Confirm copy places an image on the pasteboard.
-12. Confirm save writes `Frame yyyy-MM-dd HH.mm.ss.png` to Desktop.
+8. Press Enter to capture.
+9. Confirm the `180x120` preview appears at the active screen's bottom-left corner with equal left and bottom padding.
+10. With multiple displays, switch to another app on a different display and confirm visible previews move to that display's bottom-left corner.
+11. Take multiple screenshots and confirm previews stack upward from the bottom-left corner.
+12. Hover the preview and confirm `保存`, `复制`, and `关闭` appear.
+13. Confirm copy places an image on the pasteboard.
+14. Confirm save writes `Frame yyyy-MM-dd HH.mm.ss.png` to Desktop.
 
 Keep using the same `FRAME_CODESIGN_IDENTITY` and the same `~/Applications/Frame.app` path while iterating. Changing either one can make macOS ask for Screen Recording permission again.
 

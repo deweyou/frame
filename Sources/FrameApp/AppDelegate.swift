@@ -56,6 +56,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let quickAccessAnchor = ActiveScreenResolver.preferredQuickAccessAnchor()
+
         selectionOverlayController.startSelection { [weak self] selectedRect in
             guard let self,
                   let selectedRect else {
@@ -69,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
                 do {
                     let screenshot = try captureService.capture(rect: selectedRect)
-                    showQuickAccess(for: screenshot)
+                    showQuickAccess(for: screenshot, anchor: quickAccessAnchor)
                 } catch {
                     showCaptureFailedAlert(error)
                 }
@@ -77,9 +79,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showQuickAccess(for screenshot: CapturedScreenshot) {
+    private func showQuickAccess(for screenshot: CapturedScreenshot, anchor: CGRect?) {
         quickAccessPanelController.show(
             for: screenshot,
+            preferredAnchor: anchor,
             copy: { [weak self] in
                 self?.copyToClipboard(screenshot) ?? false
             },

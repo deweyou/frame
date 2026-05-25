@@ -5,28 +5,31 @@ final class QuickAccessPanelController: NSObject {
     private typealias ConfirmableAction = () -> Bool
     private typealias CloseAction = () -> Void
 
-    private var panel: NSPanel?
-    private var onCopy: ConfirmableAction?
-    private var onSave: ConfirmableAction?
-    private var onClose: CloseAction?
+    private var previewItems: [QuickAccessPreviewItem] = []
+    private var activeScreenObserver: NSObjectProtocol?
+    private var followActiveScreenTimer: Timer?
+    private var currentPreviewScreenID: CGDirectDisplayID?
 
     func show(
         for captured: CapturedScreenshot,
+        preferredAnchor: CGRect?,
         copy: @escaping () -> Bool,
         save: @escaping () -> Bool,
         close: @escaping () -> Void
     ) {
-        closePanel(notify: false)
-
-        onCopy = copy
-        onSave = save
-        onClose = close
-
         let panel = makePanel(for: captured.image)
         panel.contentView = makeContentView(for: captured.image)
-        positionAtMainScreenBottomRight(panel)
+        previewItems.append(
+            QuickAccessPreviewItem(
+                panel: panel,
+                copy: copy,
+                save: save,
+                close: close
+            )
+        )
+        repositionPreviewStack(preferredAnchor: preferredAnchor, force: true)
+        startFollowingActiveScreen()
 
-        self.panel = panel
         panel.orderFrontRegardless()
     }
 
@@ -130,47 +133,170 @@ final class QuickAccessPanelController: NSObject {
     }
 
     private let previewSize = CGSize(width: 180, height: 120)
+    private let previewPadding: CGFloat = 18
+    private let previewSpacing: CGFloat = 12
 
-    private func positionAtMainScreenBottomRight(_ panel: NSPanel) {
-        let panelSize = panel.frame.size
-        let visibleFrame = NSScreen.main?.visibleFrame ?? NSScreen.screens.first?.visibleFrame ?? .zero
-        let padding: CGFloat = 18
-        let origin = CGPoint(
-            x: visibleFrame.maxX - panelSize.width - padding,
-            y: visibleFrame.minY + padding
-        )
+    private func startFollowingActiveScreen() {
+        guard followActiveScreenTimer == nil else {
+            return
+        }
 
-        panel.setFrameOrigin(origin)
+        activeScreenObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.repositionPreviewStack(preferredAnchor: ActiveScreenResolver.preferredQuickAccessFollowAnchor())
+            }
+        }
+
+        followActiveScreenTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.repositionPreviewStack(preferredAnchor: ActiveScreenResolver.preferredQuickAccessFollowAnchor())
+            }
+        }
+    }
+
+    private func stopFollowingActiveScreenIfNeeded() {
+        guard previewItems.isEmpty else {
+            return
+        }
+
+        if let activeScreenObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(activeScreenObserver)
+            self.activeScreenObserver = nil
+        }
+
+        followActiveScreenTimer?.invalidate()
+        followActiveScreenTimer = nil
+        currentPreviewScreenID = nil
+    }
+
+    private func repositionPreviewStack(preferredAnchor: CGRect?, force: Bool = false) {
+        let targetScreen = preferredScreen(for: preferredAnchor)
+        let targetScreenID = displayID(for: targetScreen)
+        guard force || targetScreenID != currentPreviewScreenID else {
+            return
+        }
+
+        currentPreviewScreenID = targetScreenID
+        let visibleFrame = targetScreen?.visibleFrame
+            ?? NSScreen.main?.visibleFrame
+            ?? NSScreen.screens.first?.visibleFrame
+            ?? .zero
+        for (index, item) in previewItems.enumerated() {
+            let panelSize = item.panel.frame.size
+            let unclampedOrigin = CGPoint(
+                x: visibleFrame.minX + previewPadding,
+                y: visibleFrame.minY + previewPadding + CGFloat(index) * (panelSize.height + previewSpacing)
+            )
+            let origin = CGPoint(
+                x: min(
+                    max(unclampedOrigin.x, visibleFrame.minX + previewPadding),
+                    visibleFrame.maxX - panelSize.width - previewPadding
+                ),
+                y: min(
+                    max(unclampedOrigin.y, visibleFrame.minY + previewPadding),
+                    visibleFrame.maxY - panelSize.height - previewPadding
+                )
+            )
+
+            item.panel.setFrameOrigin(origin)
+        }
+    }
+
+    private func preferredScreen(for preferredAnchor: CGRect?) -> NSScreen? {
+        let fallbackScreen = NSScreen.main ?? NSScreen.screens.first
+        let anchorFrame = preferredAnchor ?? fallbackScreen?.visibleFrame ?? .zero
+        return NSScreen.screens
+            .max { firstScreen, secondScreen in
+                intersectionArea(firstScreen.frame, anchorFrame) < intersectionArea(secondScreen.frame, anchorFrame)
+            }
+            ?? fallbackScreen
+    }
+
+    private func displayID(for screen: NSScreen?) -> CGDirectDisplayID? {
+        guard let screen,
+              let displayNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+            return nil
+        }
+
+        return CGDirectDisplayID(displayNumber.uint32Value)
+    }
+
+    private func intersectionArea(_ firstRect: CGRect, _ secondRect: CGRect) -> CGFloat {
+        let intersection = firstRect.intersection(secondRect)
+        guard !intersection.isNull else {
+            return 0
+        }
+
+        return intersection.width * intersection.height
     }
 
     @objc private func copyButtonClicked() {
-        if onCopy?() == true {
-            closePanel(notify: false)
+        guard let item = previewItem(for: NSApp.currentEvent) else {
+            return
+        }
+
+        if item.copy() {
+            closePreview(item, notify: false)
         }
     }
 
     @objc private func saveButtonClicked() {
-        if onSave?() == true {
-            closePanel(notify: false)
+        guard let item = previewItem(for: NSApp.currentEvent) else {
+            return
+        }
+
+        if item.save() {
+            closePreview(item, notify: false)
         }
     }
 
     @objc private func closeButtonClicked() {
-        closePanel(notify: true)
+        guard let item = previewItem(for: NSApp.currentEvent) else {
+            return
+        }
+
+        closePreview(item, notify: true)
     }
 
-    private func closePanel(notify: Bool) {
-        panel?.close()
-        panel = nil
-        onCopy = nil
-        onSave = nil
-
-        let close = onClose
-        onClose = nil
-
-        if notify {
-            close?()
+    private func previewItem(for event: NSEvent?) -> QuickAccessPreviewItem? {
+        guard let eventWindow = event?.window else {
+            return nil
         }
+
+        return previewItems.first { $0.panel === eventWindow }
+    }
+
+    private func closePreview(_ item: QuickAccessPreviewItem, notify: Bool) {
+        item.panel.close()
+        previewItems.removeAll { $0 === item }
+        repositionPreviewStack(preferredAnchor: ActiveScreenResolver.preferredQuickAccessFollowAnchor(), force: true)
+        stopFollowingActiveScreenIfNeeded()
+        if notify {
+            item.close()
+        }
+    }
+}
+
+private final class QuickAccessPreviewItem {
+    let panel: NSPanel
+    let copy: () -> Bool
+    let save: () -> Bool
+    let close: () -> Void
+
+    init(
+        panel: NSPanel,
+        copy: @escaping () -> Bool,
+        save: @escaping () -> Bool,
+        close: @escaping () -> Void
+    ) {
+        self.panel = panel
+        self.copy = copy
+        self.save = save
+        self.close = close
     }
 }
 
