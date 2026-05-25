@@ -1,7 +1,7 @@
 ---
 name: spec-driven-coding
 description: >
-  Enforce Dewey's spec-driven coding workflow for new features, behavior changes,
+  Enforce the repository's spec-driven coding workflow for new features, behavior changes,
   and multi-step implementation work. Use this skill when starting a requirement,
   feature, refactor with behavior impact, or ambiguous coding task. It requires
   Superpowers brainstorming/spec/plan/task flow before coding unless the task is a
@@ -40,6 +40,9 @@ If Superpowers are missing and the environment supports installing them, tell th
 user and ask them to install or enable Superpowers before continuing with strict
 SDD. If installation is not possible, continue with the equivalent fallback steps
 in this skill and state that fallback clearly.
+
+In routing or planning output for full spec flow, explicitly mention this
+Superpowers gate and list the required skills to check before implementation.
 
 ## Full Spec Flow
 

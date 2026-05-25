@@ -1,14 +1,14 @@
 {
-  "mode": "link",
+  "mode": "copy",
   "source": {
-    "root": "/Users/deweyou/.deweyou/agents/source",
-    "commit": "e7b5bcf63b22bf47971bbdec0cc8ec44785eb526"
+    "root": "/Users/bytedance/.deweyou/agents/source",
+    "commit": "83df65b729297b865810dc9e36485493af597ad3"
   },
-  "cacheRoot": "/Users/deweyou/.deweyou/agents/assets",
+  "cacheRoot": "/Users/bytedance/.deweyou/agents/assets",
   "assets": {
     "skills": [
       "git-delivery",
-      "ui-design",
+      "repo-memory",
       "spec-driven-coding"
     ],
     "rules": []
@@ -16,16 +16,16 @@
   "assetSnapshot": {
     "skills": {
       "git-delivery": {
-        "description": "Manage Dewey's git delivery workflow. Use this skill at the start of a coding session to inspect the current branch, protect dirty work, and fetch the primary branch without moving the worktree unless the user asks for a new branch. Also use when the user says \"提交吧\", \"commit it\", \"发一下\", \"ship it\", \"开 PR\", \"push\", or asks to finish work, so the agent runs memory check, verification, intentional staging, commit, base-branch conflict check, rebase when safe, push, PR creation or exact blocker reporting, and CI follow-up. Always protect dirty work: never discard, overwrite, or stage unrelated files.\n",
-        "hash": "sha256:aa3987ef369931badd71b7723c29cbac9d9c637b03665b456eded9e55337fd55"
+        "description": "Branch-aware git delivery workflow. Use before editing new coding or asset tasks to check branch, dirty work, and base sync; use when the user asks to commit, submit, push, open a PR, ship work, resolve base conflicts, or follow PR CI, while protecting unrelated work.\n",
+        "hash": "sha256:321555c198d624493a17ace8798e007de1d3f6f178a5c4674d67e9065cdbb479"
       },
-      "ui-design": {
-        "description": "Use this skill whenever Dewey asks to design, implement, refine, or review a UI in his personal style across web, component libraries, H5/mobile screens, iOS/Android apps, HarmonyOS apps, WeChat/Alipay mini programs, macOS apps, dashboards, tools, landing pages, or Sleek prompts. This is a standalone skill: all required Dewey design rules and token snapshots are bundled inside the skill, so do not depend on any external repository files to apply it. Trigger strongly for personal-style or interface requests, including Chinese phrases such as \"我的风格\", \"Dewey 的设计风格\", \"专属于我风格\", \"帮我设计\", \"优化 UI\", \"审一下界面\", \"做个移动端/H5\", \"鸿蒙\", \"HarmonyOS\", \"小程序\", \"微信小程序\", \"支付宝小程序\", \"mac app\", \"生成 Sleek prompt\", \"组件库风格\", or English phrases such as \"Dewey interface\". It should guide platform-neutral visual taste plus platform-specific implementation quality: restrained Chinese-first copy, sans controls with serif content, neutral surfaces, emerald emphasis, border-first layout, native/headless behavior primitives, web/mobile/desktop/mini-program checks, touch/pointer/keyboard interaction, motion, and verification. For web work, prefer the current Dewey component library when available; for mobile, HarmonyOS, mini programs, or macOS, adapt the style through native platform patterns instead of forcing web components.\n",
-        "hash": "sha256:c7f12dfc0353821f63752f0482dce271ee6071467562cc2f258784462212534c"
+      "repo-memory": {
+        "description": "Repository memory workflow for durable project knowledge. Use before commits or PRs, after meaningful code or workflow changes, when initializing or updating AGENTS.md/docs/CLAUDE.md, or when local skills and repo conventions may need knowledge updates.\n",
+        "hash": "sha256:129e7082448b4349cbf76c52d9a2f7056274a8b2c50b98c7bb9555dc0a7f6c45"
       },
       "spec-driven-coding": {
-        "description": "Enforce Dewey's spec-driven coding workflow for new features, behavior changes, and multi-step implementation work. Use this skill when starting a requirement, feature, refactor with behavior impact, or ambiguous coding task. It requires Superpowers brainstorming/spec/plan/task flow before coding unless the task is a simple bugfix, and still requires TDD, unit coverage, verification, and spec updates when requirements change.\n",
-        "hash": "sha256:5a209920a9a4f10b30e584df7aa70bb30dd14f0ad8947bea995f7a4fd028d72e"
+        "description": "Enforce the repository's spec-driven coding workflow for new features, behavior changes, and multi-step implementation work. Use this skill when starting a requirement, feature, refactor with behavior impact, or ambiguous coding task. It requires Superpowers brainstorming/spec/plan/task flow before coding unless the task is a simple bugfix, and still requires TDD, unit coverage, verification, and spec updates when requirements change.\n",
+        "hash": "sha256:4bd83ca870a1eb2cb56ae9f48b42b491012577c4389749ebac02581934af318f"
       }
     },
     "rules": {}
@@ -36,5 +36,5 @@
     "claude"
   ],
   "ruleWiring": "reference",
-  "initializedAt": "2026-05-17T16:14:20.535Z"
+  "initializedAt": "2026-05-25T09:22:59.372Z"
 }
