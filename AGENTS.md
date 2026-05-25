@@ -27,7 +27,7 @@ swift build
 scripts/package-app.sh
 ```
 
-The packaging script creates `.build/app/Frame.app` and signs it for local testing. It uses ad-hoc signing by default, or `FRAME_CODESIGN_IDENTITY` when a stable local Code Signing identity is available.
+The packaging script creates `.build/app/Frame.app` and signs it for local testing. It uses ad-hoc signing by default, or `FRAME_CODESIGN_IDENTITY` when a stable local Code Signing identity is available. For repeated local GUI testing or when replacing the user's local app, use `FRAME_CODESIGN_IDENTITY="Frame Local Dev CLI" scripts/package-app.sh`, replace `~/Applications/Frame.app`, and launch that exact path.
 
 ## Knowledge Base
 

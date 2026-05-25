@@ -28,10 +28,10 @@ This should remain the default local development path even after real Apple cert
 Use a stable signing identity and app path:
 
 ```sh
-scripts/package-app.sh
+FRAME_CODESIGN_IDENTITY="Frame Local Dev CLI" scripts/package-app.sh
 mkdir -p ~/Applications
 rm -rf ~/Applications/Frame.app
-cp -R .build/app/Frame.app ~/Applications/Frame.app
+ditto .build/app/Frame.app ~/Applications/Frame.app
 open ~/Applications/Frame.app
 ```
 
