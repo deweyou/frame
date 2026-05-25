@@ -7,11 +7,14 @@ final class SelectionOverlayController {
     private var completion: ((CGRect?) -> Void)?
     private var keyMonitor: Any?
     private var lastSelectedRect: CGRect?
+    private var hoverSelection = WindowHoverSelection()
+    private let windowCandidateProvider = WindowCandidateProvider()
 
     func startSelection(completion: @escaping (CGRect?) -> Void) {
         finishSelection(with: nil)
 
         self.completion = completion
+        hoverSelection.reset()
 
         let screens = NSScreen.screens
         guard !screens.isEmpty else {
@@ -35,6 +38,12 @@ final class SelectionOverlayController {
                     }
 
                     self?.activate(createdWindow)
+                },
+                onMouseMoved: { [weak self] globalPoint, isOverHUD in
+                    self?.updateWindowHover(globalPoint: globalPoint, isOverHUD: isOverHUD)
+                },
+                onRegionEditingStarted: { [weak self] in
+                    self?.lockRegionEditingForSession()
                 },
                 onComplete: { [weak self] selectedRect in
                     self?.finishSelection(with: selectedRect)
@@ -60,6 +69,35 @@ final class SelectionOverlayController {
         activeWindow.makeKey()
     }
 
+    private func updateWindowHover(globalPoint: CGPoint, isOverHUD: Bool) {
+        let candidate = isOverHUD ? nil : windowCandidateProvider.candidate(at: globalPoint)
+        let activeCandidate = hoverSelection.update(
+            candidate: candidate,
+            mouseLocation: globalPoint,
+            isOverHUD: isOverHUD,
+            timestamp: ProcessInfo.processInfo.systemUptime
+        )
+
+        for window in overlayWindows {
+            window.showWindowCandidate(activeCandidate)
+        }
+
+        guard let activeCandidate,
+              let activeWindow = overlayWindows.first(where: { $0.contains(globalPoint: globalPoint) })
+                ?? overlayWindows.first(where: { $0.contains(globalPoint: activeCandidate.bounds.origin) }) else {
+            return
+        }
+
+        activate(activeWindow)
+    }
+
+    private func lockRegionEditingForSession() {
+        hoverSelection.lockRegionEditingForSession()
+        for window in overlayWindows {
+            window.showWindowCandidate(nil)
+        }
+    }
+
     private func finishSelection(with selectedRect: CGRect?) {
         guard let completion else {
             return
@@ -82,7 +120,7 @@ final class SelectionOverlayController {
     }
 
     private func confirmCurrentSelection() {
-        guard let selectedRect = overlayWindows.first(where: { $0.hasSelection })?.selectedGlobalRect else {
+        guard let selectedRect = overlayWindows.first(where: { $0.activeGlobalRect != nil })?.activeGlobalRect else {
             NSSound.beep()
             return
         }

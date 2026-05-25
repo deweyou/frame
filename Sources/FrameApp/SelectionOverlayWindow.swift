@@ -11,12 +11,16 @@ final class SelectionOverlayWindow {
         screen: NSScreen,
         initialGlobalRect: CGRect?,
         onInteraction: @escaping () -> Void,
+        onMouseMoved: @escaping (CGPoint, Bool) -> Void,
+        onRegionEditingStarted: @escaping () -> Void,
         onComplete: @escaping (CGRect?) -> Void
     ) {
         overlayView = SelectionOverlayView(
             screen: screen,
             initialGlobalRect: initialGlobalRect,
             onInteraction: onInteraction,
+            onMouseMoved: onMouseMoved,
+            onRegionEditingStarted: onRegionEditingStarted,
             onComplete: onComplete
         )
 
@@ -58,8 +62,20 @@ final class SelectionOverlayWindow {
         overlayView.selectedGlobalRect
     }
 
+    var activeGlobalRect: CGRect? {
+        overlayView.activeGlobalRect
+    }
+
     func clearSelection() {
         overlayView.clearSelection()
+    }
+
+    func showWindowCandidate(_ candidate: WindowCandidate?) {
+        overlayView.showWindowCandidate(candidate)
+    }
+
+    func contains(globalPoint: CGPoint) -> Bool {
+        window.frame.contains(globalPoint)
     }
 
     func orderOut(_ sender: Any?) {
@@ -76,6 +92,8 @@ private final class SelectionOverlayView: NSView {
     private let hudSize = CGSize(width: 158, height: 42)
     private let screenFrame: CGRect
     private let onInteraction: () -> Void
+    private let onMouseMoved: (CGPoint, Bool) -> Void
+    private let onRegionEditingStarted: () -> Void
     private let onComplete: (CGRect?) -> Void
     private let hudStackView = NSStackView()
     private let modeView = NSVisualEffectView()
@@ -84,6 +102,7 @@ private final class SelectionOverlayView: NSView {
     private var hudTheme: HUDTheme = .lightContent
 
     private var selectionRect: CGRect?
+    private var windowCandidate: WindowCandidate?
     private var dragOperation: SelectionDragOperation?
     private var hasCompleted = false
 
@@ -91,10 +110,14 @@ private final class SelectionOverlayView: NSView {
         screen: NSScreen,
         initialGlobalRect: CGRect?,
         onInteraction: @escaping () -> Void,
+        onMouseMoved: @escaping (CGPoint, Bool) -> Void,
+        onRegionEditingStarted: @escaping () -> Void,
         onComplete: @escaping (CGRect?) -> Void
     ) {
         self.screenFrame = screen.frame
         self.onInteraction = onInteraction
+        self.onMouseMoved = onMouseMoved
+        self.onRegionEditingStarted = onRegionEditingStarted
         self.onComplete = onComplete
 
         super.init(frame: CGRect(origin: .zero, size: screen.frame.size))
@@ -126,9 +149,24 @@ private final class SelectionOverlayView: NSView {
         return globalRect(fromLocalRect: selectionRect)
     }
 
+    var activeGlobalRect: CGRect? {
+        if let windowCandidate {
+            return windowCandidate.bounds
+        }
+
+        return selectedGlobalRect
+    }
+
     func clearSelection() {
         selectionRect = nil
+        windowCandidate = nil
         dragOperation = nil
+        updateMetrics()
+        needsDisplay = true
+    }
+
+    func showWindowCandidate(_ candidate: WindowCandidate?) {
+        windowCandidate = candidate
         updateMetrics()
         needsDisplay = true
     }
@@ -149,10 +187,17 @@ private final class SelectionOverlayView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         onInteraction()
+        windowCandidate = nil
+        onRegionEditingStarted()
         let point = clampedPoint(event.locationInWindow)
         dragOperation = dragOperation(startingAt: point)
         updateMetrics()
         needsDisplay = true
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let point = clampedPoint(event.locationInWindow)
+        onMouseMoved(globalPoint(fromLocalPoint: point), hudStackView.frame.contains(point))
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -186,14 +231,14 @@ private final class SelectionOverlayView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        guard let selectionRect else {
+        guard let displayedLocalRect else {
             NSColor.black.withAlphaComponent(0.38).setFill()
             bounds.fill()
             return
         }
 
-        drawDimmedBackdrop(excluding: selectionRect)
-        drawSelectionChrome(selectionRect)
+        drawDimmedBackdrop(excluding: displayedLocalRect)
+        drawSelectionChrome(displayedLocalRect)
     }
 
     private func configureHUD() {
@@ -383,6 +428,12 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func confirmSelection() {
+        if let windowCandidate,
+           SelectionGeometry.isValidSelection(windowCandidate.bounds) {
+            completeSelection(with: windowCandidate.bounds)
+            return
+        }
+
         guard let selectionRect,
               SelectionGeometry.isValidSelection(selectionRect) else {
             NSSound.beep()
@@ -393,7 +444,7 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func updateMetrics() {
-        guard let selectionRect else {
+        guard let displayedLocalRect else {
             hudStackView.isHidden = true
             modeView.isHidden = true
             sizeView.isHidden = true
@@ -405,7 +456,7 @@ private final class SelectionOverlayView: NSView {
         hudStackView.isHidden = false
         modeView.isHidden = false
         sizeView.isHidden = false
-        sizeLabel.stringValue = "\(Int(selectionRect.width.rounded())) x \(Int(selectionRect.height.rounded()))"
+        sizeLabel.stringValue = "\(Int(displayedLocalRect.width.rounded())) x \(Int(displayedLocalRect.height.rounded()))"
         positionHUD()
         updateHUDTheme()
     }
@@ -417,19 +468,19 @@ private final class SelectionOverlayView: NSView {
             y: bounds.minY + 34
         )
 
-        guard let selectionRect else {
+        guard let displayedLocalRect else {
             hudStackView.frame = CGRect(origin: fallbackOrigin, size: visibleSize)
             return
         }
 
         let inset: CGFloat = 10
         let spacing: CGFloat = 10
-        let horizontalCenter = selectionRect.midX - visibleSize.width / 2
-        let insideBottomY = selectionRect.minY + inset
-        let belowY = selectionRect.minY - visibleSize.height - spacing
-        let aboveY = selectionRect.maxY + spacing
+        let horizontalCenter = displayedLocalRect.midX - visibleSize.width / 2
+        let insideBottomY = displayedLocalRect.minY + inset
+        let belowY = displayedLocalRect.minY - visibleSize.height - spacing
+        let aboveY = displayedLocalRect.maxY + spacing
         let canFitBelow = belowY >= bounds.minY + 18
-        let canFitInside = selectionRect.height >= visibleSize.height + inset * 2
+        let canFitInside = displayedLocalRect.height >= visibleSize.height + inset * 2
         let canFitAbove = aboveY + visibleSize.height <= bounds.maxY - 18
         let y = if canFitBelow {
             belowY
@@ -450,6 +501,14 @@ private final class SelectionOverlayView: NSView {
 
     private var modeButton: HUDIconButton? {
         modeView.subviews.first as? HUDIconButton
+    }
+
+    private var displayedLocalRect: CGRect? {
+        if let windowCandidate {
+            return localRect(fromGlobalRect: windowCandidate.bounds)
+        }
+
+        return selectionRect
     }
 
     private func updateHUDTheme() {
@@ -525,6 +584,13 @@ private final class SelectionOverlayView: NSView {
             y: screenFrame.minY + localRect.minY,
             width: localRect.width,
             height: localRect.height
+        )
+    }
+
+    private func globalPoint(fromLocalPoint localPoint: CGPoint) -> CGPoint {
+        CGPoint(
+            x: screenFrame.minX + localPoint.x,
+            y: screenFrame.minY + localPoint.y
         )
     }
 
