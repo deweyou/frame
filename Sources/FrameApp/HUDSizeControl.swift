@@ -19,6 +19,7 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     private var maximumHeight = 9999
     private var foregroundColor = NSColor.white
     private var isFinishingEditing = false
+    private var hasEditedActiveField = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -150,6 +151,7 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
 
         editingOriginalValue = field.stringValue
         editingDimension = field === widthField ? .width : .height
+        hasEditedActiveField = false
         selectAll(in: field)
     }
 
@@ -276,6 +278,11 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         let original = textView.string
         var sanitized = String(original.filter(\.isNumber))
 
+        if !hasEditedActiveField {
+            sanitized = firstEditReplacement(from: sanitized)
+            hasEditedActiveField = true
+        }
+
         if let value = Int(sanitized) {
             sanitized = "\(value)"
         }
@@ -295,6 +302,24 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
 
         textView.string = sanitized
         textView.setSelectedRange(NSRange(location: sanitized.count, length: 0))
+    }
+
+    private func firstEditReplacement(from digits: String) -> String {
+        let originalDigits = String(editingOriginalValue.filter(\.isNumber))
+        guard !originalDigits.isEmpty,
+              digits.count > originalDigits.count else {
+            return digits
+        }
+
+        if digits.hasPrefix(originalDigits) {
+            return String(digits.dropFirst(originalDigits.count))
+        }
+
+        if digits.hasSuffix(originalDigits) {
+            return String(digits.dropLast(originalDigits.count))
+        }
+
+        return digits
     }
 
     private func selectAll(in field: NSTextField) {
