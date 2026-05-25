@@ -183,7 +183,6 @@ private final class SelectionOverlayView: NSView {
         }
 
         onInteraction()
-        windowCandidate = nil
         dragOperation = dragOperation(startingAt: point)
         updateMetrics()
         needsDisplay = true
@@ -194,6 +193,7 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
+        windowCandidate = nil
         updateSelection(for: dragOperation, currentPoint: clampedPoint(event.locationInWindow))
         updateMetrics()
         needsDisplay = true
@@ -435,6 +435,7 @@ private final class SelectionOverlayView: NSView {
         onInteraction()
         dragOperation = nil
         windowCandidate = candidate
+        selectionRect = localRect(fromGlobalRect: candidate.bounds)
         updateMetrics()
         needsDisplay = true
     }
