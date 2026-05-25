@@ -118,6 +118,10 @@ final class SelectionOverlayController {
                 return event
             }
 
+            if self.overlayWindows.contains(where: \.isEditingSize) {
+                return event
+            }
+
             switch event.keyCode {
             case escapeKeyCode:
                 self.finishSelection(with: nil)

@@ -27,6 +27,10 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         nil
     }
 
+    var isEditingSize: Bool {
+        editingDimension != nil
+    }
+
     func update(width: Int, height: Int, isLocked: Bool, foregroundColor: NSColor) {
         self.foregroundColor = foregroundColor
         widthButton.title = "\(width)"

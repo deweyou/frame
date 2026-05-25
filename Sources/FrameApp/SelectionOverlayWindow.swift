@@ -58,6 +58,10 @@ final class SelectionOverlayWindow {
         overlayView.hasSelection
     }
 
+    var isEditingSize: Bool {
+        overlayView.isEditingSize
+    }
+
     var selectedGlobalRect: CGRect? {
         overlayView.selectedGlobalRect
     }
@@ -143,6 +147,10 @@ private final class SelectionOverlayView: NSView {
         selectionRect != nil
     }
 
+    var isEditingSize: Bool {
+        sizeControl.isEditingSize
+    }
+
     var selectedGlobalRect: CGRect? {
         guard let selectionRect else {
             return nil
@@ -225,6 +233,13 @@ private final class SelectionOverlayView: NSView {
     }
 
     override func flagsChanged(with event: NSEvent) {
+        guard dragOperation != nil else {
+            isShiftTemporarilyLocking = false
+            updateMetrics()
+            super.flagsChanged(with: event)
+            return
+        }
+
         let isShiftPressed = event.modifierFlags.contains(.shift)
         if !isShiftPressed,
            case let .create(startPoint, _) = dragOperation {
