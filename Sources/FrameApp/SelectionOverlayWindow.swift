@@ -24,7 +24,7 @@ final class SelectionOverlayWindow {
             onComplete: onComplete
         )
 
-        window = NSWindow(
+        window = SelectionOverlayNativeWindow(
             contentRect: screen.frame,
             styleMask: [.borderless],
             backing: .buffered,
@@ -50,7 +50,7 @@ final class SelectionOverlayWindow {
     }
 
     func makeKey() {
-        window.makeKey()
+        window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(overlayView)
     }
 
@@ -88,6 +88,16 @@ final class SelectionOverlayWindow {
 
     func close() {
         window.close()
+    }
+}
+
+private final class SelectionOverlayNativeWindow: NSWindow {
+    override var canBecomeKey: Bool {
+        true
+    }
+
+    override var canBecomeMain: Bool {
+        true
     }
 }
 

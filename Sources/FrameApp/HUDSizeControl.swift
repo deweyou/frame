@@ -8,10 +8,11 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     var onLockToggle: (() -> Void)?
     var onRatioPreset: ((SelectionAspectRatio) -> Void)?
 
-    private let widthField = NSTextField(string: "0")
-    private let linkButton = NSButton()
-    private let heightField = NSTextField(string: "0")
-    private let menuButton = NSPopUpButton(frame: .zero, pullsDown: true)
+    private let widthField = HUDSizeTextField(string: "0")
+    private let linkButton = HUDSizeButton()
+    private let heightField = HUDSizeTextField(string: "0")
+    private let menuButton = HUDSizeButton()
+    private let ratioMenu = NSMenu()
     private var editingDimension: SelectionSizeDimension?
     private var editingOriginalValue = ""
     private var foregroundColor = NSColor.white
@@ -45,9 +46,10 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         [widthField, heightField].forEach { field in
             field.textColor = foregroundColor
         }
-        [linkButton, menuButton].forEach {
-            $0.contentTintColor = foregroundColor
+        [linkButton, menuButton].forEach { button in
+            button.contentTintColor = foregroundColor
         }
+        linkButton.alphaValue = isLocked ? 1 : 0.5
     }
 
     private func configure() {
@@ -77,6 +79,8 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         linkButton.toolTip = "锁定比例"
         linkButton.isBordered = false
         linkButton.bezelStyle = .regularSquare
+        linkButton.imagePosition = .imageOnly
+        linkButton.setButtonType(.momentaryChange)
         linkButton.translatesAutoresizingMaskIntoConstraints = false
         addSubview(linkButton)
 
@@ -108,8 +112,11 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         menuButton.isBordered = false
         menuButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "比例预设")
         menuButton.imagePosition = .imageOnly
-        menuButton.menu?.removeAllItems()
-        menuButton.addItem(withTitle: "")
+        menuButton.bezelStyle = .regularSquare
+        menuButton.setButtonType(.momentaryChange)
+        menuButton.target = self
+        menuButton.action = #selector(showRatioMenu)
+        menuButton.toolTip = "比例预设"
         addRatioItem(title: "1:1", ratio: .square)
         addRatioItem(title: "4:3", ratio: .fourThree)
         addRatioItem(title: "3:2", ratio: .threeTwo)
@@ -122,7 +129,7 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         let item = NSMenuItem(title: title, action: #selector(selectRatio(_:)), keyEquivalent: "")
         item.target = self
         item.representedObject = ratio
-        menuButton.menu?.addItem(item)
+        ratioMenu.addItem(item)
     }
 
     func controlTextDidBeginEditing(_ notification: Notification) {
@@ -164,6 +171,14 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
 
     @objc private func toggleLock() {
         onLockToggle?()
+    }
+
+    @objc private func showRatioMenu() {
+        ratioMenu.popUp(
+            positioning: nil,
+            at: CGPoint(x: menuButton.bounds.minX, y: menuButton.bounds.maxY + 4),
+            in: menuButton
+        )
     }
 
     @objc private func selectRatio(_ sender: NSMenuItem) {
@@ -217,7 +232,7 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     }
 
     private func linkImage(isLocked: Bool) -> NSImage? {
-        let symbolName = isLocked ? "link.circle.fill" : "link.circle"
+        let symbolName = isLocked ? "link" : "link"
         return NSImage(systemSymbolName: symbolName, accessibilityDescription: isLocked ? "比例联动" : "自由比例")
             ?? NSImage(systemSymbolName: "link", accessibilityDescription: nil)
     }
@@ -233,4 +248,16 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
 private enum EditingFinishAction {
     case commit
     case cancel
+}
+
+private final class HUDSizeTextField: NSTextField {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+}
+
+private final class HUDSizeButton: NSButton {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
 }
