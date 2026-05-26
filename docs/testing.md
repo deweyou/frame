@@ -34,13 +34,17 @@ Do not call modal menu presentation such as `NSMenu.popUp` from CI tests. Prefer
 GitHub Actions runs on macOS and includes an explicit AppKit component E2E step:
 
 ```sh
-swift test --filter HUDSizeControlTests
+swift test list | grep '^FrameAppTests.HUDSizeControlTests/' | while read -r test; do
+  swift test --filter "$test"
+done
 ```
 
-The workflow also runs the full verification sequence:
+Run AppKit HUD component E2E tests one test case per `swift test` process. The hosted macOS runner can crash the AppKit test harness when all HUD window/editor tests share one process, so the full test step skips that suite after the isolated E2E step has covered it.
+
+The workflow also runs the rest of the verification sequence:
 
 ```sh
-swift test
+swift test --skip HUDSizeControlTests
 swift build
 scripts/package-app.sh
 ```
@@ -51,4 +55,5 @@ Component E2E tests must remain deterministic without Screen Recording permissio
 
 When a new requirement changes an interactive AppKit behavior, update the matching component E2E tests in the same change. If the behavior cannot be automated safely, document the reason and add the smallest stable lower-level coverage instead.
 
-Last updated: 2026-05-26
+---
+*Last updated: 2026-05-26 | Reason: document isolated HUD AppKit E2E execution in CI*

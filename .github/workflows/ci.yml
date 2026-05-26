@@ -19,10 +19,16 @@ jobs:
         run: swift --version
 
       - name: AppKit Component E2E
-        run: swift test --filter HUDSizeControlTests
+        run: |
+          set -euo pipefail
+          swift test list | grep '^FrameAppTests.HUDSizeControlTests/' | while read -r test; do
+            echo "::group::$test"
+            swift test --filter "$test"
+            echo "::endgroup::"
+          done
 
       - name: Test
-        run: swift test
+        run: swift test --skip HUDSizeControlTests
 
       - name: Build
         run: swift build
