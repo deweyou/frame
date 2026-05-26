@@ -1,12 +1,10 @@
 import AppKit
-import Testing
+import XCTest
 @testable import FrameApp
 
 @MainActor
-@Suite("HUD size control", .serialized)
-struct HUDSizeControlTests {
-    @Test("width field allows normal editing before commit")
-    func widthFieldAllowsNormalEditingBeforeCommit() throws {
+final class HUDSizeControlTests: XCTestCase {
+    func testWidthFieldAllowsNormalEditingBeforeCommit() throws {
         let harness = HUDSizeControlHarness()
         defer {
             harness.close()
@@ -21,20 +19,19 @@ struct HUDSizeControlTests {
             foregroundColor: .labelColor
         )
 
-        let widthField = try #require(harness.widthField)
-        #expect(harness.window.makeFirstResponder(widthField))
+        let widthField = try XCTUnwrap(harness.widthField)
+        XCTAssert(harness.window.makeFirstResponder(widthField))
         widthField.selectText(nil)
 
-        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        let editor = try XCTUnwrap(widthField.currentEditor() as? NSTextView)
         editor.replaceCharacters(in: editor.selectedRange, with: "5")
-        #expect(editor.string == "5")
+        XCTAssert(editor.string == "5")
 
         editor.replaceCharacters(in: NSRange(location: 0, length: 1), with: "")
-        #expect(editor.string == "")
+        XCTAssert(editor.string == "")
     }
 
-    @Test("width field appends consecutive digits without reselecting")
-    func widthFieldAppendsConsecutiveDigitsWithoutReselecting() throws {
+    func testWidthFieldAppendsConsecutiveDigitsWithoutReselecting() throws {
         let harness = HUDSizeControlHarness()
         defer {
             harness.close()
@@ -49,21 +46,20 @@ struct HUDSizeControlTests {
             foregroundColor: .labelColor
         )
 
-        let widthField = try #require(harness.widthField)
-        #expect(harness.window.makeFirstResponder(widthField))
+        let widthField = try XCTUnwrap(harness.widthField)
+        XCTAssert(harness.window.makeFirstResponder(widthField))
         widthField.selectText(nil)
 
-        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        let editor = try XCTUnwrap(widthField.currentEditor() as? NSTextView)
         editor.replaceCharacters(in: editor.selectedRange, with: "1")
         editor.setSelectedRange(NSRange(location: editor.string.count, length: 0))
         editor.replaceCharacters(in: editor.selectedRange, with: "1")
 
-        #expect(editor.string == "11")
-        #expect(editor.selectedRange == NSRange(location: 2, length: 0))
+        XCTAssert(editor.string == "11")
+        XCTAssert(editor.selectedRange == NSRange(location: 2, length: 0))
     }
 
-    @Test("command select all replaces the full value")
-    func commandSelectAllReplacesFullValue() throws {
+    func testCommandSelectAllReplacesFullValue() throws {
         let harness = HUDSizeControlHarness()
         defer {
             harness.close()
@@ -78,22 +74,21 @@ struct HUDSizeControlTests {
             foregroundColor: .labelColor
         )
 
-        let widthField = try #require(harness.widthField)
-        #expect(harness.window.makeFirstResponder(widthField))
+        let widthField = try XCTUnwrap(harness.widthField)
+        XCTAssert(harness.window.makeFirstResponder(widthField))
 
-        let editor = try #require(widthField.currentEditor() as? NSTextView)
-        #expect(harness.control.control(
+        let editor = try XCTUnwrap(widthField.currentEditor() as? NSTextView)
+        XCTAssert(harness.control.control(
             widthField,
             textView: editor,
             doCommandBy: #selector(NSResponder.selectAll(_:))
         ))
         editor.replaceCharacters(in: editor.selectedRange, with: "9")
 
-        #expect(editor.string == "9")
+        XCTAssert(editor.string == "9")
     }
 
-    @Test("command A key equivalent selects all text")
-    func commandAKeyEquivalentSelectsAllText() throws {
+    func testCommandAKeyEquivalentSelectsAllText() throws {
         let harness = HUDSizeControlHarness()
         defer {
             harness.close()
@@ -108,12 +103,12 @@ struct HUDSizeControlTests {
             foregroundColor: .labelColor
         )
 
-        let widthField = try #require(harness.widthField)
-        #expect(harness.window.makeFirstResponder(widthField))
+        let widthField = try XCTUnwrap(harness.widthField)
+        XCTAssert(harness.window.makeFirstResponder(widthField))
 
-        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        let editor = try XCTUnwrap(widthField.currentEditor() as? NSTextView)
         editor.setSelectedRange(NSRange(location: 2, length: 0))
-        let event = try #require(NSEvent.keyEvent(
+        let event = try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown,
             location: .zero,
             modifierFlags: .command,
@@ -126,12 +121,11 @@ struct HUDSizeControlTests {
             keyCode: 0
         ))
 
-        #expect(widthField.performKeyEquivalent(with: event))
-        #expect(editor.selectedRange == NSRange(location: 0, length: 4))
+        XCTAssert(widthField.performKeyEquivalent(with: event))
+        XCTAssert(editor.selectedRange == NSRange(location: 0, length: 4))
     }
 
-    @Test("width field commits editor text")
-    func widthFieldCommitsEditorText() throws {
+    func testWidthFieldCommitsEditorText() throws {
         let harness = HUDSizeControlHarness()
         defer {
             harness.close()
@@ -151,24 +145,23 @@ struct HUDSizeControlTests {
             foregroundColor: .labelColor
         )
 
-        let widthField = try #require(harness.widthField)
-        #expect(harness.window.makeFirstResponder(widthField))
+        let widthField = try XCTUnwrap(harness.widthField)
+        XCTAssert(harness.window.makeFirstResponder(widthField))
         widthField.selectText(nil)
 
-        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        let editor = try XCTUnwrap(widthField.currentEditor() as? NSTextView)
         editor.replaceCharacters(in: editor.selectedRange, with: "640")
         committedWidth = nil
-        #expect(harness.control.control(
+        XCTAssert(harness.control.control(
             widthField,
             textView: editor,
             doCommandBy: #selector(NSResponder.insertNewline(_:))
         ))
 
-        #expect(committedWidth == 640)
+        XCTAssert(committedWidth == 640)
     }
 
-    @Test("height field commits editor text")
-    func heightFieldCommitsEditorText() throws {
+    func testHeightFieldCommitsEditorText() throws {
         let harness = HUDSizeControlHarness()
         defer {
             harness.close()
@@ -188,23 +181,22 @@ struct HUDSizeControlTests {
             foregroundColor: .labelColor
         )
 
-        let heightField = try #require(harness.heightField)
-        #expect(harness.window.makeFirstResponder(heightField))
+        let heightField = try XCTUnwrap(harness.heightField)
+        XCTAssert(harness.window.makeFirstResponder(heightField))
         heightField.selectText(nil)
 
-        let editor = try #require(heightField.currentEditor() as? NSTextView)
+        let editor = try XCTUnwrap(heightField.currentEditor() as? NSTextView)
         editor.replaceCharacters(in: editor.selectedRange, with: "480")
-        #expect(harness.control.control(
+        XCTAssert(harness.control.control(
             heightField,
             textView: editor,
             doCommandBy: #selector(NSResponder.insertNewline(_:))
         ))
 
-        #expect(committedHeight == 480)
+        XCTAssert(committedHeight == 480)
     }
 
-    @Test("width field allows values above screen maximum to be clamped by overlay")
-    func widthFieldAllowsValuesAboveScreenMaximumToBeClampedByOverlay() throws {
+    func testWidthFieldAllowsValuesAboveScreenMaximumToBeClampedByOverlay() throws {
         let harness = HUDSizeControlHarness()
         defer {
             harness.close()
@@ -224,23 +216,22 @@ struct HUDSizeControlTests {
             foregroundColor: .labelColor
         )
 
-        let widthField = try #require(harness.widthField)
-        #expect(harness.window.makeFirstResponder(widthField))
+        let widthField = try XCTUnwrap(harness.widthField)
+        XCTAssert(harness.window.makeFirstResponder(widthField))
         widthField.selectText(nil)
 
-        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        let editor = try XCTUnwrap(widthField.currentEditor() as? NSTextView)
         editor.replaceCharacters(in: editor.selectedRange, with: "999")
-        #expect(harness.control.control(
+        XCTAssert(harness.control.control(
             widthField,
             textView: editor,
             doCommandBy: #selector(NSResponder.insertNewline(_:))
         ))
 
-        #expect(committedWidth == 999)
+        XCTAssert(committedWidth == 999)
     }
 
-    @Test("empty width edit restores without commit")
-    func emptyWidthEditRestoresWithoutCommit() throws {
+    func testEmptyWidthEditRestoresWithoutCommit() throws {
         let harness = HUDSizeControlHarness()
         defer {
             harness.close()
@@ -260,24 +251,23 @@ struct HUDSizeControlTests {
             foregroundColor: .labelColor
         )
 
-        let widthField = try #require(harness.widthField)
-        #expect(harness.window.makeFirstResponder(widthField))
+        let widthField = try XCTUnwrap(harness.widthField)
+        XCTAssert(harness.window.makeFirstResponder(widthField))
 
-        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        let editor = try XCTUnwrap(widthField.currentEditor() as? NSTextView)
         editor.setSelectedRange(NSRange(location: 0, length: editor.string.count))
         editor.replaceCharacters(in: editor.selectedRange, with: "")
-        #expect(harness.control.control(
+        XCTAssert(harness.control.control(
             widthField,
             textView: editor,
             doCommandBy: #selector(NSResponder.insertNewline(_:))
         ))
 
-        #expect(committedWidth == nil)
-        #expect(widthField.stringValue == "1280")
+        XCTAssert(committedWidth == nil)
+        XCTAssert(widthField.stringValue == "1280")
     }
 
-    @Test("metrics refresh does not overwrite active editor text")
-    func metricsRefreshDoesNotOverwriteActiveEditorText() throws {
+    func testMetricsRefreshDoesNotOverwriteActiveEditorText() throws {
         let harness = HUDSizeControlHarness()
         defer {
             harness.close()
@@ -292,11 +282,11 @@ struct HUDSizeControlTests {
             foregroundColor: .labelColor
         )
 
-        let widthField = try #require(harness.widthField)
-        #expect(harness.window.makeFirstResponder(widthField))
+        let widthField = try XCTUnwrap(harness.widthField)
+        XCTAssert(harness.window.makeFirstResponder(widthField))
         widthField.selectText(nil)
 
-        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        let editor = try XCTUnwrap(widthField.currentEditor() as? NSTextView)
         editor.replaceCharacters(in: editor.selectedRange, with: "1")
 
         harness.control.update(
@@ -308,11 +298,10 @@ struct HUDSizeControlTests {
             foregroundColor: .labelColor
         )
 
-        #expect(editor.string == "1")
+        XCTAssert(editor.string == "1")
     }
 
-    @Test("metrics refresh updates inactive dimension while preserving active editor")
-    func metricsRefreshUpdatesInactiveDimensionWhilePreservingActiveEditor() throws {
+    func testMetricsRefreshUpdatesInactiveDimensionWhilePreservingActiveEditor() throws {
         let harness = HUDSizeControlHarness()
         defer {
             harness.close()
@@ -327,12 +316,12 @@ struct HUDSizeControlTests {
             foregroundColor: .labelColor
         )
 
-        let widthField = try #require(harness.widthField)
-        let heightField = try #require(harness.heightField)
-        #expect(harness.window.makeFirstResponder(widthField))
+        let widthField = try XCTUnwrap(harness.widthField)
+        let heightField = try XCTUnwrap(harness.heightField)
+        XCTAssert(harness.window.makeFirstResponder(widthField))
         widthField.selectText(nil)
 
-        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        let editor = try XCTUnwrap(widthField.currentEditor() as? NSTextView)
         editor.replaceCharacters(in: editor.selectedRange, with: "1")
 
         harness.control.update(
@@ -344,12 +333,11 @@ struct HUDSizeControlTests {
             foregroundColor: .labelColor
         )
 
-        #expect(editor.string == "1")
-        #expect(heightField.stringValue == "600")
+        XCTAssert(editor.string == "1")
+        XCTAssert(heightField.stringValue == "600")
     }
 
-    @Test("lock button commits active edit before toggling")
-    func lockButtonCommitsActiveEditBeforeToggling() throws {
+    func testLockButtonCommitsActiveEditBeforeToggling() throws {
         let harness = HUDSizeControlHarness()
         defer {
             harness.close()
@@ -373,16 +361,16 @@ struct HUDSizeControlTests {
             foregroundColor: .labelColor
         )
 
-        let widthField = try #require(harness.widthField)
-        #expect(harness.window.makeFirstResponder(widthField))
+        let widthField = try XCTUnwrap(harness.widthField)
+        XCTAssert(harness.window.makeFirstResponder(widthField))
         widthField.selectText(nil)
 
-        let editor = try #require(widthField.currentEditor() as? NSTextView)
+        let editor = try XCTUnwrap(widthField.currentEditor() as? NSTextView)
         editor.replaceCharacters(in: editor.selectedRange, with: "640")
         harness.linkButton?.performClick(nil)
 
-        #expect(committedWidth == 640)
-        #expect(toggled)
+        XCTAssert(committedWidth == 640)
+        XCTAssert(toggled)
     }
 
 }

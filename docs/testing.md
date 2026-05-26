@@ -15,7 +15,7 @@ Frame uses two automated test layers:
 
 ## Component E2E
 
-AppKit component E2E tests live in `Tests/FrameAppTests/`. They should exercise real controls and field editors inside a test window, but avoid full desktop automation, Screen Recording permission, and modal AppKit APIs.
+AppKit component E2E tests live in `Tests/FrameAppTests/` and use XCTest. They should exercise real controls and field editors inside a test window, but avoid full desktop automation, Screen Recording permission, and modal AppKit APIs.
 
 New HUD or interactive AppKit features should add component E2E coverage for the user-visible cases they change:
 
@@ -39,7 +39,7 @@ swift test list | grep '^FrameAppTests.HUDSizeControlTests/' | while read -r tes
 done
 ```
 
-Run AppKit HUD component E2E tests one test case per `swift test` process. The hosted macOS runner can crash the AppKit test harness when all HUD window/editor tests share one process, so the full test step skips that suite after the isolated E2E step has covered it.
+Run AppKit HUD component E2E tests one test case per `swift test` process. The hosted macOS runner can crash the Swift Testing/AppKit window harness before assertions run, so keep AppKit component E2E on XCTest and keep the full test step skipping that suite after the isolated E2E step has covered it.
 
 The workflow also runs the rest of the verification sequence:
 
@@ -56,4 +56,4 @@ Component E2E tests must remain deterministic without Screen Recording permissio
 When a new requirement changes an interactive AppKit behavior, update the matching component E2E tests in the same change. If the behavior cannot be automated safely, document the reason and add the smallest stable lower-level coverage instead.
 
 ---
-*Last updated: 2026-05-26 | Reason: document isolated HUD AppKit E2E execution in CI*
+*Last updated: 2026-05-26 | Reason: document XCTest-based isolated HUD AppKit E2E execution in CI*
