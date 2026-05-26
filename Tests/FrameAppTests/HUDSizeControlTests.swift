@@ -3,7 +3,7 @@ import Testing
 @testable import FrameApp
 
 @MainActor
-@Suite("HUD size control")
+@Suite("HUD size control", .serialized)
 struct HUDSizeControlTests {
     @Test("width field allows normal editing before commit")
     func widthFieldAllowsNormalEditingBeforeCommit() throws {
