@@ -41,6 +41,8 @@ done
 
 Run AppKit HUD component E2E tests one test case per `swift test` process. The hosted macOS runner can crash the Swift Testing/AppKit window harness before assertions run, so keep AppKit component E2E on XCTest and keep the full test step skipping that suite after the isolated E2E step has covered it.
 
+Synthetic AppKit key-equivalent events are the one local-only HUD case because `performKeyEquivalent(with:)` can crash on the hosted runner before assertions run. Keep the lower-level `selectAll(_:)` command routing covered in CI and run the synthetic key-equivalent case locally.
+
 The workflow also runs the rest of the verification sequence:
 
 ```sh
@@ -56,4 +58,4 @@ Component E2E tests must remain deterministic without Screen Recording permissio
 When a new requirement changes an interactive AppKit behavior, update the matching component E2E tests in the same change. If the behavior cannot be automated safely, document the reason and add the smallest stable lower-level coverage instead.
 
 ---
-*Last updated: 2026-05-26 | Reason: document XCTest-based isolated HUD AppKit E2E execution in CI*
+*Last updated: 2026-05-26 | Reason: document XCTest-based isolated HUD AppKit E2E execution and local-only key-equivalent coverage*
