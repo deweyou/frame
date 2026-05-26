@@ -32,5 +32,9 @@ let package = Package(
             name: "FrameCoreTests",
             dependencies: ["FrameCore"]
         ),
+        .testTarget(
+            name: "FrameAppTests",
+            dependencies: ["FrameApp"]
+        ),
     ]
 )

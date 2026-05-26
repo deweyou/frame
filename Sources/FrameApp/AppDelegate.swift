@@ -83,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 do {
-                    let screenshot = try captureService.capture(rect: selection.rect)
+                    let screenshot = try captureService.capture(selection: selection)
                     showQuickAccess(for: screenshot, anchor: quickAccessAnchor)
                     NSLog("Frame 截图选区类型：\(selection.kind)")
                 } catch {

@@ -8,6 +8,7 @@ Frame is a native macOS menu bar app. AppKit owns the runtime because the produc
 - `FrameApp`: AppKit adapters and user-facing capture flow.
 - `FrameCore`: deterministic helpers that can be tested without AppKit.
 - `FrameCoreTests`: unit tests for core behavior.
+- `FrameAppTests`: AppKit component E2E tests for stable HUD and interaction behavior.
 
 ## Runtime Flow
 
@@ -22,7 +23,7 @@ background-aware contrast, and direct-manipulation capture behavior.
 6. `HotKeyController` registers the selected screenshot shortcut through Carbon and routes it to the screenshot flow.
 7. `ScreenRecordingPermission` checks and requests macOS Screen Recording access.
 8. `SelectionOverlayController` creates one overlay per connected `NSScreen`, owns window candidate lookup, and stores the last confirmed selection rectangle.
-9. `SelectionOverlayWindow` shows a single active editable selection across displays, supports drag adjustment, can switch to an eligible double-clicked application window as a marked window selection, clears selection on empty double-clicks, shows a centered HUD on the active screen when no selection exists, and returns a global Cocoa screen rectangle after keyboard confirmation.
+9. `SelectionOverlayWindow` shows a single active editable selection across displays, supports drag create/move/edge-resize/corner-resize interactions, can switch to an eligible double-clicked application window as a marked window selection, clears selection on empty double-clicks, and returns a global Cocoa screen rectangle after keyboard confirmation. Its fixed-width HUD includes numeric width/height editing, current-ratio locking, preset ratios, anchored ratio resizing, and temporary Shift ratio locking without changing the HUD width.
 10. `WindowCandidateProvider` adapts CoreGraphics window-list metadata into eligible ordinary application window candidates while excluding Frame's own windows and obvious non-application surfaces.
 11. `CaptureService` converts the selected Cocoa rectangle into a Quartz capture rectangle and returns PNG data plus `NSImage`.
 12. `ActiveScreenResolver` resolves the active window rectangle, falling back to the mouse screen or main screen.
@@ -38,12 +39,13 @@ background-aware contrast, and direct-manipulation capture behavior.
 - screenshot filename generation
 - Desktop save URL composition
 - selection rectangle normalization and validation
-- selection capture kind metadata for region and window selections
+- deterministic selection sizing, ratio fitting, and center-preserving rectangle adjustment
+- selection capture metadata for region selections and window selections with window IDs
 
 AppKit-specific code stays in `FrameApp`. Keep permission, capture, pasteboard, panels, window metadata, and window behavior behind narrow adapters so future ScreenCaptureKit migration or UI changes are local.
 
 ## Current Tradeoffs
 
-- `CaptureService` uses `CGWindowListCreateImage`, which is deprecated on macOS 14+. It is isolated in one adapter so a future ScreenCaptureKit migration is contained.
+- `CaptureService` uses `CGWindowListCreateImage`, which is deprecated on macOS 14+. Region captures use rectangular on-screen pixels. Window captures use the selected window ID with bounds framing ignored so saved window screenshots do not include macOS shadow ornamentation. The adapter is isolated so a future ScreenCaptureKit migration is contained.
 - Local development should use a stable self-signed Code Signing identity through `FRAME_CODESIGN_IDENTITY` to reduce TCC permission churn.
 - Screen Recording permission is sensitive to bundle identity, path, and signature. Keep local testing on a stable app path such as `~/Applications/Frame.app`.
