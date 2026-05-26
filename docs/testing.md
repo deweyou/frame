@@ -31,7 +31,7 @@ Do not call modal menu presentation such as `NSMenu.popUp` from CI tests. Prefer
 
 ## CI Expectations
 
-GitHub Actions runs on a fixed `macos-14` runner and includes an explicit AppKit component E2E step:
+GitHub Actions runs on a fixed `macos-15-intel` runner and includes an explicit AppKit component E2E step:
 
 ```sh
 swift test list | grep '^FrameAppTests.HUDSizeControlTests/' | while read -r test; do
@@ -41,7 +41,7 @@ done
 
 Run AppKit HUD component E2E tests one test case per `swift test` process. The hosted macOS runner can crash the Swift Testing/AppKit window harness before assertions run, so keep AppKit component E2E on XCTest and keep the full test step skipping that suite after the isolated E2E step has covered it.
 
-Avoid `macos-latest` for AppKit component E2E because it can silently move to newer hosted images with different window-server behavior. Synthetic AppKit key-equivalent events are the one local-only HUD case because `performKeyEquivalent(with:)` can crash on hosted runners before assertions run. Keep the lower-level `selectAll(_:)` command routing covered in CI and run the synthetic key-equivalent case locally.
+Avoid `macos-latest` for AppKit component E2E because it can silently move to newer hosted images with different window-server behavior. Use the Intel macOS 15 image so CI keeps Swift 6.1 support without the arm64 AppKit window/editor crash seen on hosted runners. Synthetic AppKit key-equivalent events are the one local-only HUD case because `performKeyEquivalent(with:)` can crash on hosted runners before assertions run. Keep the lower-level `selectAll(_:)` command routing covered in CI and run the synthetic key-equivalent case locally.
 
 The workflow also runs the rest of the verification sequence:
 
