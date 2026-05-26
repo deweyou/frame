@@ -47,6 +47,7 @@ Use `docs/` as the project knowledge base:
 
 - `docs/architecture.md` explains runtime boundaries and core components.
 - `docs/development.md` explains local setup, verification, packaging, and CI expectations.
+- `docs/overlay-interactions.md` explains screenshot overlay drag, cursor, handle, and HUD tooltip behavior.
 - `docs/testing.md` explains automated test layers, AppKit component e2e boundaries, and the expectation to cover new interactive requirements with e2e tests.
 - `docs/permissions.md` explains macOS Screen Recording/TCC behavior.
 - `DESIGN.md` explains durable interface principles and HUD/Quick Access behavior.

@@ -7,6 +7,7 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     var onHeightCommit: ((Int) -> Void)?
     var onLockToggle: (() -> Void)?
     var onRatioPreset: ((SelectionAspectRatio) -> Void)?
+    var onTooltipChange: ((String?, NSView?) -> Void)?
 
     private let widthField = HUDSizeTextField(string: "0")
     private let linkButton = HUDSizeButton()
@@ -66,7 +67,7 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         [linkButton, menuButton].forEach { button in
             button.contentTintColor = foregroundColor
         }
-        linkButton.alphaValue = isLocked ? 1 : 0.5
+        linkButton.alphaValue = isLocked ? 1 : 0.32
     }
 
     private func configure() {
@@ -93,10 +94,16 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
 
         linkButton.target = self
         linkButton.action = #selector(toggleLock)
-        linkButton.toolTip = "锁定比例"
+        linkButton.identifier = NSUserInterfaceItemIdentifier("ratio-lock")
+        linkButton.setAccessibilityLabel("锁定比例")
+        linkButton.tooltipText = "锁定比例"
+        linkButton.onHoverChange = { [weak self, weak linkButton] isHovering in
+            self?.onTooltipChange?(isHovering ? "锁定比例" : nil, linkButton)
+        }
         linkButton.isBordered = false
         linkButton.bezelStyle = .regularSquare
         linkButton.imagePosition = .imageOnly
+        linkButton.imageScaling = .scaleProportionallyDown
         linkButton.setButtonType(.momentaryChange)
         linkButton.translatesAutoresizingMaskIntoConstraints = false
         addSubview(linkButton)
@@ -118,22 +125,27 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
             heightField.widthAnchor.constraint(equalToConstant: 34),
 
             menuButton.leadingAnchor.constraint(equalTo: heightField.trailingAnchor, constant: 3),
-            menuButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            menuButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
             menuButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            menuButton.widthAnchor.constraint(equalToConstant: 17),
+            menuButton.widthAnchor.constraint(equalToConstant: 21),
+            menuButton.heightAnchor.constraint(equalToConstant: 34),
         ])
     }
 
     private func configureMenu() {
         menuButton.translatesAutoresizingMaskIntoConstraints = false
         menuButton.isBordered = false
-        menuButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "比例预设")
+        menuButton.identifier = NSUserInterfaceItemIdentifier("ratio-menu")
+        menuButton.setAccessibilityLabel("比例预设")
+        ratioMenu.title = "比例预设"
+        setMenuIcon(isOpen: false, animated: false)
+        menuButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 9, weight: .regular)
         menuButton.imagePosition = .imageOnly
+        menuButton.imageScaling = .scaleProportionallyDown
         menuButton.bezelStyle = .regularSquare
         menuButton.setButtonType(.momentaryChange)
         menuButton.target = self
         menuButton.action = #selector(showRatioMenu)
-        menuButton.toolTip = "比例预设"
         addRatioItem(title: "1:1", ratio: .square)
         addRatioItem(title: "4:3", ratio: .fourThree)
         addRatioItem(title: "3:2", ratio: .threeTwo)
@@ -208,12 +220,14 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
 
     @objc private func showRatioMenu() {
         finishActiveEditingBeforeControlAction()
+        setMenuIcon(isOpen: true, animated: true)
         window?.makeFirstResponder(window?.contentView)
         ratioMenu.popUp(
             positioning: nil,
-            at: CGPoint(x: menuButton.bounds.minX, y: menuButton.bounds.maxY + 4),
+            at: CGPoint(x: menuButton.bounds.minX, y: menuButton.bounds.maxY + 10),
             in: menuButton
         )
+        setMenuIcon(isOpen: false, animated: true)
     }
 
     @objc private func selectRatio(_ sender: NSMenuItem) {
@@ -340,9 +354,53 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
     }
 
     private func linkImage(isLocked: Bool) -> NSImage? {
-        let symbolName = isLocked ? "link" : "link"
-        return NSImage(systemSymbolName: symbolName, accessibilityDescription: isLocked ? "比例联动" : "自由比例")
-            ?? NSImage(systemSymbolName: "link", accessibilityDescription: nil)
+        let image = NSImage(size: CGSize(width: 12, height: 12), flipped: false) { rect in
+            NSColor.black.setStroke()
+
+            let strokeWidth: CGFloat = 1.35
+            let linkSize = isLocked ? CGSize(width: 6.2, height: 4.2) : CGSize(width: 5.0, height: 4.2)
+            let leftX = isLocked ? rect.midX - 5.0 : rect.midX - 5.6
+            let rightX = isLocked ? rect.midX - 1.2 : rect.midX + 0.6
+            let leftRect = CGRect(
+                x: leftX,
+                y: rect.midY - linkSize.height / 2,
+                width: linkSize.width,
+                height: linkSize.height
+            )
+            let rightRect = CGRect(
+                x: rightX,
+                y: rect.midY - linkSize.height / 2,
+                width: linkSize.width,
+                height: linkSize.height
+            )
+
+            for linkRect in [leftRect, rightRect] {
+                let path = NSBezierPath(roundedRect: linkRect, xRadius: linkSize.height / 2, yRadius: linkSize.height / 2)
+                path.lineWidth = strokeWidth
+                path.stroke()
+            }
+
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = isLocked ? "比例联动" : "自由比例"
+        return image
+    }
+
+    private func setMenuIcon(isOpen: Bool, animated: Bool) {
+        if animated {
+            menuButton.wantsLayer = true
+            let transition = CATransition()
+            transition.type = .fade
+            transition.duration = 0.14
+            transition.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            menuButton.layer?.add(transition, forKey: "ratio-menu-icon")
+        }
+
+        menuButton.image = NSImage(
+            systemSymbolName: isOpen ? "chevron.up" : "chevron.down",
+            accessibilityDescription: "比例预设"
+        )
     }
 
     func cancelEditing() {
@@ -385,6 +443,20 @@ private final class HUDSizeTextField: NSTextField {
 }
 
 private final class HUDSizeButton: NSButton {
+    private var trackingArea: NSTrackingArea?
+    var tooltipText: String?
+    var onHoverChange: ((Bool) -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        wantsLayer = true
+    }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
@@ -392,5 +464,29 @@ private final class HUDSizeButton: NSButton {
     override func resetCursorRects() {
         super.resetCursorRects()
         addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+
+        let newTrackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect],
+            owner: self
+        )
+        addTrackingArea(newTrackingArea)
+        trackingArea = newTrackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onHoverChange?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onHoverChange?(false)
     }
 }

@@ -420,7 +420,7 @@ private final class HUDSizeControlHarness {
 
     var linkButton: NSButton? {
         control.subviews.compactMap { $0 as? NSButton }
-            .first { $0.toolTip == "锁定比例" }
+            .first { $0.identifier?.rawValue == "ratio-lock" }
     }
 
     func close() {
