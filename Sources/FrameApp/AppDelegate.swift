@@ -87,11 +87,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
 
                     do {
-                        let screenshot = try await captureService.capture(selection: selection)
-                        showQuickAccess(for: screenshot, anchor: quickAccessAnchor)
+                        let screenshot = try await self.captureService.capture(selection: selection)
+                        self.showQuickAccess(for: screenshot, anchor: quickAccessAnchor)
                         NSLog("Frame 截图选区类型：\(selection.kind)")
                     } catch {
-                        showCaptureFailedAlert(error)
+                        self.showCaptureFailedAlert(error)
                     }
                 }
             }

@@ -1,7 +1,7 @@
 import AppKit
 import CoreGraphics
 import FrameCore
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 
 struct CapturedScreenshot {
     let id = UUID()
