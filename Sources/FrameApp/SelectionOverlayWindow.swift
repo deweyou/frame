@@ -40,6 +40,7 @@ final class SelectionOverlayWindow {
         window.ignoresMouseEvents = false
         window.isMovable = false
         window.isOpaque = false
+        window.sharingType = .none
         window.level = .screenSaver
         window.isReleasedWhenClosed = false
         window.acceptsMouseMovedEvents = true
@@ -297,8 +298,12 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
-        drawDimmedBackdrop(excluding: displayedLocalRect)
-        drawSelectionChrome(displayedLocalRect)
+        let drawingSelectionRect = pixelAlignedSelectionRect(
+            displayedLocalRect,
+            scale: window?.backingScaleFactor ?? 1
+        )
+        drawDimmedBackdrop(excluding: drawingSelectionRect)
+        drawSelectionChrome(drawingSelectionRect)
     }
 
     private func configureHUD() {
@@ -417,93 +422,52 @@ private final class SelectionOverlayView: NSView {
     private func drawDimmedBackdrop(excluding selectionRect: CGRect) {
         NSColor.black.withAlphaComponent(0.42).setFill()
 
-        let topRect = CGRect(
-            x: bounds.minX,
-            y: selectionRect.maxY,
-            width: bounds.width,
-            height: bounds.maxY - selectionRect.maxY
-        )
-        let bottomRect = CGRect(
-            x: bounds.minX,
-            y: bounds.minY,
-            width: bounds.width,
-            height: selectionRect.minY - bounds.minY
-        )
-        let leftRect = CGRect(
-            x: bounds.minX,
-            y: selectionRect.minY,
-            width: selectionRect.minX - bounds.minX,
-            height: selectionRect.height
-        )
-        let rightRect = CGRect(
-            x: selectionRect.maxX,
-            y: selectionRect.minY,
-            width: bounds.maxX - selectionRect.maxX,
-            height: selectionRect.height
-        )
-
-        [topRect, bottomRect, leftRect, rightRect].forEach { rect in
-            guard !rect.isEmpty, rect.width > 0, rect.height > 0 else {
-                return
-            }
-
-            rect.fill()
-        }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current?.shouldAntialias = false
+        let backdropPath = NSBezierPath(rect: bounds)
+        backdropPath.append(NSBezierPath(rect: selectionRect))
+        backdropPath.windingRule = .evenOdd
+        backdropPath.fill()
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     private func drawSelectionChrome(_ selectionRect: CGRect) {
-        let roundedSelection = NSBezierPath(roundedRect: selectionRect, xRadius: 7, yRadius: 7)
-
-        NSColor.white.withAlphaComponent(0.42).setStroke()
-        roundedSelection.lineWidth = 1
-        roundedSelection.stroke()
-
         drawSelectionHandles(in: selectionRect)
     }
 
     private func drawSelectionHandles(in selectionRect: CGRect) {
-        guard selectionRect.width >= 4, selectionRect.height >= 4 else {
-            return
+        let lineWidth: CGFloat = 2.5
+
+        for cornerPath in selectionChromeCornerPaths(in: selectionRect, lineWidth: lineWidth) {
+            let path = NSBezierPath()
+            path.lineWidth = lineWidth
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            guard let firstPoint = cornerPath.points.first else {
+                continue
+            }
+
+            path.move(to: firstPoint)
+            for point in cornerPath.points.dropFirst() {
+                path.line(to: point)
+            }
+
+            let strokeStyle = selectionChromeStrokeStyle(
+                backgroundLuminance: averageLuminance(under: cornerPath),
+                foregroundLineWidth: lineWidth
+            )
+            path.lineWidth = strokeStyle.lineWidth
+            NSGraphicsContext.saveGraphicsState()
+            strokeStyle.shadow.set()
+            strokeStyle.color.setStroke()
+            path.stroke()
+            NSGraphicsContext.restoreGraphicsState()
         }
+    }
 
-        let legLength = min(16, max(10, min(selectionRect.width, selectionRect.height) / 5))
-        let path = NSBezierPath()
-        path.lineWidth = 3
-
-        path.move(to: CGPoint(x: selectionRect.minX, y: selectionRect.minY + legLength))
-        path.line(to: CGPoint(x: selectionRect.minX, y: selectionRect.minY))
-        path.line(to: CGPoint(x: selectionRect.minX + legLength, y: selectionRect.minY))
-
-        path.move(to: CGPoint(x: selectionRect.maxX - legLength, y: selectionRect.minY))
-        path.line(to: CGPoint(x: selectionRect.maxX, y: selectionRect.minY))
-        path.line(to: CGPoint(x: selectionRect.maxX, y: selectionRect.minY + legLength))
-
-        path.move(to: CGPoint(x: selectionRect.minX, y: selectionRect.maxY - legLength))
-        path.line(to: CGPoint(x: selectionRect.minX, y: selectionRect.maxY))
-        path.line(to: CGPoint(x: selectionRect.minX + legLength, y: selectionRect.maxY))
-
-        path.move(to: CGPoint(x: selectionRect.maxX - legLength, y: selectionRect.maxY))
-        path.line(to: CGPoint(x: selectionRect.maxX, y: selectionRect.maxY))
-        path.line(to: CGPoint(x: selectionRect.maxX, y: selectionRect.maxY - legLength))
-
-        let edgeHandleLength = min(18, max(10, min(selectionRect.width, selectionRect.height) / 6))
-        let halfEdgeHandleLength = edgeHandleLength / 2
-
-        path.move(to: CGPoint(x: selectionRect.midX - halfEdgeHandleLength, y: selectionRect.minY))
-        path.line(to: CGPoint(x: selectionRect.midX + halfEdgeHandleLength, y: selectionRect.minY))
-
-        path.move(to: CGPoint(x: selectionRect.midX - halfEdgeHandleLength, y: selectionRect.maxY))
-        path.line(to: CGPoint(x: selectionRect.midX + halfEdgeHandleLength, y: selectionRect.maxY))
-
-        path.move(to: CGPoint(x: selectionRect.minX, y: selectionRect.midY - halfEdgeHandleLength))
-        path.line(to: CGPoint(x: selectionRect.minX, y: selectionRect.midY + halfEdgeHandleLength))
-
-        path.move(to: CGPoint(x: selectionRect.maxX, y: selectionRect.midY - halfEdgeHandleLength))
-        path.line(to: CGPoint(x: selectionRect.maxX, y: selectionRect.midY + halfEdgeHandleLength))
-
-        NSColor.white.withAlphaComponent(0.96).setStroke()
-        path.lineWidth = 3
-        path.stroke()
+    private func averageLuminance(under cornerPath: SelectionChromeCornerPath) -> CGFloat? {
+        let sampleRect = globalRect(fromLocalRect: cornerPath.bounds.insetBy(dx: -6, dy: -6))
+        return ScreenLuminanceSampler.averageLuminance(in: sampleRect)
     }
 
     private func setHUDTooltip(_ text: String?, anchorView: NSView?) {
@@ -991,6 +955,142 @@ private enum SelectionDragOperation {
     case create(startPoint: CGPoint, ratio: SelectionAspectRatio?)
     case move(startRect: CGRect, startPoint: CGPoint)
     case resize(handle: SelectionHandle, startRect: CGRect, ratio: SelectionAspectRatio?)
+}
+
+struct SelectionChromeCornerPath: Equatable {
+    let points: [CGPoint]
+}
+
+enum SelectionChromeStrokeRole: Equatable {
+    case darkForeground
+    case lightForeground
+}
+
+struct SelectionChromeStrokeStyle: Equatable {
+    let role: SelectionChromeStrokeRole
+    let lineWidth: CGFloat
+    let whiteComponent: CGFloat
+    let alpha: CGFloat
+    let shadow: SelectionChromeShadowStyle
+
+    @MainActor
+    var color: NSColor {
+        switch role {
+        case .darkForeground:
+            NSColor(calibratedWhite: whiteComponent, alpha: alpha)
+        case .lightForeground:
+            NSColor(calibratedWhite: whiteComponent, alpha: alpha)
+        }
+    }
+}
+
+struct SelectionChromeShadowStyle: Equatable {
+    let role: SelectionChromeStrokeRole
+    let alpha: CGFloat
+    let blurRadius: CGFloat
+    let offset: CGSize
+
+    @MainActor
+    func set() {
+        let shadow = NSShadow()
+        shadow.shadowBlurRadius = blurRadius
+        shadow.shadowOffset = offset
+        switch role {
+        case .darkForeground:
+            shadow.shadowColor = NSColor.white.withAlphaComponent(alpha)
+        case .lightForeground:
+            shadow.shadowColor = NSColor.black.withAlphaComponent(alpha)
+        }
+        shadow.set()
+    }
+}
+
+func selectionChromeStrokeStyle(
+    backgroundLuminance: CGFloat?,
+    foregroundLineWidth: CGFloat
+) -> SelectionChromeStrokeStyle {
+    let luminance = backgroundLuminance ?? 0.45
+    let role: SelectionChromeStrokeRole = luminance > 0.58 ? .darkForeground : .lightForeground
+    let whiteComponent: CGFloat = role == .darkForeground ? 0.22 : 0.92
+    let alpha: CGFloat = role == .darkForeground ? 0.68 : 0.88
+    let shadowAlpha: CGFloat = role == .darkForeground ? 0.08 : 0.14
+
+    return SelectionChromeStrokeStyle(
+        role: role,
+        lineWidth: foregroundLineWidth,
+        whiteComponent: whiteComponent,
+        alpha: alpha,
+        shadow: SelectionChromeShadowStyle(
+            role: role,
+            alpha: shadowAlpha,
+            blurRadius: 1.2,
+            offset: CGSize(width: 0, height: -0.5)
+        )
+    )
+}
+
+func selectionChromeCornerPaths(in selectionRect: CGRect, lineWidth: CGFloat) -> [SelectionChromeCornerPath] {
+    let inset = max(0, lineWidth / 2)
+    let rect = selectionRect.insetBy(dx: inset, dy: inset)
+    guard rect.width >= 4, rect.height >= 4 else {
+        return []
+    }
+
+    let legLength = min(14, max(9, min(rect.width, rect.height) / 5))
+    return [
+        SelectionChromeCornerPath(
+            points: [
+                CGPoint(x: rect.minX, y: rect.minY + legLength),
+                CGPoint(x: rect.minX, y: rect.minY),
+                CGPoint(x: rect.minX + legLength, y: rect.minY),
+            ]
+        ),
+        SelectionChromeCornerPath(
+            points: [
+                CGPoint(x: rect.maxX - legLength, y: rect.minY),
+                CGPoint(x: rect.maxX, y: rect.minY),
+                CGPoint(x: rect.maxX, y: rect.minY + legLength),
+            ]
+        ),
+        SelectionChromeCornerPath(
+            points: [
+                CGPoint(x: rect.minX, y: rect.maxY - legLength),
+                CGPoint(x: rect.minX, y: rect.maxY),
+                CGPoint(x: rect.minX + legLength, y: rect.maxY),
+            ]
+        ),
+        SelectionChromeCornerPath(
+            points: [
+                CGPoint(x: rect.maxX - legLength, y: rect.maxY),
+                CGPoint(x: rect.maxX, y: rect.maxY),
+                CGPoint(x: rect.maxX, y: rect.maxY - legLength),
+            ]
+        ),
+    ]
+}
+
+extension SelectionChromeCornerPath {
+    var bounds: CGRect {
+        points.reduce(CGRect.null) { rect, point in
+            rect.union(CGRect(origin: point, size: .zero))
+        }
+    }
+}
+
+func pixelAlignedSelectionRect(_ rect: CGRect, scale: CGFloat) -> CGRect {
+    let safeScale = max(scale, 1)
+    let minX = (rect.minX * safeScale).rounded() / safeScale
+    let minY = (rect.minY * safeScale).rounded() / safeScale
+    let maxX = (rect.maxX * safeScale).rounded() / safeScale
+    let maxY = (rect.maxY * safeScale).rounded() / safeScale
+    let minimumLength = 1 / safeScale
+
+    return CGRect(
+        x: minX,
+        y: minY,
+        width: max(maxX - minX, minimumLength),
+        height: max(maxY - minY, minimumLength)
+    )
 }
 
 private enum SelectionHandle {

@@ -12,6 +12,7 @@ public enum FrameApplication {
         appDelegate = delegate
         app.delegate = delegate
         app.setActivationPolicy(.accessory)
+        ProcessInfo.processInfo.disableAutomaticTermination("Frame stays resident as a menu bar app.")
         app.run()
     }
 }

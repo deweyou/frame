@@ -15,15 +15,20 @@ final class QuickAccessPanelController: NSObject {
         preferredAnchor: CGRect?,
         copy: @escaping () -> Bool,
         save: @escaping () -> Bool,
+        openWorkspace: @escaping () -> Bool,
+        pin: @escaping () -> Bool,
         close: @escaping () -> Void
     ) {
         let panel = makePanel(for: captured.image)
-        panel.contentView = makeContentView(for: captured.image)
+        panel.contentView = makeContentView(for: captured)
         previewItems.append(
             QuickAccessPreviewItem(
+                screenshotID: captured.id,
                 panel: panel,
                 copy: copy,
                 save: save,
+                openWorkspace: openWorkspace,
+                pin: pin,
                 close: close
             )
         )
@@ -33,10 +38,22 @@ final class QuickAccessPanelController: NSObject {
         panel.orderFrontRegardless()
     }
 
+    @discardableResult
+    func closePreview(for screenshot: CapturedScreenshot, notify: Bool) -> Bool {
+        guard let item = previewItems.first(where: { $0.screenshotID == screenshot.id }) else {
+            return false
+        }
+
+        closePreview(item, notify: notify)
+        return true
+    }
+
     private func makePanel(for image: NSImage) -> NSPanel {
+        // Non-activating panels do not reliably participate in cursor-rect updates
+        // while another app is focused, so Quick Access stays a normal floating panel.
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: previewSize),
-            styleMask: [.nonactivatingPanel, .titled, .fullSizeContentView],
+            styleMask: [.titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -47,7 +64,8 @@ final class QuickAccessPanelController: NSObject {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
-        panel.isMovableByWindowBackground = true
+        panel.isMovableByWindowBackground = false
+        panel.acceptsMouseMovedEvents = true
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.isOpaque = false
@@ -55,22 +73,25 @@ final class QuickAccessPanelController: NSObject {
         return panel
     }
 
-    private func makeContentView(for image: NSImage) -> NSView {
-        let contentView = ScreenshotPreviewView()
+    private func makeContentView(for screenshot: CapturedScreenshot) -> NSView {
+        let contentView = ScreenshotPreviewView(
+            screenshot: screenshot,
+            dragItemProvider: ScreenshotDragItemProvider()
+        )
         contentView.wantsLayer = true
-        contentView.layer?.cornerRadius = 12
-        contentView.layer?.cornerCurve = .continuous
-        contentView.layer?.masksToBounds = true
-        contentView.layer?.borderWidth = 0.5
-        contentView.layer?.borderColor = NSColor.white.withAlphaComponent(0.32).cgColor
         contentView.onHoverChanged = { [weak contentView] isHovered in
             contentView?.setActionsVisible(isHovered)
         }
 
-        let imageView = AspectFillImageView(image: image)
+        let imageView = AspectFillImageView(image: screenshot.image)
         imageView.translatesAutoresizingMaskIntoConstraints = false
         imageView.wantsLayer = true
-        imageView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.18).cgColor
+        imageView.layer?.cornerRadius = 12
+        imageView.layer?.cornerCurve = .continuous
+        imageView.layer?.masksToBounds = true
+        imageView.layer?.borderWidth = 0.5
+        imageView.layer?.borderColor = NSColor.white.withAlphaComponent(0.32).cgColor
+        imageView.layer?.backgroundColor = NSColor.clear.cgColor
 
         let overlayView = NSVisualEffectView()
         overlayView.material = .hudWindow
@@ -78,7 +99,7 @@ final class QuickAccessPanelController: NSObject {
         overlayView.state = .active
         overlayView.translatesAutoresizingMaskIntoConstraints = false
         overlayView.wantsLayer = true
-        overlayView.layer?.cornerRadius = 10
+        overlayView.layer?.cornerRadius = 14
         overlayView.layer?.cornerCurve = .continuous
         overlayView.layer?.masksToBounds = true
         overlayView.alphaValue = 0
@@ -87,16 +108,50 @@ final class QuickAccessPanelController: NSObject {
         stackView.orientation = .horizontal
         stackView.alignment = .centerY
         stackView.distribution = .fillEqually
-        stackView.spacing = 6
+        stackView.spacing = 5
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
-        stackView.addArrangedSubview(makeButton(title: "保存", symbolName: "square.and.arrow.down", action: #selector(saveButtonClicked)))
-        stackView.addArrangedSubview(makeButton(title: "复制", symbolName: "doc.on.doc", action: #selector(copyButtonClicked)))
-        stackView.addArrangedSubview(makeButton(title: "关闭", symbolName: "xmark", action: #selector(closeButtonClicked)))
+        let closeButton = makeIconButton(
+            title: "关闭",
+            symbolName: "xmark",
+            action: #selector(closeButtonClicked),
+            style: .floatingCorner
+        )
+        closeButton.alphaValue = 0
+        let saveButton = makeIconButton(
+            title: "保存",
+            symbolName: "square.and.arrow.down",
+            action: #selector(saveButtonClicked),
+            style: .toolbar
+        )
+        let copyButton = makeIconButton(
+            title: "复制",
+            symbolName: "doc.on.doc",
+            action: #selector(copyButtonClicked),
+            style: .toolbar
+        )
+        let pinButton = makeIconButton(
+            title: "固定到预览窗口",
+            symbolName: "pin",
+            action: #selector(pinButtonClicked),
+            style: .toolbar
+        )
+        let openWorkspaceButton = makeIconButton(
+            title: "打开预览",
+            symbolName: "arrow.up.left.and.arrow.down.right",
+            action: #selector(openWorkspaceButtonClicked),
+            style: .toolbar
+        )
 
-        contentView.actionsView = overlayView
+        stackView.addArrangedSubview(saveButton)
+        stackView.addArrangedSubview(copyButton)
+        stackView.addArrangedSubview(pinButton)
+        stackView.addArrangedSubview(openWorkspaceButton)
+
+        contentView.actionsViews = [closeButton, overlayView]
         contentView.addSubview(imageView)
         contentView.addSubview(overlayView)
+        contentView.addSubview(closeButton)
         overlayView.addSubview(stackView)
 
         NSLayoutConstraint.activate([
@@ -105,34 +160,79 @@ final class QuickAccessPanelController: NSObject {
             imageView.topAnchor.constraint(equalTo: contentView.topAnchor),
             imageView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
 
-            overlayView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 10),
-            overlayView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -10),
-            overlayView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10),
-            overlayView.heightAnchor.constraint(equalToConstant: 36),
+            overlayView.centerXAnchor.constraint(equalTo: imageView.centerXAnchor),
+            overlayView.bottomAnchor.constraint(equalTo: imageView.bottomAnchor, constant: -7),
+            overlayView.widthAnchor.constraint(equalToConstant: 124),
+            overlayView.heightAnchor.constraint(equalToConstant: 28),
 
-            stackView.leadingAnchor.constraint(equalTo: overlayView.leadingAnchor, constant: 6),
-            stackView.trailingAnchor.constraint(equalTo: overlayView.trailingAnchor, constant: -6),
-            stackView.topAnchor.constraint(equalTo: overlayView.topAnchor, constant: 5),
-            stackView.bottomAnchor.constraint(equalTo: overlayView.bottomAnchor, constant: -5),
+            stackView.leadingAnchor.constraint(equalTo: overlayView.leadingAnchor, constant: 7),
+            stackView.trailingAnchor.constraint(equalTo: overlayView.trailingAnchor, constant: -7),
+            stackView.topAnchor.constraint(equalTo: overlayView.topAnchor, constant: 4),
+            stackView.bottomAnchor.constraint(equalTo: overlayView.bottomAnchor, constant: -4),
+
+            closeButton.trailingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: -cornerButtonInset),
+            closeButton.topAnchor.constraint(equalTo: imageView.topAnchor, constant: cornerButtonInset),
+            closeButton.widthAnchor.constraint(equalToConstant: floatingButtonDiameter),
+            closeButton.heightAnchor.constraint(equalToConstant: floatingButtonDiameter),
         ])
 
         return contentView
     }
 
-    private func makeButton(title: String, symbolName: String, action: Selector) -> NSButton {
-        let button = NSButton(title: title, target: self, action: action)
-        button.bezelStyle = .texturedRounded
-        button.controlSize = .small
-        button.font = .systemFont(ofSize: 11, weight: .medium)
-        button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: title)
-        button.imagePosition = .imageLeading
-        button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
+    private enum IconButtonStyle {
+        case floatingCorner
+        case toolbar
+    }
+
+    private func makeIconButton(
+        title: String,
+        symbolName: String,
+        action: Selector,
+        style: IconButtonStyle
+    ) -> NSButton {
+        let button = PointingHandButton(
+            image: NSImage(systemSymbolName: symbolName, accessibilityDescription: title) ?? NSImage(),
+            target: self,
+            action: action
+        )
+        button.isBordered = false
+        button.bezelStyle = .regularSquare
+        button.imagePosition = .imageOnly
+        button.toolTip = title
+        let symbolPointSize: CGFloat = style == .floatingCorner ? 9.5 : 10.5
+        button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: symbolPointSize, weight: .semibold)
         button.contentTintColor = .labelColor
         button.setButtonType(.momentaryPushIn)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.setAccessibilityLabel(title)
+        button.setAccessibilityHelp(title)
+        if style == .floatingCorner {
+            button.controlSize = .mini
+            button.contentTintColor = NSColor.black.withAlphaComponent(0.82)
+            button.wantsLayer = true
+            button.layer?.cornerRadius = floatingButtonRadius
+            button.layer?.cornerCurve = .continuous
+            button.layer?.masksToBounds = false
+            button.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.92).cgColor
+            button.layer?.borderWidth = 0.5
+            button.layer?.borderColor = NSColor.black.withAlphaComponent(0.14).cgColor
+            button.layer?.shadowColor = NSColor.black.cgColor
+            button.layer?.shadowOpacity = 0.22
+            button.layer?.shadowRadius = 4
+            button.layer?.shadowOffset = CGSize(width: 0, height: -1)
+        }
         return button
     }
 
-    private let previewSize = CGSize(width: 180, height: 120)
+    private let previewImageSize = CGSize(width: 200, height: 132)
+    private let floatingButtonDiameter: CGFloat = 20
+    private let cornerButtonInset: CGFloat = 6
+    private var floatingButtonRadius: CGFloat {
+        floatingButtonDiameter / 2
+    }
+    private var previewSize: CGSize {
+        previewImageSize
+    }
     private let previewPadding: CGFloat = 18
     private let previewSpacing: CGFloat = 12
 
@@ -234,8 +334,8 @@ final class QuickAccessPanelController: NSObject {
         return intersection.width * intersection.height
     }
 
-    @objc private func copyButtonClicked() {
-        guard let item = previewItem(for: NSApp.currentEvent) else {
+    @objc private func copyButtonClicked(_ sender: NSButton) {
+        guard let item = previewItem(for: sender.window) else {
             return
         }
 
@@ -244,8 +344,8 @@ final class QuickAccessPanelController: NSObject {
         }
     }
 
-    @objc private func saveButtonClicked() {
-        guard let item = previewItem(for: NSApp.currentEvent) else {
+    @objc private func saveButtonClicked(_ sender: NSButton) {
+        guard let item = previewItem(for: sender.window) else {
             return
         }
 
@@ -254,20 +354,38 @@ final class QuickAccessPanelController: NSObject {
         }
     }
 
-    @objc private func closeButtonClicked() {
-        guard let item = previewItem(for: NSApp.currentEvent) else {
+    @objc private func openWorkspaceButtonClicked(_ sender: NSButton) {
+        guard let item = previewItem(for: sender.window) else {
+            return
+        }
+
+        _ = item.openWorkspace()
+    }
+
+    @objc private func pinButtonClicked(_ sender: NSButton) {
+        guard let item = previewItem(for: sender.window) else {
+            return
+        }
+
+        if item.pin() {
+            closePreview(item, notify: false)
+        }
+    }
+
+    @objc private func closeButtonClicked(_ sender: NSButton) {
+        guard let item = previewItem(for: sender.window) else {
             return
         }
 
         closePreview(item, notify: true)
     }
 
-    private func previewItem(for event: NSEvent?) -> QuickAccessPreviewItem? {
-        guard let eventWindow = event?.window else {
+    private func previewItem(for window: NSWindow?) -> QuickAccessPreviewItem? {
+        guard let window else {
             return nil
         }
 
-        return previewItems.first { $0.panel === eventWindow }
+        return previewItems.first { $0.panel === window }
     }
 
     private func closePreview(_ item: QuickAccessPreviewItem, notify: Bool) {
@@ -282,29 +400,57 @@ final class QuickAccessPanelController: NSObject {
 }
 
 private final class QuickAccessPreviewItem {
+    let screenshotID: UUID
     let panel: NSPanel
     let copy: () -> Bool
     let save: () -> Bool
+    let openWorkspace: () -> Bool
+    let pin: () -> Bool
     let close: () -> Void
 
     init(
+        screenshotID: UUID,
         panel: NSPanel,
         copy: @escaping () -> Bool,
         save: @escaping () -> Bool,
+        openWorkspace: @escaping () -> Bool,
+        pin: @escaping () -> Bool,
         close: @escaping () -> Void
     ) {
+        self.screenshotID = screenshotID
         self.panel = panel
         self.copy = copy
         self.save = save
+        self.openWorkspace = openWorkspace
+        self.pin = pin
         self.close = close
     }
 }
 
 private final class ScreenshotPreviewView: NSView {
-    var actionsView: NSView?
+    var actionsViews: [NSView] = []
     var onHoverChanged: ((Bool) -> Void)?
 
+    private let screenshot: CapturedScreenshot
+    private let dragItemProvider: ScreenshotDragItemProvider
     private var trackingArea: NSTrackingArea?
+    private var pendingHideActionsWorkItem: DispatchWorkItem?
+    private var areActionsVisible = false
+
+    init(screenshot: CapturedScreenshot, dragItemProvider: ScreenshotDragItemProvider) {
+        self.screenshot = screenshot
+        self.dragItemProvider = dragItemProvider
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -315,7 +461,7 @@ private final class ScreenshotPreviewView: NSView {
 
         let trackingArea = NSTrackingArea(
             rect: bounds,
-            options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect],
+            options: [.activeAlways, .mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
@@ -324,20 +470,203 @@ private final class ScreenshotPreviewView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        setActionsVisible(true)
+        showActions()
         onHoverChanged?(true)
+        updateCursor(for: event)
     }
 
     override func mouseExited(with event: NSEvent) {
-        setActionsVisible(false)
-        onHoverChanged?(false)
+        scheduleActionsHide()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateCursor(for: event)
+        super.mouseMoved(with: event)
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        updateCursor(for: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard !isPointInActions(point) else {
+            return
+        }
+
+        let item = dragItemProvider.draggingItem(for: screenshot, sourceBounds: bounds)
+        beginDraggingSession(with: [item], event: event, source: self)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHidden, alphaValue > 0, bounds.contains(point) else {
+            return nil
+        }
+
+        for actionsView in actionsViews.reversed() {
+            let actionPoint = actionsView.convert(point, from: self)
+            guard actionsView.bounds.contains(actionPoint) else {
+                continue
+            }
+
+            if let hitView = hitActionView(actionsView, at: actionPoint) {
+                return hitView
+            }
+
+            return actionsView
+        }
+
+        return self
     }
 
     func setActionsVisible(_ isVisible: Bool) {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.12
-            actionsView?.animator().alphaValue = isVisible ? 1 : 0
+        guard areActionsVisible != isVisible else {
+            return
         }
+
+        areActionsVisible = isVisible
+        window?.invalidateCursorRects(for: self)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = isVisible ? 0.16 : 0.22
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            for actionsView in actionsViews {
+                actionsView.layer?.removeAnimation(forKey: "opacity")
+                actionsView.animator().alphaValue = isVisible ? 1 : 0
+            }
+        }
+    }
+
+    private func showActions() {
+        pendingHideActionsWorkItem?.cancel()
+        pendingHideActionsWorkItem = nil
+        setActionsVisible(true)
+    }
+
+    private func scheduleActionsHide() {
+        pendingHideActionsWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, !self.isMouseInsideBounds else {
+                return
+            }
+
+            self.setActionsVisible(false)
+            self.onHoverChanged?(false)
+            NSCursor.arrow.set()
+        }
+        pendingHideActionsWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: workItem)
+    }
+
+    private var isMouseInsideBounds: Bool {
+        guard let window else {
+            return false
+        }
+
+        return bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
+    }
+
+    private func isPointInActions(_ point: NSPoint) -> Bool {
+        guard areActionsVisible else {
+            return false
+        }
+
+        return actionsViews.contains { actionsView in
+            actionsView.frame.contains(point)
+        }
+    }
+
+    private func hitActionView(_ view: NSView, at point: NSPoint) -> NSView? {
+        guard !view.isHidden,
+              view.bounds.contains(point) else {
+            return nil
+        }
+
+        if view is NSButton {
+            return view
+        }
+
+        for subview in view.subviews.reversed() {
+            let subviewPoint = subview.convert(point, from: view)
+            if let hitView = hitActionView(subview, at: subviewPoint) {
+                return hitView
+            }
+        }
+
+        return view
+    }
+
+    private func updateCursor(for event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if isPointInActions(point) {
+            NSCursor.pointingHand.set()
+        } else {
+            NSCursor.arrow.set()
+        }
+    }
+}
+
+private final class PointingHandButton: NSButton {
+    private var trackingArea: NSTrackingArea?
+
+    override var alignmentRectInsets: NSEdgeInsets {
+        NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+
+        let newTrackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(newTrackingArea)
+        trackingArea = newTrackingArea
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        NSCursor.pointingHand.set()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        NSCursor.pointingHand.set()
+        super.mouseEntered(with: event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        NSCursor.pointingHand.set()
+        super.mouseMoved(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+    }
+}
+
+extension ScreenshotPreviewView: NSDraggingSource {
+    func draggingSession(
+        _ session: NSDraggingSession,
+        sourceOperationMaskFor context: NSDraggingContext
+    ) -> NSDragOperation {
+        .copy
+    }
+
+    func ignoreModifierKeys(for session: NSDraggingSession) -> Bool {
+        true
     }
 }
 
@@ -348,7 +677,7 @@ private final class AspectFillImageView: NSView {
         self.image = image
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.18).cgColor
+        layer?.backgroundColor = NSColor.clear.cgColor
     }
 
     @available(*, unavailable)

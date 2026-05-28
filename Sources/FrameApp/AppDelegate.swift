@@ -3,11 +3,14 @@ import FrameCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let overlayDismissalCaptureDelay: DispatchTimeInterval = .milliseconds(80)
+
     private var statusItemController: StatusItemController?
     private var hotKeyController: HotKeyController?
     private let selectionOverlayController = SelectionOverlayController()
     private let captureService = CaptureService()
     private let quickAccessPanelController = QuickAccessPanelController()
+    private let imageWorkspacePanelController = ImageWorkspacePanelController()
     private let clipboardWriter = ClipboardWriter()
     private let screenshotFileWriter = ScreenshotFileWriter()
     private let settingsWindowController = SettingsWindowController()
@@ -77,17 +80,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            DispatchQueue.main.async { [weak self] in
-                guard let self else {
-                    return
-                }
+            DispatchQueue.main.asyncAfter(deadline: .now() + overlayDismissalCaptureDelay) { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self else {
+                        return
+                    }
 
-                do {
-                    let screenshot = try captureService.capture(selection: selection)
-                    showQuickAccess(for: screenshot, anchor: quickAccessAnchor)
-                    NSLog("Frame 截图选区类型：\(selection.kind)")
-                } catch {
-                    showCaptureFailedAlert(error)
+                    do {
+                        let screenshot = try await captureService.capture(selection: selection)
+                        showQuickAccess(for: screenshot, anchor: quickAccessAnchor)
+                        NSLog("Frame 截图选区类型：\(selection.kind)")
+                    } catch {
+                        showCaptureFailedAlert(error)
+                    }
                 }
             }
         }
@@ -103,6 +108,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             save: { [weak self] in
                 self?.saveToDesktop(screenshot) ?? false
             },
+            openWorkspace: { [weak self] in
+                self?.openWorkspace(screenshot, kind: .temporaryPreview) ?? false
+            },
+            pin: { [weak self] in
+                self?.openWorkspace(screenshot, kind: .pinned) ?? false
+            },
             close: {
                 NSLog("Frame 快速操作已关闭")
             }
@@ -110,6 +121,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSLog(
             "Frame 已捕获截图：rect=\(screenshot.rect.debugDescription), pngSize=\(screenshot.pngData.count) bytes"
+        )
+    }
+
+    private func openWorkspace(_ screenshot: CapturedScreenshot, kind: ImageWorkspaceKind) -> Bool {
+        imageWorkspacePanelController.show(
+            screenshot: screenshot,
+            kind: kind,
+            copy: { [weak self] in
+                guard let self,
+                      self.copyToClipboard(screenshot) else {
+                    return false
+                }
+
+                self.quickAccessPanelController.closePreview(for: screenshot, notify: false)
+                return true
+            },
+            save: { [weak self] in
+                guard let self,
+                      self.saveToDesktop(screenshot) else {
+                    return false
+                }
+
+                self.quickAccessPanelController.closePreview(for: screenshot, notify: false)
+                return true
+            }
         )
     }
 

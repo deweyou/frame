@@ -1,5 +1,15 @@
 # Architecture
 
+```mermaid
+flowchart TD
+    HotKey[Hot key or menu] --> Overlay[Selection overlays]
+    Overlay --> Selection[Region or window selection]
+    Selection --> Capture[CaptureService]
+    Capture --> QuickAccess[Quick Access preview]
+    QuickAccess --> Output[Copy, save/download, drag, preview, pin]
+    QuickAccess --> Workspace[Image workspace]
+```
+
 Frame is a native macOS menu bar app. AppKit owns the runtime because the product depends on system-level behavior: status items, global hotkeys, Screen Recording permission, full-screen overlay windows, pasteboard access, and local file output.
 
 ## Targets
@@ -27,9 +37,10 @@ background-aware contrast, and direct-manipulation capture behavior.
 10. `WindowCandidateProvider` adapts CoreGraphics window-list metadata into eligible ordinary application window candidates while excluding Frame's own windows and obvious non-application surfaces.
 11. `CaptureService` converts the selected Cocoa rectangle into a Quartz capture rectangle and returns PNG data plus `NSImage`.
 12. `ActiveScreenResolver` resolves the active window rectangle, falling back to the mouse screen or main screen.
-13. `QuickAccessPanelController` presents fixed-size screenshot previews at the active screen's bottom-left corner, stacks multiple previews upward, follows active-screen changes while previews are visible, and exposes hover actions for copy, save, and close.
-14. `ClipboardWriter` writes the captured image to `NSPasteboard`.
-15. `ScreenshotFileWriter` saves PNG data to Desktop using `ScreenshotNaming`.
+13. `QuickAccessPanelController` presents fixed-position screenshot previews at the active screen's bottom-left corner, stacks multiple previews upward, exposes icon-only hover actions, and acts as the drag source for moving captured image content into compatible target apps.
+14. `ImageWorkspacePanelController` presents movable and resizable preview/edit workspace windows for preview sessions, plus separate image-only pinned windows. Preview/edit windows use native macOS close controls plus a top toolbar that leaves captured pixels unobstructed. Copy and download close both the preview/edit workspace and the originating Quick Access preview on success; edited-image save remains disabled until editing ships. Pinned windows expose copy, download, and edit through a context menu while keeping the pinned image open.
+15. `ClipboardWriter` writes the captured image to `NSPasteboard`.
+16. `ScreenshotFileWriter` saves PNG data to Desktop using `ScreenshotNaming`.
 
 ## Boundaries
 
@@ -41,11 +52,16 @@ background-aware contrast, and direct-manipulation capture behavior.
 - selection rectangle normalization and validation
 - deterministic selection sizing, ratio fitting, and center-preserving rectangle adjustment
 - selection capture metadata for region selections and window selections with window IDs
+- workspace close policy and selected editing tool state
 
 AppKit-specific code stays in `FrameApp`. Keep permission, capture, pasteboard, panels, window metadata, and window behavior behind narrow adapters so future ScreenCaptureKit migration or UI changes are local.
 
 ## Current Tradeoffs
 
-- `CaptureService` uses `CGWindowListCreateImage`, which is deprecated on macOS 14+. Region captures use rectangular on-screen pixels. Window captures use the selected window ID with bounds framing ignored so saved window screenshots do not include macOS shadow ornamentation. The adapter is isolated so a future ScreenCaptureKit migration is contained.
+- `CaptureService` keeps capture platform calls isolated. Region captures still use `CGWindowListCreateImage` rectangular on-screen pixels. Window captures prefer ScreenCaptureKit single-window capture with shadow framing disabled, crop transparent or shadow-only margins, and fall back to CoreGraphics with bounds framing ignored before using a region fallback.
+- Selection overlay windows opt out of system capture sharing so the dimming layer, selection outline, and HUD cannot be captured while the overlay is being dismissed.
 - Local development should use a stable self-signed Code Signing identity through `FRAME_CODESIGN_IDENTITY` to reduce TCC permission churn.
 - Screen Recording permission is sensitive to bundle identity, path, and signature. Keep local testing on a stable app path such as `~/Applications/Frame.app`.
+
+---
+*Last updated: 2026-05-28 | Reason: document pinned window context menu behavior*
