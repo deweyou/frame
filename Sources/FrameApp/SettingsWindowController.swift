@@ -5,39 +5,87 @@ import SwiftUI
 @MainActor
 final class SettingsWindowController {
     private var window: NSWindow?
+    private var splitViewController: SettingsSplitViewController?
 
     func show(
+        strings: AppStrings,
         onShortcutChange: @escaping @MainActor (ScreenshotShortcut) -> Bool,
-        onCheckPermission: @escaping @MainActor () -> Void
+        onCheckPermission: @escaping @MainActor () -> Void,
+        onLanguageChange: @escaping @MainActor (AppLanguage) -> Void,
+        onChooseScreenshotDirectory: @escaping @MainActor () -> URL?,
+        onResetScreenshotDirectory: @escaping @MainActor () -> Void
     ) {
         if let window {
+            splitViewController?.update(strings: strings)
+            centerOnActiveScreen(window)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
 
         let splitViewController = SettingsSplitViewController(
+            strings: strings,
             onShortcutChange: onShortcutChange,
-            onCheckPermission: onCheckPermission
+            onCheckPermission: onCheckPermission,
+            onLanguageChange: onLanguageChange,
+            onChooseScreenshotDirectory: onChooseScreenshotDirectory,
+            onResetScreenshotDirectory: onResetScreenshotDirectory
         )
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 720, height: 520),
+            contentRect: NSRect(origin: .zero, size: SettingsWindowLayout.defaultSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        window.title = "设置"
+        window.title = strings.settingsTitle
         window.titlebarAppearsTransparent = true
         window.toolbarStyle = .unified
-        window.minSize = NSSize(width: 640, height: 460)
-        window.center()
+        window.minSize = SettingsWindowLayout.minimumSize
+        centerOnActiveScreen(window)
         window.isReleasedWhenClosed = false
         window.contentViewController = splitViewController
 
         self.window = window
+        self.splitViewController = splitViewController
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func update(strings: AppStrings) {
+        window?.title = strings.settingsTitle
+        splitViewController?.update(strings: strings)
+    }
+
+    private func centerOnActiveScreen(_ window: NSWindow) {
+        let mouseLocation = NSEvent.mouseLocation
+        let targetScreen = NSScreen.screens.first { $0.frame.contains(mouseLocation) }
+            ?? NSScreen.main
+            ?? window.screen
+
+        guard let visibleFrame = targetScreen?.visibleFrame else {
+            window.center()
+            return
+        }
+
+        window.setFrame(SettingsWindowLayout.centeredFrame(
+            windowSize: window.frame.size,
+            visibleFrame: visibleFrame
+        ), display: false)
+    }
+}
+
+enum SettingsWindowLayout {
+    static let defaultSize = CGSize(width: 900, height: 540)
+    static let minimumSize = CGSize(width: 780, height: 480)
+
+    static func centeredFrame(windowSize: CGSize, visibleFrame: CGRect) -> CGRect {
+        CGRect(
+            x: visibleFrame.midX - windowSize.width / 2,
+            y: visibleFrame.midY - windowSize.height / 2,
+            width: windowSize.width,
+            height: windowSize.height
+        )
     }
 }
 
@@ -45,12 +93,12 @@ private enum SettingsSection: Int, CaseIterable {
     case general
     case about
 
-    var title: String {
+    func title(strings: AppStrings) -> String {
         switch self {
         case .general:
-            "通用"
+            strings.settingsGeneral
         case .about:
-            "关于"
+            strings.settingsAbout
         }
     }
 
@@ -67,17 +115,26 @@ private enum SettingsSection: Int, CaseIterable {
 @MainActor
 private final class SettingsSplitViewController: NSSplitViewController {
     private let detailViewController: SettingsDetailViewController
+    private let sidebarViewController: SettingsSidebarViewController
 
     init(
+        strings: AppStrings,
         onShortcutChange: @escaping @MainActor (ScreenshotShortcut) -> Bool,
-        onCheckPermission: @escaping @MainActor () -> Void
+        onCheckPermission: @escaping @MainActor () -> Void,
+        onLanguageChange: @escaping @MainActor (AppLanguage) -> Void,
+        onChooseScreenshotDirectory: @escaping @MainActor () -> URL?,
+        onResetScreenshotDirectory: @escaping @MainActor () -> Void
     ) {
         detailViewController = SettingsDetailViewController(
+            strings: strings,
             onShortcutChange: onShortcutChange,
-            onCheckPermission: onCheckPermission
+            onCheckPermission: onCheckPermission,
+            onLanguageChange: onLanguageChange,
+            onChooseScreenshotDirectory: onChooseScreenshotDirectory,
+            onResetScreenshotDirectory: onResetScreenshotDirectory
         )
 
-        let sidebarViewController = SettingsSidebarViewController()
+        sidebarViewController = SettingsSidebarViewController(strings: strings)
 
         super.init(nibName: nil, bundle: nil)
 
@@ -107,6 +164,11 @@ private final class SettingsSplitViewController: NSSplitViewController {
     required init?(coder: NSCoder) {
         nil
     }
+
+    func update(strings: AppStrings) {
+        sidebarViewController.update(strings: strings)
+        detailViewController.update(strings: strings)
+    }
 }
 
 @MainActor
@@ -114,6 +176,17 @@ private final class SettingsSidebarViewController: NSViewController, NSTableView
     var onSelectSection: ((SettingsSection) -> Void)?
 
     private let tableView = NSTableView()
+    private var strings: AppStrings
+
+    init(strings: AppStrings) {
+        self.strings = strings
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
 
     override func loadView() {
         let scrollView = NSScrollView()
@@ -156,8 +229,11 @@ private final class SettingsSidebarViewController: NSViewController, NSTableView
             ?? SidebarCellView()
 
         view.identifier = .settingsSidebarCell
-        view.textField?.stringValue = section.title
-        view.imageView?.image = NSImage(systemSymbolName: section.imageName, accessibilityDescription: section.title)
+        view.textField?.stringValue = section.title(strings: strings)
+        view.imageView?.image = NSImage(
+            systemSymbolName: section.imageName,
+            accessibilityDescription: section.title(strings: strings)
+        )
 
         return view
     }
@@ -168,6 +244,11 @@ private final class SettingsSidebarViewController: NSViewController, NSTableView
         }
 
         onSelectSection?(section)
+    }
+
+    func update(strings: AppStrings) {
+        self.strings = strings
+        tableView.reloadData()
     }
 }
 
@@ -212,13 +293,26 @@ private final class SidebarCellView: NSTableCellView {
 private final class SettingsDetailViewController: NSHostingController<AnyView> {
     private let onShortcutChange: @MainActor (ScreenshotShortcut) -> Bool
     private let onCheckPermission: @MainActor () -> Void
+    private let onLanguageChange: @MainActor (AppLanguage) -> Void
+    private let onChooseScreenshotDirectory: @MainActor () -> URL?
+    private let onResetScreenshotDirectory: @MainActor () -> Void
+    private var strings: AppStrings
+    private var currentSection: SettingsSection = .general
 
     init(
+        strings: AppStrings,
         onShortcutChange: @escaping @MainActor (ScreenshotShortcut) -> Bool,
-        onCheckPermission: @escaping @MainActor () -> Void
+        onCheckPermission: @escaping @MainActor () -> Void,
+        onLanguageChange: @escaping @MainActor (AppLanguage) -> Void,
+        onChooseScreenshotDirectory: @escaping @MainActor () -> URL?,
+        onResetScreenshotDirectory: @escaping @MainActor () -> Void
     ) {
+        self.strings = strings
         self.onShortcutChange = onShortcutChange
         self.onCheckPermission = onCheckPermission
+        self.onLanguageChange = onLanguageChange
+        self.onChooseScreenshotDirectory = onChooseScreenshotDirectory
+        self.onResetScreenshotDirectory = onResetScreenshotDirectory
         super.init(rootView: AnyView(EmptyView()))
     }
 
@@ -228,32 +322,48 @@ private final class SettingsDetailViewController: NSHostingController<AnyView> {
     }
 
     func show(_ section: SettingsSection) {
-        NSLog("Frame 设置页 detail 切换到 \(section.title)")
+        currentSection = section
+        NSLog("Frame 设置页 detail 切换到 \(section.title(strings: strings))")
         switch section {
         case .general:
             rootView = AnyView(
                 GeneralSettingsView(
+                    strings: strings,
                     onShortcutChange: onShortcutChange,
-                    onCheckPermission: onCheckPermission
+                    onCheckPermission: onCheckPermission,
+                    onLanguageChange: onLanguageChange,
+                    onChooseScreenshotDirectory: onChooseScreenshotDirectory,
+                    onResetScreenshotDirectory: onResetScreenshotDirectory
                 )
             )
         case .about:
-            rootView = AnyView(AboutSettingsView())
+            rootView = AnyView(AboutSettingsView(strings: strings))
         }
+    }
+
+    func update(strings: AppStrings) {
+        self.strings = strings
+        show(currentSection)
     }
 }
 
 private struct GeneralSettingsView: View {
+    let strings: AppStrings
     let onShortcutChange: @MainActor (ScreenshotShortcut) -> Bool
     let onCheckPermission: @MainActor () -> Void
+    let onLanguageChange: @MainActor (AppLanguage) -> Void
+    let onChooseScreenshotDirectory: @MainActor () -> URL?
+    let onResetScreenshotDirectory: @MainActor () -> Void
 
     @State private var selectedShortcut = SettingsStore.screenshotShortcut()
     @State private var hasScreenRecordingAccess = ScreenRecordingPermission.hasAccess
+    @State private var selectedLanguage = SettingsStore.appLanguage()
+    @State private var screenshotDirectoryPath = (try? SettingsStore.screenshotDirectory().path) ?? ""
 
     var body: some View {
-        SettingsPane(title: "通用") {
+        SettingsPane(title: strings.settingsGeneral) {
             Form {
-                Picker("截图快捷键", selection: $selectedShortcut) {
+                Picker(strings.settingsScreenshotShortcut, selection: $selectedShortcut) {
                     ForEach(ScreenshotShortcut.allCases) { shortcut in
                         Text(shortcut.keyboardShortcut.displayName)
                             .tag(shortcut)
@@ -264,12 +374,35 @@ private struct GeneralSettingsView: View {
                     changeShortcut(newShortcut)
                 }
 
-                LabeledContent("屏幕录制权限") {
+                LabeledContent(strings.settingsSaveLocation) {
                     HStack(spacing: 8) {
-                        Text(hasScreenRecordingAccess ? "已开启" : "未开启")
+                        Text(screenshotDirectoryPath)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .foregroundStyle(.secondary)
+                        Button(strings.settingsChooseFolder, action: chooseScreenshotDirectory)
+                        Button(strings.settingsResetFolder, action: resetScreenshotDirectory)
+                    }
+                }
+
+                Picker(strings.settingsLanguage, selection: $selectedLanguage) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(language.displayName(strings: strings))
+                            .tag(language)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: selectedLanguage) { _, newLanguage in
+                    SettingsStore.setAppLanguage(newLanguage)
+                    onLanguageChange(newLanguage)
+                }
+
+                LabeledContent(strings.settingsScreenRecordingPermission) {
+                    HStack(spacing: 8) {
+                        Text(hasScreenRecordingAccess ? strings.settingsPermissionGranted : strings.settingsPermissionMissing)
                             .foregroundStyle(hasScreenRecordingAccess ? .green : .secondary)
-                        Button("检查权限", action: checkPermission)
-                        Button("打开系统设置", action: ScreenRecordingPermission.openSettings)
+                        Button(strings.settingsCheckPermission, action: checkPermission)
+                        Button(strings.settingsOpenSystemSettings, action: ScreenRecordingPermission.openSettings)
                     }
                 }
             }
@@ -286,6 +419,20 @@ private struct GeneralSettingsView: View {
         hasScreenRecordingAccess = ScreenRecordingPermission.hasAccess
     }
 
+    private func chooseScreenshotDirectory() {
+        guard let directory = onChooseScreenshotDirectory() else {
+            return
+        }
+
+        SettingsStore.setScreenshotDirectory(directory)
+        screenshotDirectoryPath = directory.path
+    }
+
+    private func resetScreenshotDirectory() {
+        onResetScreenshotDirectory()
+        screenshotDirectoryPath = (try? SettingsStore.screenshotDirectory().path) ?? ""
+    }
+
     private func checkPermission() {
         onCheckPermission()
         hasScreenRecordingAccess = ScreenRecordingPermission.hasAccess
@@ -293,12 +440,14 @@ private struct GeneralSettingsView: View {
 }
 
 private struct AboutSettingsView: View {
+    let strings: AppStrings
+
     var body: some View {
-        SettingsPane(title: "关于") {
+        SettingsPane(title: strings.settingsAbout) {
             Form {
-                LabeledContent("应用", value: appName)
-                LabeledContent("版本", value: versionText)
-                LabeledContent("构建", value: buildText)
+                LabeledContent(strings.settingsAppName, value: appName)
+                LabeledContent(strings.settingsVersion, value: versionText)
+                LabeledContent(strings.settingsBuild, value: buildText)
             }
             .formStyle(.grouped)
         }

@@ -46,6 +46,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         controller.show(
             for: screenshot,
             preferredAnchor: nil,
+            strings: AppStrings(language: .zhHans),
             copy: { true },
             save: { true },
             openWorkspace: { true },
@@ -163,6 +164,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         controller.show(
             for: firstScreenshot,
             preferredAnchor: nil,
+            strings: AppStrings(language: .zhHans),
             copy: { true },
             save: { true },
             openWorkspace: { true },
@@ -172,6 +174,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         controller.show(
             for: secondScreenshot,
             preferredAnchor: nil,
+            strings: AppStrings(language: .zhHans),
             copy: { true },
             save: { true },
             openWorkspace: { true },
@@ -257,6 +260,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         controller.show(
             for: screenshot,
             preferredAnchor: nil,
+            strings: AppStrings(language: .zhHans),
             copy: copy,
             save: save,
             openWorkspace: { true },

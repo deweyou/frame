@@ -12,11 +12,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let quickAccessPanelController = QuickAccessPanelController()
     private let imageWorkspacePanelController = ImageWorkspacePanelController()
     private let clipboardWriter = ClipboardWriter()
-    private let screenshotFileWriter = ScreenshotFileWriter()
     private let settingsWindowController = SettingsWindowController()
+    private var strings = AppStrings.current()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        strings = AppStrings.current()
         statusItemController = StatusItemController(
+            strings: strings,
             onCapture: { [weak self] in
                 self?.onCapture()
             },
@@ -57,11 +59,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func onSettings() {
         settingsWindowController.show(
+            strings: strings,
             onShortcutChange: { [weak self] shortcut in
                 self?.changeScreenshotShortcut(to: shortcut) ?? false
             },
             onCheckPermission: { [weak self] in
                 self?.onCheckPermission()
+            },
+            onLanguageChange: { [weak self] language in
+                self?.changeLanguage(to: language)
+            },
+            onChooseScreenshotDirectory: { [weak self] in
+                self?.chooseScreenshotDirectory()
+            },
+            onResetScreenshotDirectory: {
+                SettingsStore.resetScreenshotDirectory()
             }
         )
     }
@@ -74,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let quickAccessAnchor = ActiveScreenResolver.preferredQuickAccessAnchor()
 
-        selectionOverlayController.startSelection { [weak self] selection in
+        selectionOverlayController.startSelection(strings: strings) { [weak self] selection in
             guard let self,
                   let selection else {
                 return
@@ -102,6 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickAccessPanelController.show(
             for: screenshot,
             preferredAnchor: anchor,
+            strings: strings,
             copy: { [weak self] in
                 self?.copyToClipboard(screenshot) ?? false
             },
@@ -155,20 +168,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSLog("Frame 已复制截图到剪贴板")
             return true
         } catch {
-            showQuickAccessFailedAlert(title: "Frame 复制失败", error: error)
+            showQuickAccessFailedAlert(title: strings.copyFailedTitle, error: error)
             return false
         }
     }
 
     private func saveToDesktop(_ screenshot: CapturedScreenshot) -> Bool {
         do {
-            let saveURL = try screenshotFileWriter.write(pngData: screenshot.pngData)
+            let saveURL = try ScreenshotFileWriter(strings: strings).write(pngData: screenshot.pngData)
             NSLog("Frame 已保存截图：\(saveURL.path)")
             return true
         } catch {
-            showQuickAccessFailedAlert(title: "Frame 保存失败", error: error)
+            showQuickAccessFailedAlert(title: strings.saveFailedTitle, error: error)
             return false
         }
+    }
+
+    private func chooseScreenshotDirectory() -> URL? {
+        let panel = NSOpenPanel()
+        panel.title = strings.settingsSaveLocation
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+
+        guard panel.runModal() == .OK,
+              let directory = panel.url else {
+            return nil
+        }
+
+        return directory
+    }
+
+    private func changeLanguage(to language: AppLanguage) {
+        SettingsStore.setAppLanguage(language)
+        strings = AppStrings.current()
+        statusItemController?.reloadMenu(strings: strings)
+        settingsWindowController.update(strings: strings)
     }
 
     private func changeScreenshotShortcut(to shortcut: ScreenshotShortcut) -> Bool {
@@ -198,26 +234,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showHotKeyRegistrationFailedAlert(_ error: Error) {
         let alert = NSAlert()
-        alert.messageText = "Frame 快捷键注册失败"
-        alert.informativeText = "截图快捷键暂时无法使用。你仍然可以通过菜单栏使用截图功能。\n\n\(error.localizedDescription)"
-        alert.addButton(withTitle: "好")
+        alert.messageText = strings.hotKeyRegistrationFailedTitle
+        alert.informativeText = strings.hotKeyRegistrationFailedMessage(errorDescription: error.localizedDescription)
+        alert.addButton(withTitle: strings.ok)
         alert.runModal()
     }
 
     private func showCaptureFailedAlert(_ error: Error) {
         let alert = NSAlert()
-        alert.messageText = "Frame 截图失败"
+        alert.messageText = strings.captureFailedTitle
         alert.informativeText = error.localizedDescription
-        alert.addButton(withTitle: "好")
+        alert.addButton(withTitle: strings.ok)
         alert.runModal()
     }
 
     private func showPermissionReadyAlert() {
         let alert = NSAlert()
-        alert.messageText = "Frame 屏幕录制权限已开启"
+        alert.messageText = strings.permissionReadyTitle
         let shortcut = SettingsStore.screenshotShortcut().keyboardShortcut.displayName
-        alert.informativeText = "你可以使用 \(shortcut) 或菜单栏截图入口开始区域截图。"
-        alert.addButton(withTitle: "好")
+        alert.informativeText = strings.permissionReadyMessage(shortcut: shortcut)
+        alert.addButton(withTitle: strings.ok)
         alert.runModal()
     }
 
@@ -225,7 +261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = error.localizedDescription
-        alert.addButton(withTitle: "好")
+        alert.addButton(withTitle: strings.ok)
         alert.runModal()
     }
 }

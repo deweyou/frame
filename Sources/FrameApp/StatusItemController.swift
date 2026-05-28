@@ -5,18 +5,26 @@ final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
     private let onCaptureAction: () -> Void
     private let onSettingsAction: () -> Void
+    private var strings: AppStrings
 
     init(
         statusItem: NSStatusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength),
+        strings: AppStrings = AppStrings.current(),
         onCapture: @escaping () -> Void,
         onSettings: @escaping () -> Void
     ) {
         self.statusItem = statusItem
+        self.strings = strings
         self.onCaptureAction = onCapture
         self.onSettingsAction = onSettings
 
         super.init()
 
+        configureStatusItem()
+    }
+
+    func reloadMenu(strings: AppStrings) {
+        self.strings = strings
         configureStatusItem()
     }
 
@@ -34,10 +42,10 @@ final class StatusItemController: NSObject {
         }
 
         let menu = NSMenu()
-        menu.addItem(menuItem(title: "截图", action: #selector(onCapture(_:))))
-        menu.addItem(menuItem(title: "设置…", action: #selector(onSettings(_:))))
+        menu.addItem(menuItem(title: strings.menuCapture, action: #selector(onCapture(_:))))
+        menu.addItem(menuItem(title: strings.menuSettings, action: #selector(onSettings(_:))))
         menu.addItem(.separator())
-        menu.addItem(menuItem(title: "退出", action: #selector(onQuit(_:))))
+        menu.addItem(menuItem(title: strings.menuQuit, action: #selector(onQuit(_:))))
 
         statusItem.menu = menu
     }
