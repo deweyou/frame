@@ -20,11 +20,14 @@ jobs:
 
       - name: AppKit Component E2E
         run: |
-          echo "HUD AppKit component E2E opens real NSWindow/field-editor state and crashes on GitHub hosted macOS runners before assertions run."
-          echo "Run locally before shipping interactive HUD changes: swift test --filter HUDSizeControlTests"
+          echo "Real NSWindow/NSPanel AppKit component E2E is local-only on GitHub hosted macOS runners."
+          echo "Run locally before shipping interactive changes:"
+          echo "  swift test --filter HUDSizeControlTests"
+          echo "  swift test --filter ImageWorkspacePanelControllerTests"
+          echo "  swift test --filter ScreenshotDragItemProviderTests"
 
       - name: Test
-        run: swift test --skip HUDSizeControlTests
+        run: swift test --skip HUDSizeControlTests --skip ImageWorkspacePanelControllerTests --skip ScreenshotDragItemProviderTests
 
       - name: Build
         run: swift build

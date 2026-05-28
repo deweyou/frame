@@ -3,8 +3,9 @@
 ```mermaid
 flowchart TD
     Change["Interactive AppKit change"] --> E2E["Add or update component E2E"]
-    E2E --> Unit["Keep deterministic logic in unit tests"]
-    E2E --> CI["Run on macOS CI"]
+    Change --> Unit["Keep deterministic logic in unit tests"]
+    E2E --> Local["Run real-window AppKit E2E locally"]
+    Unit --> CI["Run stable suite on macos-15 CI"]
     CI --> Manual["Use manual smoke only for permissions and full desktop flows"]
 ```
 
@@ -35,16 +36,18 @@ GitHub Actions runs on a fixed `macos-15` runner and records the AppKit componen
 
 ```sh
 swift test --filter HUDSizeControlTests
+swift test --filter ImageWorkspacePanelControllerTests
+swift test --filter ScreenshotDragItemProviderTests
 ```
 
-Run AppKit HUD component E2E locally before shipping interactive HUD changes. GitHub hosted macOS runners crash real `NSWindow`/field-editor tests before assertions run, so hosted CI skips this suite and keeps the stable lower-level test/build/package path green.
+Run AppKit component E2E locally before shipping interactive HUD, workspace, preview, or drag changes. GitHub hosted macOS runners can crash or hang real `NSWindow`, `NSPanel`, and field-editor tests before assertions run, so hosted CI skips these suites and keeps the stable lower-level test/build/package path green.
 
 Avoid `macos-latest` because it can silently move to newer hosted images. Keep the runner pinned to a Swift 6.1-capable macOS image and keep real AppKit window e2e local-only until a self-hosted runner or a stable UI automation environment is available.
 
 The workflow also runs the rest of the verification sequence:
 
 ```sh
-swift test --skip HUDSizeControlTests
+swift test --skip HUDSizeControlTests --skip ImageWorkspacePanelControllerTests --skip ScreenshotDragItemProviderTests
 swift build
 scripts/package-app.sh
 ```
@@ -56,4 +59,4 @@ Component E2E tests must remain deterministic without Screen Recording permissio
 When a new requirement changes an interactive AppKit behavior, update the matching component E2E tests in the same change. If the behavior cannot be automated safely, document the reason and add the smallest stable lower-level coverage instead.
 
 ---
-*Last updated: 2026-05-26 | Reason: document hosted CI boundary for HUD AppKit E2E*
+*Last updated: 2026-05-28 | Reason: document hosted CI boundary for real-window AppKit E2E*
