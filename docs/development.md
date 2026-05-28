@@ -1,5 +1,16 @@
 # Development
 
+```mermaid
+flowchart TD
+    Edit[Edit code] --> Verify[swift test and swift build]
+    Verify --> Package[scripts/package-app.sh]
+    Package --> Sign[Stable local signing identity]
+    Sign --> Install[Replace ~/Applications/Frame.app]
+    Install --> Smoke[Manual screenshot smoke test]
+```
+
+Frame development uses SwiftPM for verification, a local packaging script for app bundle creation, and a stable local signing path for repeat GUI testing without unnecessary Screen Recording permission churn.
+
 ## Requirements
 
 - macOS
@@ -142,9 +153,23 @@ Agents should use this stable-sign-and-replace flow whenever the user asks to ru
 9. Confirm the `180x120` preview appears at the active screen's bottom-left corner with equal left and bottom padding.
 10. With multiple displays, switch to another app on a different display and confirm visible previews move to that display's bottom-left corner.
 11. Take multiple screenshots and confirm previews stack upward from the bottom-left corner.
-12. Hover the preview and confirm `保存`, `复制`, and `关闭` appear.
-13. Confirm copy places an image on the pasteboard.
-14. Confirm save writes `Frame yyyy-MM-dd HH.mm.ss.png` to Desktop.
+12. Confirm the Quick Access preview cannot be moved by dragging its background.
+13. Drag the preview image into a rich-text TextEdit document or Notes note and confirm the target receives image content.
+14. Hover the preview and confirm icon-only save, copy, workspace, pin, and close actions appear.
+15. Confirm copy places an image on the pasteboard.
+16. Confirm save writes `Frame yyyy-MM-dd HH.mm.ss.png` to Desktop.
+17. Confirm the workspace action opens a movable, resizable preview workspace.
+18. Resize the workspace and confirm the image preview area preserves the captured image aspect ratio without empty fill.
+19. Confirm switching focus to another app does not close the preview workspace.
+20. Click the same Quick Access workspace action again and confirm it activates the existing preview workspace instead of opening a duplicate.
+21. Confirm workspace Save is visible but disabled, while Copy and Download are enabled.
+22. Confirm workspace Copy closes the workspace and the originating Quick Access preview on success.
+23. Confirm workspace Download writes `Frame yyyy-MM-dd HH.mm.ss.png` to Desktop, then closes the workspace and originating Quick Access preview on success.
+24. Confirm Escape closes the preview workspace.
+25. Confirm pin closes the originating Quick Access card and opens a persistent image-only pinned window.
+26. Confirm the pinned window has no toolbar or visible output buttons, keeps the image edge-to-edge, stays open after focus changes, and closes with the native red traffic-light close button.
+27. Right-click the pinned window and confirm Copy and Download work without closing it.
+28. Right-click the pinned window and confirm Edit opens or activates the preview/edit workspace without closing the pinned window.
 
 Keep using the same `FRAME_CODESIGN_IDENTITY` and the same `~/Applications/Frame.app` path while iterating. Changing either one can make macOS ask for Screen Recording permission again.
 
@@ -171,3 +196,6 @@ tccutil reset ScreenCapture dev.dewey.frame
 ```
 
 Then reopen the exact app bundle you want to authorize.
+
+---
+*Last updated: 2026-05-28 | Reason: document pinned window context menu smoke checks*

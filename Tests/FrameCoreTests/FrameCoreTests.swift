@@ -37,6 +37,33 @@ struct FrameCoreTests {
     }
 
     @Test
+    func testImageWorkspaceDefaultsToViewWithoutActiveTool() {
+        let state = ImageWorkspaceState(kind: .temporaryPreview)
+
+        #expect(state.kind == .temporaryPreview)
+        #expect(state.selectedTool == nil)
+        #expect(state.closePolicy == .escapeOrExplicitClose)
+    }
+
+    @Test
+    func testPinnedWorkspaceOnlyClosesExplicitly() {
+        let state = ImageWorkspaceState(kind: .pinned)
+
+        #expect(state.kind == .pinned)
+        #expect(state.closePolicy == .explicitCloseOnly)
+    }
+
+    @Test
+    func testSelectingEditingToolsUpdatesWorkspaceState() {
+        var state = ImageWorkspaceState(kind: .temporaryPreview)
+
+        for tool in ImageEditingTool.allCases {
+            state.select(tool)
+            #expect(state.selectedTool == tool)
+        }
+    }
+
+    @Test
     func testScreenshotFilenameUsesFrameTimestampFormat() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
