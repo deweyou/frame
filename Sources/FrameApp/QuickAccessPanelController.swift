@@ -13,6 +13,7 @@ final class QuickAccessPanelController: NSObject {
     func show(
         for captured: CapturedScreenshot,
         preferredAnchor: CGRect?,
+        strings: AppStrings = AppStrings.current(),
         copy: @escaping () -> Bool,
         save: @escaping () -> Bool,
         openWorkspace: @escaping () -> Bool,
@@ -20,7 +21,7 @@ final class QuickAccessPanelController: NSObject {
         close: @escaping () -> Void
     ) {
         let panel = makePanel(for: captured.image)
-        panel.contentView = makeContentView(for: captured)
+        panel.contentView = makeContentView(for: captured, strings: strings)
         previewItems.append(
             QuickAccessPreviewItem(
                 screenshotID: captured.id,
@@ -73,7 +74,7 @@ final class QuickAccessPanelController: NSObject {
         return panel
     }
 
-    private func makeContentView(for screenshot: CapturedScreenshot) -> NSView {
+    private func makeContentView(for screenshot: CapturedScreenshot, strings: AppStrings) -> NSView {
         let contentView = ScreenshotPreviewView(
             screenshot: screenshot,
             dragItemProvider: ScreenshotDragItemProvider()
@@ -112,32 +113,32 @@ final class QuickAccessPanelController: NSObject {
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
         let closeButton = makeIconButton(
-            title: "关闭",
+            title: strings.quickAccessClose,
             symbolName: "xmark",
             action: #selector(closeButtonClicked),
             style: .floatingCorner
         )
         closeButton.alphaValue = 0
         let saveButton = makeIconButton(
-            title: "保存",
+            title: strings.quickAccessSave,
             symbolName: "square.and.arrow.down",
             action: #selector(saveButtonClicked),
             style: .toolbar
         )
         let copyButton = makeIconButton(
-            title: "复制",
+            title: strings.quickAccessCopy,
             symbolName: "doc.on.doc",
             action: #selector(copyButtonClicked),
             style: .toolbar
         )
         let pinButton = makeIconButton(
-            title: "固定到预览窗口",
+            title: strings.quickAccessPin,
             symbolName: "pin",
             action: #selector(pinButtonClicked),
             style: .toolbar
         )
         let openWorkspaceButton = makeIconButton(
-            title: "打开预览",
+            title: strings.quickAccessOpen,
             symbolName: "arrow.up.left.and.arrow.down.right",
             action: #selector(openWorkspaceButtonClicked),
             style: .toolbar

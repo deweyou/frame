@@ -6,10 +6,13 @@ final class SelectionOverlayController {
     private var overlayWindows: [SelectionOverlayWindow] = []
     private var completion: ((SelectionCapture?) -> Void)?
     private var keyMonitor: Any?
-    private var lastSelectedRect: CGRect?
+    private var lastSelectionHistory: SelectionHistory?
     private let windowCandidateProvider = WindowCandidateProvider()
 
-    func startSelection(completion: @escaping (SelectionCapture?) -> Void) {
+    func startSelection(
+        strings: AppStrings = AppStrings.current(),
+        completion: @escaping (SelectionCapture?) -> Void
+    ) {
         finishSelection(with: nil)
 
         self.completion = completion
@@ -23,8 +26,10 @@ final class SelectionOverlayController {
         installKeyMonitor()
         NSApp.activate(ignoringOtherApps: true)
 
-        let initialRect = lastSelectedRect
         let activeScreen = activeScreen(from: screens)
+        let initialRect = lastSelectionHistory?.rectForRestore(
+            activeDisplayID: displayID(for: activeScreen)
+        )
         var createdWindows: [SelectionOverlayWindow] = []
         for screen in screens {
             var createdWindow: SelectionOverlayWindow?
@@ -32,6 +37,7 @@ final class SelectionOverlayController {
                 screen: screen,
                 initialGlobalRect: initialRect,
                 showsCenteredHUDWhenEmpty: screen === activeScreen,
+                placeholderText: strings.capturePlaceholder,
                 onInteraction: { [weak self] in
                     guard let createdWindow else {
                         return
@@ -75,6 +81,30 @@ final class SelectionOverlayController {
             ?? screens[0]
     }
 
+    private func screen(containing rect: CGRect) -> NSScreen? {
+        NSScreen.screens.max { firstScreen, secondScreen in
+            intersectionArea(firstScreen.frame, rect) < intersectionArea(secondScreen.frame, rect)
+        }
+    }
+
+    private func displayID(for screen: NSScreen?) -> CGDirectDisplayID? {
+        guard let screen,
+              let displayNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+            return nil
+        }
+
+        return CGDirectDisplayID(displayNumber.uint32Value)
+    }
+
+    private func intersectionArea(_ firstRect: CGRect, _ secondRect: CGRect) -> CGFloat {
+        let intersection = firstRect.intersection(secondRect)
+        guard !intersection.isNull else {
+            return 0
+        }
+
+        return intersection.width * intersection.height
+    }
+
     private func finishSelection(with selection: SelectionCapture?) {
         guard let completion else {
             return
@@ -84,7 +114,10 @@ final class SelectionOverlayController {
         removeKeyMonitor()
 
         if let selection {
-            lastSelectedRect = selection.rect
+            lastSelectionHistory = SelectionHistory(
+                rect: selection.rect,
+                displayID: displayID(for: screen(containing: selection.rect))
+            )
         }
 
         for window in overlayWindows {

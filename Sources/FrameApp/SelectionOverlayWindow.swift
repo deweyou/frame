@@ -11,6 +11,7 @@ final class SelectionOverlayWindow {
         screen: NSScreen,
         initialGlobalRect: CGRect?,
         showsCenteredHUDWhenEmpty: Bool,
+        placeholderText: String,
         onInteraction: @escaping () -> Void,
         onWindowSelectionRequested: @escaping (CGPoint) -> WindowCandidate?,
         onComplete: @escaping (SelectionCapture?) -> Void
@@ -19,6 +20,7 @@ final class SelectionOverlayWindow {
             screen: screen,
             initialGlobalRect: initialGlobalRect,
             showsCenteredHUDWhenEmpty: showsCenteredHUDWhenEmpty,
+            placeholderText: placeholderText,
             onInteraction: onInteraction,
             onWindowSelectionRequested: onWindowSelectionRequested,
             onComplete: onComplete
@@ -113,6 +115,8 @@ private final class SelectionOverlayView: NSView {
     private let modeView = NSVisualEffectView()
     private let sizeView = NSVisualEffectView()
     private let sizeControl = HUDSizeControl()
+    private let placeholderView = NSVisualEffectView()
+    private let placeholderLabel: NSTextField
     private let tooltipView = HUDTooltipView()
     private var pendingTooltipTask: Task<Void, Never>?
     private var hudTheme: HUDTheme = .lightContent
@@ -129,6 +133,7 @@ private final class SelectionOverlayView: NSView {
         screen: NSScreen,
         initialGlobalRect: CGRect?,
         showsCenteredHUDWhenEmpty: Bool,
+        placeholderText: String,
         onInteraction: @escaping () -> Void,
         onWindowSelectionRequested: @escaping (CGPoint) -> WindowCandidate?,
         onComplete: @escaping (SelectionCapture?) -> Void
@@ -138,12 +143,14 @@ private final class SelectionOverlayView: NSView {
         self.onInteraction = onInteraction
         self.onWindowSelectionRequested = onWindowSelectionRequested
         self.onComplete = onComplete
+        self.placeholderLabel = NSTextField(labelWithString: placeholderText)
 
         super.init(frame: CGRect(origin: .zero, size: screen.frame.size))
 
         wantsLayer = true
         selectionRect = localRect(fromGlobalRect: initialGlobalRect)
         configureHUD()
+        configurePlaceholder()
         updateMetrics()
     }
 
@@ -206,6 +213,7 @@ private final class SelectionOverlayView: NSView {
     override func layout() {
         super.layout()
         positionHUD()
+        positionPlaceholder()
         scheduleHUDThemeUpdate()
     }
 
@@ -355,6 +363,28 @@ private final class SelectionOverlayView: NSView {
         positionHUD()
     }
 
+    private func configurePlaceholder() {
+        configureGlass(placeholderView, cornerRadius: 22)
+        placeholderView.isHidden = true
+        placeholderView.translatesAutoresizingMaskIntoConstraints = true
+        placeholderLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        placeholderLabel.textColor = hudTheme.foregroundColor
+        placeholderLabel.alignment = .center
+        placeholderLabel.lineBreakMode = .byTruncatingTail
+        placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        placeholderView.addSubview(placeholderLabel)
+        addSubview(placeholderView)
+
+        NSLayoutConstraint.activate([
+            placeholderLabel.leadingAnchor.constraint(equalTo: placeholderView.leadingAnchor, constant: 18),
+            placeholderLabel.trailingAnchor.constraint(equalTo: placeholderView.trailingAnchor, constant: -18),
+            placeholderLabel.centerYAnchor.constraint(equalTo: placeholderView.centerYAnchor),
+        ])
+
+        positionPlaceholder()
+    }
+
     private func configureGlass(_ view: NSVisualEffectView, cornerRadius: CGFloat) {
         view.material = .hudWindow
         view.blendingMode = .behindWindow
@@ -406,6 +436,9 @@ private final class SelectionOverlayView: NSView {
             view.layer?.borderColor = theme.borderColor.cgColor
             view.layer?.backgroundColor = theme.backgroundColor.cgColor
         }
+        placeholderView.layer?.borderColor = theme.borderColor.cgColor
+        placeholderView.layer?.backgroundColor = theme.backgroundColor.cgColor
+        placeholderLabel.textColor = theme.foregroundColor
         modeButton?.contentTintColor = theme.foregroundColor
         modeButton?.hoverColor = theme.hoverColor
         tooltipView.applyTheme(theme)
@@ -556,15 +589,18 @@ private final class SelectionOverlayView: NSView {
 
     private func updateMetrics() {
         guard let displayedLocalRect else {
-            hudStackView.isHidden = !showsCenteredHUDWhenEmpty
-            modeView.isHidden = !showsCenteredHUDWhenEmpty
-            sizeView.isHidden = !showsCenteredHUDWhenEmpty
+            hudStackView.isHidden = true
+            modeView.isHidden = true
+            sizeView.isHidden = true
+            placeholderView.isHidden = !showsCenteredHUDWhenEmpty
             updateSizeControl(width: 0, height: 0)
             positionHUD()
+            positionPlaceholder()
             scheduleHUDThemeUpdate()
             return
         }
 
+        placeholderView.isHidden = true
         hudStackView.isHidden = false
         modeView.isHidden = false
         sizeView.isHidden = false
@@ -573,6 +609,7 @@ private final class SelectionOverlayView: NSView {
             height: Int(displayedLocalRect.height.rounded())
         )
         positionHUD()
+        positionPlaceholder()
         scheduleHUDThemeUpdate()
     }
 
@@ -588,9 +625,7 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func positionHUD() {
-        let hasDisplayedSelection = displayedLocalRect != nil
-        let desiredHUDSize = hasDisplayedSelection ? hudSize : hudSize
-        let visibleSize = CGSize(width: min(desiredHUDSize.width, bounds.width - 24), height: desiredHUDSize.height)
+        let visibleSize = CGSize(width: min(hudSize.width, bounds.width - 24), height: hudSize.height)
         let fallbackOrigin = CGPoint(
             x: min(max(bounds.midX - visibleSize.width / 2, bounds.minX + 12), bounds.maxX - visibleSize.width - 12),
             y: min(max(bounds.midY - visibleSize.height / 2, bounds.minY + 18), bounds.maxY - visibleSize.height - 18)
@@ -625,6 +660,21 @@ private final class SelectionOverlayView: NSView {
         origin.y = min(max(origin.y, bounds.minY + 18), bounds.maxY - visibleSize.height - 18)
 
         hudStackView.frame = CGRect(origin: origin, size: visibleSize)
+    }
+
+    private func positionPlaceholder() {
+        let fittingSize = placeholderLabel.fittingSize
+        let width = min(max(fittingSize.width + 36, 180), max(bounds.width - 48, 120))
+        let height: CGFloat = 44
+        let origin = CGPoint(
+            x: min(max(bounds.midX - width / 2, bounds.minX + 24), bounds.maxX - width - 24),
+            y: min(max(bounds.midY - height / 2, bounds.minY + 24), bounds.maxY - height - 24)
+        )
+
+        placeholderView.frame = CGRect(
+            origin: origin,
+            size: CGSize(width: width, height: height)
+        )
     }
 
     private var modeButton: HUDIconButton? {
@@ -754,7 +804,8 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func updateHUDTheme() {
-        let sampleRect = globalRect(fromLocalRect: hudStackView.frame.insetBy(dx: -10, dy: -10))
+        let visibleControlFrame = hudStackView.isHidden ? placeholderView.frame : hudStackView.frame
+        let sampleRect = globalRect(fromLocalRect: visibleControlFrame.insetBy(dx: -10, dy: -10))
         guard let luminance = ScreenLuminanceSampler.averageLuminance(in: sampleRect) else {
             return
         }
@@ -763,7 +814,7 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func updateVisibleHUDTheme() {
-        guard !hudStackView.isHidden else {
+        guard !hudStackView.isHidden || !placeholderView.isHidden else {
             return
         }
 

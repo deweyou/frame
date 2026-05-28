@@ -146,30 +146,34 @@ Agents should use this stable-sign-and-replace flow whenever the user asks to ru
 
 3. Grant Screen Recording permission when prompted.
 4. Quit and reopen `~/Applications/Frame.app`.
-5. Use `Frame -> 截图` or `Command+Shift+A`.
-6. Confirm an initial selection appears immediately. The first run should select the main screen; later runs should reuse the last confirmed selection from the current app session.
-7. Drag to create, move, or resize the region.
-8. Press Enter to capture.
-9. Confirm the `180x120` preview appears at the active screen's bottom-left corner with equal left and bottom padding.
-10. With multiple displays, switch to another app on a different display and confirm visible previews move to that display's bottom-left corner.
-11. Take multiple screenshots and confirm previews stack upward from the bottom-left corner.
-12. Confirm the Quick Access preview cannot be moved by dragging its background.
-13. Drag the preview image into a rich-text TextEdit document or Notes note and confirm the target receives image content.
-14. Hover the preview and confirm icon-only save, copy, workspace, pin, and close actions appear.
-15. Confirm copy places an image on the pasteboard.
-16. Confirm save writes `Frame yyyy-MM-dd HH.mm.ss.png` to Desktop.
-17. Confirm the workspace action opens a movable, resizable preview workspace.
-18. Resize the workspace and confirm the image preview area preserves the captured image aspect ratio without empty fill.
-19. Confirm switching focus to another app does not close the preview workspace.
-20. Click the same Quick Access workspace action again and confirm it activates the existing preview workspace instead of opening a duplicate.
-21. Confirm workspace Save is visible but disabled, while Copy and Download are enabled.
-22. Confirm workspace Copy closes the workspace and the originating Quick Access preview on success.
-23. Confirm workspace Download writes `Frame yyyy-MM-dd HH.mm.ss.png` to Desktop, then closes the workspace and originating Quick Access preview on success.
-24. Confirm Escape closes the preview workspace.
-25. Confirm pin closes the originating Quick Access card and opens a persistent image-only pinned window.
-26. Confirm the pinned window has no toolbar or visible output buttons, keeps the image edge-to-edge, stays open after focus changes, and closes with the native red traffic-light close button.
-27. Right-click the pinned window and confirm Copy and Download work without closing it.
-28. Right-click the pinned window and confirm Edit opens or activates the preview/edit workspace without closing the pinned window.
+5. Open `Frame -> 设置...` / `Frame -> Settings...`, then open it again from another display and confirm it centers on the current display.
+6. Change the language between Follow System, 中文, and English. Confirm the menu, settings window labels, alerts opened after the change, Quick Access tooltips, and capture placeholder use the selected language.
+7. In Settings, choose a custom screenshot save folder, quit and reopen Frame, and confirm the path persists.
+8. Reset the screenshot save folder and confirm it returns to Desktop.
+9. Use the menu capture item or the configured keyboard shortcut.
+10. On a fresh app session with no previous selection, confirm the active display shows a centered placeholder instead of a `0 x 0` HUD.
+11. Drag to create, move, or resize the region.
+12. Press Enter to capture.
+13. Confirm the `180x120` preview appears at the active screen's bottom-left corner with equal left and bottom padding.
+14. With multiple displays, switch to another app on a different display and confirm visible previews move to that display's bottom-left corner.
+15. Take multiple screenshots and confirm previews stack upward from the bottom-left corner.
+16. Confirm the Quick Access preview cannot be moved by dragging its background.
+17. Drag the preview image into a rich-text TextEdit document or Notes note and confirm the target receives image content.
+18. Hover the preview and confirm icon-only save, copy, workspace, pin, and close actions appear.
+19. Confirm copy places an image on the pasteboard.
+20. Confirm save writes `Frame yyyy-MM-dd HH.mm.ss.png` to the configured screenshot folder, or Desktop after reset.
+21. Confirm the workspace action opens a movable, resizable preview workspace.
+22. Resize the workspace and confirm the image preview area preserves the captured image aspect ratio without empty fill.
+23. Confirm switching focus to another app does not close the preview workspace.
+24. Click the same Quick Access workspace action again and confirm it activates the existing preview workspace instead of opening a duplicate.
+25. Confirm workspace Save is visible but disabled, while Copy and Download are enabled.
+26. Confirm workspace Copy closes the workspace and the originating Quick Access preview on success.
+27. Confirm workspace Download writes `Frame yyyy-MM-dd HH.mm.ss.png` to the configured screenshot folder, then closes the workspace and originating Quick Access preview on success.
+28. Confirm Escape closes the preview workspace.
+29. Confirm pin closes the originating Quick Access card and opens a persistent image-only pinned window.
+30. Confirm the pinned window has no toolbar or visible output buttons, keeps the image edge-to-edge, stays open after focus changes, and closes with the native red traffic-light close button.
+31. Right-click the pinned window and confirm Copy and Download work without closing it.
+32. Right-click the pinned window and confirm Edit opens or activates the preview/edit workspace without closing the pinned window.
 
 Keep using the same `FRAME_CODESIGN_IDENTITY` and the same `~/Applications/Frame.app` path while iterating. Changing either one can make macOS ask for Screen Recording permission again.
 
@@ -198,4 +202,4 @@ tccutil reset ScreenCapture dev.dewey.frame
 Then reopen the exact app bundle you want to authorize.
 
 ---
-*Last updated: 2026-05-28 | Reason: document pinned window context menu smoke checks*
+*Last updated: 2026-05-28 | Reason: document settings persistence, localization, and configurable save folder smoke checks*
