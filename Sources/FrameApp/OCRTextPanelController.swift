@@ -21,7 +21,7 @@ final class OCRTextPanelController: NSObject {
         let panel = makePanel(title: strings.ocrPanelTitle)
         let item = OCRTextPanelItem(
             panel: panel,
-            screenshot: screenshot,
+            screenshotID: screenshot.id,
             copyAll: copyAll
         )
         panel.contentView = makeContentView(layout: layout, strings: strings)
@@ -149,8 +149,7 @@ final class OCRTextPanelController: NSObject {
 
     private func panelItem(for screenshot: CapturedScreenshot) -> OCRTextPanelItem? {
         panelItems.first {
-            $0.screenshot.id == screenshot.id
-                && $0.panel.isVisible
+            $0.screenshotID == screenshot.id
         }
     }
 
@@ -212,12 +211,12 @@ private final class OCRTextPanel: NSPanel {
 
 private final class OCRTextPanelItem {
     let panel: OCRTextPanel
-    let screenshot: CapturedScreenshot
+    let screenshotID: UUID
     var copyAll: () -> Bool
 
-    init(panel: OCRTextPanel, screenshot: CapturedScreenshot, copyAll: @escaping () -> Bool) {
+    init(panel: OCRTextPanel, screenshotID: UUID, copyAll: @escaping () -> Bool) {
         self.panel = panel
-        self.screenshot = screenshot
+        self.screenshotID = screenshotID
         self.copyAll = copyAll
     }
 }

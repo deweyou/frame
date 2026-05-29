@@ -53,6 +53,57 @@ final class OCRTextPanelControllerTests: XCTestCase {
         XCTAssertEqual(panels.count, 1)
     }
 
+    func testOCRPanelReusesOrderedOutWindowForSameScreenshot() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = OCRTextPanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeScreenshot()
+        let layout = RecognizedTextLayout(lines: [
+            RecognizedTextLine(text: "hello", bounds: .zero, confidence: 0.9),
+        ])
+
+        controller.show(layout: layout, for: screenshot, strings: AppStrings(language: .en), copyAll: { true })
+        let firstPanel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        firstPanel.orderOut(nil)
+        XCTAssertFalse(firstPanel.isVisible)
+
+        controller.show(layout: layout, for: screenshot, strings: AppStrings(language: .en), copyAll: { true })
+
+        let visiblePanels = NSApp.windows.filter { !windowsBeforeShow.contains(ObjectIdentifier($0)) && $0.isVisible }
+        XCTAssertEqual(visiblePanels.count, 1)
+        XCTAssertTrue(visiblePanels.first === firstPanel)
+        XCTAssertTrue(controller.closePanel(for: screenshot))
+    }
+
+    func testCopyAllButtonInvokesClosureUsingSenderWindow() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = OCRTextPanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeScreenshot()
+        var didCopyAll = false
+
+        controller.show(
+            layout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(text: "hello", bounds: .zero, confidence: 0.9),
+            ]),
+            for: screenshot,
+            strings: AppStrings(language: .en),
+            copyAll: {
+                didCopyAll = true
+                return true
+            }
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer { panel.close() }
+
+        let button = try XCTUnwrap(findButton(in: try XCTUnwrap(panel.contentView), accessibilityLabel: "Copy All"))
+        button.performClick(nil)
+        XCTAssertTrue(didCopyAll)
+    }
+
     func testClosePanelForScreenshotClosesMatchingPanelOnly() throws {
         _ = NSApplication.shared
         let controller = OCRTextPanelController()
