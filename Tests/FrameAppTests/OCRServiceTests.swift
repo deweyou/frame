@@ -1,8 +1,19 @@
 import XCTest
+import Vision
 @testable import FrameApp
 @testable import FrameCore
 
 final class OCRServiceTests: XCTestCase {
+    func testConfigureTextRecognitionRequestIncludesChineseAndEnglish() {
+        let request = VNRecognizeTextRequest()
+
+        configureTextRecognitionRequest(request)
+
+        XCTAssertEqual(request.recognitionLevel, .accurate)
+        XCTAssertTrue(request.usesLanguageCorrection)
+        XCTAssertEqual(request.recognitionLanguages, ["zh-Hans", "zh-Hant", "en-US"])
+    }
+
     func testMakeLineConvertsVisionRectIntoCoreModel() {
         let line = makeRecognizedTextLine(
             text: "Frame",

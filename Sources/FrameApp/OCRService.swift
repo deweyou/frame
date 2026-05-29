@@ -29,8 +29,7 @@ final class OCRService: Sendable {
     nonisolated func recognizeText(in image: CGImage) async throws -> RecognizedTextLayout {
         try await Task.detached(priority: .userInitiated) {
             let request = VNRecognizeTextRequest()
-            request.recognitionLevel = .accurate
-            request.usesLanguageCorrection = true
+            configureTextRecognitionRequest(request)
 
             let handler = VNImageRequestHandler(cgImage: image, options: [:])
             do {
@@ -54,6 +53,12 @@ final class OCRService: Sendable {
             return makeRecognizedTextLayout(lines: lines)
         }.value
     }
+}
+
+func configureTextRecognitionRequest(_ request: VNRecognizeTextRequest) {
+    request.recognitionLevel = .accurate
+    request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
+    request.usesLanguageCorrection = true
 }
 
 func makeRecognizedTextLine(
