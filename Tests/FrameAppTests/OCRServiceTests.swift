@@ -15,7 +15,7 @@ final class OCRServiceTests: XCTestCase {
         XCTAssertEqual(line.confidence ?? 0, 0.81, accuracy: 0.001)
     }
 
-    func testMakeLayoutDropsEmptyCandidates() {
+    func testMakeLayoutDropsEmptyLines() {
         let layout = makeRecognizedTextLayout(lines: [
             makeRecognizedTextLine(text: "", normalizedBounds: .zero, confidence: nil),
             makeRecognizedTextLine(text: "Visible", normalizedBounds: CGRect(x: 0, y: 0.5, width: 1, height: 0.2), confidence: 0.9),

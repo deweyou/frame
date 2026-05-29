@@ -16,7 +16,8 @@ enum OCRServiceError: LocalizedError {
     }
 }
 
-final class OCRService {
+final class OCRService: Sendable {
+    @MainActor
     func recognizeText(in screenshot: CapturedScreenshot) async throws -> RecognizedTextLayout {
         guard let cgImage = screenshot.image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             throw OCRServiceError.cgImageUnavailable
@@ -25,7 +26,7 @@ final class OCRService {
         return try await recognizeText(in: cgImage)
     }
 
-    func recognizeText(in image: CGImage) async throws -> RecognizedTextLayout {
+    nonisolated func recognizeText(in image: CGImage) async throws -> RecognizedTextLayout {
         try await Task.detached(priority: .userInitiated) {
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
