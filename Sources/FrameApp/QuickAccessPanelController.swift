@@ -49,6 +49,26 @@ final class QuickAccessPanelController: NSObject {
         return true
     }
 
+    func temporarilyHidePreviews() {
+        for item in previewItems where item.panel.isVisible {
+            item.isTemporarilyHidden = true
+            item.panel.orderOut(nil)
+        }
+    }
+
+    func restoreTemporarilyHiddenPreviews() {
+        let hiddenItems = previewItems.filter(\.isTemporarilyHidden)
+        guard !hiddenItems.isEmpty else {
+            return
+        }
+
+        repositionPreviewStack(preferredAnchor: ActiveScreenResolver.preferredQuickAccessFollowAnchor(), force: true)
+        for item in hiddenItems {
+            item.isTemporarilyHidden = false
+            item.panel.orderFrontRegardless()
+        }
+    }
+
     private func makePanel(for image: NSImage) -> NSPanel {
         // Non-activating panels do not reliably participate in cursor-rect updates
         // while another app is focused, so Quick Access stays a normal floating panel.
@@ -65,6 +85,7 @@ final class QuickAccessPanelController: NSObject {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
+        panel.isMovable = false
         panel.isMovableByWindowBackground = false
         panel.acceptsMouseMovedEvents = true
         panel.backgroundColor = .clear
@@ -75,10 +96,7 @@ final class QuickAccessPanelController: NSObject {
     }
 
     private func makeContentView(for screenshot: CapturedScreenshot, strings: AppStrings) -> NSView {
-        let contentView = ScreenshotPreviewView(
-            screenshot: screenshot,
-            dragItemProvider: ScreenshotDragItemProvider()
-        )
+        let contentView = ScreenshotPreviewView()
         contentView.wantsLayer = true
         contentView.onHoverChanged = { [weak contentView] isHovered in
             contentView?.setActionsVisible(isHovered)
@@ -408,6 +426,7 @@ private final class QuickAccessPreviewItem {
     let openWorkspace: () -> Bool
     let pin: () -> Bool
     let close: () -> Void
+    var isTemporarilyHidden = false
 
     init(
         screenshotID: UUID,
@@ -432,16 +451,12 @@ private final class ScreenshotPreviewView: NSView {
     var actionsViews: [NSView] = []
     var onHoverChanged: ((Bool) -> Void)?
 
-    private let screenshot: CapturedScreenshot
-    private let dragItemProvider: ScreenshotDragItemProvider
     private var trackingArea: NSTrackingArea?
     private var pendingHideActionsWorkItem: DispatchWorkItem?
     private var areActionsVisible = false
 
-    init(screenshot: CapturedScreenshot, dragItemProvider: ScreenshotDragItemProvider) {
-        self.screenshot = screenshot
-        self.dragItemProvider = dragItemProvider
-        super.init(frame: .zero)
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
     }
 
     @available(*, unavailable)
@@ -487,16 +502,6 @@ private final class ScreenshotPreviewView: NSView {
 
     override func cursorUpdate(with event: NSEvent) {
         updateCursor(for: event)
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        guard !isPointInActions(point) else {
-            return
-        }
-
-        let item = dragItemProvider.draggingItem(for: screenshot, sourceBounds: bounds)
-        beginDraggingSession(with: [item], event: event, source: self)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -655,19 +660,6 @@ private final class PointingHandButton: NSButton {
 
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
-    }
-}
-
-extension ScreenshotPreviewView: NSDraggingSource {
-    func draggingSession(
-        _ session: NSDraggingSession,
-        sourceOperationMaskFor context: NSDraggingContext
-    ) -> NSDragOperation {
-        .copy
-    }
-
-    func ignoreModifierKeys(for session: NSDraggingSession) -> Bool {
-        true
     }
 }
 

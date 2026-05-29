@@ -84,11 +84,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        quickAccessPanelController.temporarilyHidePreviews()
+
         let quickAccessAnchor = ActiveScreenResolver.preferredQuickAccessAnchor()
 
         selectionOverlayController.startSelection(strings: strings) { [weak self] selection in
-            guard let self,
-                  let selection else {
+            guard let self else {
+                return
+            }
+
+            guard let selection else {
+                self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
                 return
             }
 
@@ -100,9 +106,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
                     do {
                         let screenshot = try await self.captureService.capture(selection: selection)
+                        self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
                         self.showQuickAccess(for: screenshot, anchor: quickAccessAnchor)
                         NSLog("Frame 截图选区类型：\(selection.kind)")
                     } catch {
+                        self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
                         self.showCaptureFailedAlert(error)
                     }
                 }
