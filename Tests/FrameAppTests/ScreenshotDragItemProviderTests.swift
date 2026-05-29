@@ -32,7 +32,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: fileURL), pngData)
     }
 
-    func testPreviewHitTestingRoutesImageBodyToDragSourceAndVisibleControlsToButtons() throws {
+    func testPreviewHitTestingRoutesImageBodyToPreviewAndVisibleControlsToButtons() throws {
         _ = NSApplication.shared
         let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
         let screenshot = CapturedScreenshot(
@@ -59,11 +59,14 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
             panel.close()
         }
         XCTAssertFalse(panel.styleMask.contains(.nonactivatingPanel))
+        XCTAssertFalse(panel.isMovable)
+        XCTAssertFalse(panel.isMovableByWindowBackground)
 
         let previewView = try XCTUnwrap(panel.contentView)
         previewView.layoutSubtreeIfNeeded()
 
         XCTAssertIdentical(previewView.hitTest(NSPoint(x: 90, y: 60)), previewView)
+        XCTAssertFalse(previewView is NSDraggingSource)
         XCTAssertTrue(previewView.acceptsFirstMouse(for: nil))
 
         let closeButton = try XCTUnwrap(findButton(in: previewView, accessibilityLabel: "关闭"))
@@ -191,6 +194,63 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         for panel in previewPanels where panel.isVisible {
             panel.close()
         }
+    }
+
+    func testQuickAccessCanTemporarilyHideAndRestoreAllPreviews() throws {
+        _ = NSApplication.shared
+        let firstScreenshot = CapturedScreenshot(
+            pngData: try makePNGData(),
+            image: NSImage(size: NSSize(width: 2, height: 2)),
+            rect: CGRect(x: 0, y: 0, width: 2, height: 2)
+        )
+        let secondScreenshot = CapturedScreenshot(
+            pngData: try makePNGData(),
+            image: NSImage(size: NSSize(width: 2, height: 2)),
+            rect: CGRect(x: 0, y: 0, width: 2, height: 2)
+        )
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        var closeCount = 0
+
+        controller.show(
+            for: firstScreenshot,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .zhHans),
+            copy: { true },
+            save: { true },
+            openWorkspace: { true },
+            pin: { true },
+            close: {
+                closeCount += 1
+            }
+        )
+        controller.show(
+            for: secondScreenshot,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .zhHans),
+            copy: { true },
+            save: { true },
+            openWorkspace: { true },
+            pin: { true },
+            close: {
+                closeCount += 1
+            }
+        )
+
+        let previewPanels = NSApp.windows.filter { !windowsBeforeShow.contains(ObjectIdentifier($0)) }
+        XCTAssertEqual(previewPanels.count, 2)
+
+        controller.temporarilyHidePreviews()
+
+        XCTAssertEqual(previewPanels.filter(\.isVisible).count, 0)
+        XCTAssertEqual(closeCount, 0)
+
+        controller.restoreTemporarilyHiddenPreviews()
+
+        XCTAssertEqual(previewPanels.filter(\.isVisible).count, 2)
+        XCTAssertTrue(controller.closePreview(for: firstScreenshot, notify: false))
+        XCTAssertEqual(previewPanels.filter(\.isVisible).count, 1)
     }
 
     func testQuickAccessActionButtonsReceivePanelMouseClicks() throws {
