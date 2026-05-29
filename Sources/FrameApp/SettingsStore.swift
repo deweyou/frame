@@ -5,6 +5,7 @@ enum SettingsStore {
     static let screenshotShortcutKey = "screenshotShortcut"
     static let appLanguageKey = "appLanguage"
     static let screenshotDirectoryKey = "screenshotDirectory"
+    static let ocrRecognitionLanguagesKey = "ocrRecognitionLanguages"
 
     static func screenshotShortcut(defaults: UserDefaults = .standard) -> ScreenshotShortcut {
         ScreenshotShortcut.persistedValue(for: defaults.string(forKey: screenshotShortcutKey))
@@ -26,6 +27,24 @@ enum SettingsStore {
         defaults: UserDefaults = .standard
     ) {
         defaults.set(language.rawValue, forKey: appLanguageKey)
+    }
+
+    static func ocrRecognitionLanguages(defaults: UserDefaults = .standard) -> [String] {
+        guard let identifiers = defaults.array(forKey: ocrRecognitionLanguagesKey) as? [String] else {
+            return OCRLanguageOption.defaultIdentifiers
+        }
+
+        return OCRLanguageOption.validatedIdentifiers(identifiers)
+    }
+
+    @discardableResult
+    static func setOCRRecognitionLanguages(
+        _ identifiers: [String],
+        defaults: UserDefaults = .standard
+    ) -> [String] {
+        let validatedIdentifiers = OCRLanguageOption.validatedIdentifiers(identifiers)
+        defaults.set(validatedIdentifiers, forKey: ocrRecognitionLanguagesKey)
+        return validatedIdentifiers
     }
 
     static func screenshotDirectory(
