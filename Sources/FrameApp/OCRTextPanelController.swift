@@ -78,15 +78,14 @@ final class OCRTextPanelController: NSObject {
         let contentView = NSView()
         contentView.translatesAutoresizingMaskIntoConstraints = false
 
-        let scrollView = NSScrollView()
+        let scrollView = NSTextView.scrollableTextView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.borderType = .bezelBorder
         scrollView.autohidesScrollers = true
 
-        let textView = NSTextView()
-        textView.translatesAutoresizingMaskIntoConstraints = false
+        let textView = scrollView.documentView as? NSTextView ?? NSTextView()
         textView.string = layout.fullText
         textView.isEditable = false
         textView.isSelectable = true
@@ -95,11 +94,13 @@ final class OCRTextPanelController: NSObject {
         textView.textColor = .labelColor
         textView.backgroundColor = .textBackgroundColor
         textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.minSize = NSSize(width: 0, height: 0)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(width: scrollView.contentSize.width, height: .greatestFiniteMagnitude)
-
-        scrollView.documentView = textView
 
         let copyButton = NSButton(title: strings.ocrCopyAll, target: self, action: #selector(copyAllButtonClicked))
         copyButton.translatesAutoresizingMaskIntoConstraints = false

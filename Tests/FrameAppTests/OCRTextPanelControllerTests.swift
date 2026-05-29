@@ -30,6 +30,9 @@ final class OCRTextPanelControllerTests: XCTestCase {
         XCTAssertEqual(textView.string, "hello")
         XCTAssertTrue(textView.isSelectable)
         XCTAssertFalse(textView.isEditable)
+        panel.contentView?.layoutSubtreeIfNeeded()
+        XCTAssertGreaterThan(textView.frame.width, 0)
+        XCTAssertGreaterThan(textView.frame.height, textView.font?.pointSize ?? 0)
 
         let button = try XCTUnwrap(findButton(in: try XCTUnwrap(panel.contentView), accessibilityLabel: "Copy All"))
         XCTAssertTrue(button.isEnabled)
