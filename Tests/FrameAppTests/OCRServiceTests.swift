@@ -11,7 +11,23 @@ final class OCRServiceTests: XCTestCase {
 
         XCTAssertEqual(request.recognitionLevel, .accurate)
         XCTAssertTrue(request.usesLanguageCorrection)
-        XCTAssertEqual(request.recognitionLanguages, ["zh-Hans", "zh-Hant", "en-US"])
+        XCTAssertEqual(request.recognitionLanguages, SettingsStore.ocrRecognitionLanguages())
+    }
+
+    func testConfigureTextRecognitionRequestUsesProvidedLanguages() {
+        let request = VNRecognizeTextRequest()
+
+        configureTextRecognitionRequest(request, recognitionLanguages: ["fr-FR", "en-US"])
+
+        XCTAssertEqual(request.recognitionLanguages, ["fr-FR", "en-US"])
+    }
+
+    func testConfigureTextRecognitionRequestFallsBackForInvalidProvidedLanguages() {
+        let request = VNRecognizeTextRequest()
+
+        configureTextRecognitionRequest(request, recognitionLanguages: ["bad-language"])
+
+        XCTAssertEqual(request.recognitionLanguages, OCRLanguageOption.defaultIdentifiers)
     }
 
     func testMakeLineConvertsVisionRectIntoCoreModel() {

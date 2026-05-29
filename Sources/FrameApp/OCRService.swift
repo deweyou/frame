@@ -55,9 +55,12 @@ final class OCRService: Sendable {
     }
 }
 
-func configureTextRecognitionRequest(_ request: VNRecognizeTextRequest) {
+func configureTextRecognitionRequest(
+    _ request: VNRecognizeTextRequest,
+    recognitionLanguages: [String] = SettingsStore.ocrRecognitionLanguages()
+) {
     request.recognitionLevel = .accurate
-    request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
+    request.recognitionLanguages = OCRLanguageOption.validatedIdentifiers(recognitionLanguages)
     request.usesLanguageCorrection = true
 }
 
