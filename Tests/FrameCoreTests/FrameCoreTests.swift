@@ -265,4 +265,35 @@ struct FrameCoreTests {
         #expect(layout.fullText == "")
         #expect(layout.isEmpty)
     }
+
+    @Test
+    func testRecognizedTextLayoutUsesDeterministicTieBreakersWithinRows() {
+        let lines = [
+            RecognizedTextLine(text: "wide", bounds: NormalizedImageRect(x: 0.2, y: 0.5, width: 0.3, height: 0.1), confidence: nil),
+            RecognizedTextLine(text: "higher", bounds: NormalizedImageRect(x: 0.2, y: 0.51, width: 0.2, height: 0.1), confidence: nil),
+            RecognizedTextLine(text: "narrow", bounds: NormalizedImageRect(x: 0.2, y: 0.5, width: 0.2, height: 0.1), confidence: nil),
+            RecognizedTextLine(text: "right", bounds: NormalizedImageRect(x: 0.2001, y: 0.5, width: 0.1, height: 0.1), confidence: nil),
+        ]
+
+        let layout = RecognizedTextLayout(lines: lines)
+
+        #expect(layout.lines.map(\.text) == ["higher", "narrow", "wide", "right"])
+        #expect(layout.fullText == "higher narrow wide right")
+    }
+
+    @Test
+    func testRecognizedTextLayoutSeparatesRowsPastToleranceBoundary() {
+        let sameRowTop = RecognizedTextLine(text: "same-top", bounds: NormalizedImageRect(x: 0.1, y: 0.56, width: 0.2, height: 0.1), confidence: nil)
+        let sameRowBottom = RecognizedTextLine(text: "same-bottom", bounds: NormalizedImageRect(x: 0.4, y: 0.5, width: 0.2, height: 0.1), confidence: nil)
+        let nextRow = RecognizedTextLine(text: "next", bounds: NormalizedImageRect(x: 0.1, y: 0.439, width: 0.2, height: 0.1), confidence: nil)
+
+        let layout = RecognizedTextLayout(lines: [
+            nextRow,
+            sameRowBottom,
+            sameRowTop,
+        ])
+
+        #expect(layout.lines.map(\.text) == ["same-top", "same-bottom", "next"])
+        #expect(layout.fullText == "same-top same-bottom\nnext")
+    }
 }
