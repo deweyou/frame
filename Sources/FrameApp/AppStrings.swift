@@ -264,6 +264,20 @@ struct AppStrings {
         }
     }
 
+    var ocrSelectAll: String {
+        switch language {
+        case .zhHans: "全选"
+        case .en: "Select All"
+        }
+    }
+
+    var ocrCopySelected: String {
+        switch language {
+        case .zhHans: "复制"
+        case .en: "Copy Selected"
+        }
+    }
+
     var ocrRecognizing: String {
         switch language {
         case .zhHans: "正在识别..."

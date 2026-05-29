@@ -9,11 +9,14 @@ final class OCRTextPanelController: NSObject {
         layout: RecognizedTextLayout,
         for screenshot: CapturedScreenshot,
         strings: AppStrings,
-        copyAll: @escaping () -> Bool
+        copyText: @escaping (String) -> Bool
     ) {
+        let cutLayout = RecognizedTextCutLayout(textLayout: layout)
         if let existingItem = panelItem(for: screenshot) {
-            existingItem.copyAll = copyAll
-            update(existingItem, layout: layout)
+            existingItem.copyText = copyText
+            existingItem.cutLayout = cutLayout
+            existingItem.selectedCutIDs = []
+            update(existingItem, screenshot: screenshot, strings: strings)
             activatePanel(existingItem.panel)
             return
         }
@@ -22,9 +25,10 @@ final class OCRTextPanelController: NSObject {
         let item = OCRTextPanelItem(
             panel: panel,
             screenshotID: screenshot.id,
-            copyAll: copyAll
+            cutLayout: cutLayout,
+            copyText: copyText
         )
-        panel.contentView = makeContentView(layout: layout, strings: strings)
+        panel.contentView = makeContentView(screenshot: screenshot, strings: strings, item: item)
         panelItems.append(item)
         installLifecycleCallbacks(for: item)
         activatePanel(panel)
@@ -74,63 +78,121 @@ final class OCRTextPanelController: NSObject {
         return panel
     }
 
-    private func makeContentView(layout: RecognizedTextLayout, strings: AppStrings) -> NSView {
+    private func makeContentView(
+        screenshot: CapturedScreenshot,
+        strings: AppStrings,
+        item: OCRTextPanelItem
+    ) -> NSView {
         let contentView = NSView()
         contentView.translatesAutoresizingMaskIntoConstraints = false
 
-        let scrollView = NSTextView.scrollableTextView()
+        let imageView = NSImageView(image: screenshot.image)
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.wantsLayer = true
+        imageView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.04).cgColor
+        imageView.setAccessibilityLabel("OCR Screenshot Preview")
+
+        let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.borderType = .bezelBorder
+        scrollView.hasHorizontalScroller = true
+        scrollView.borderType = .noBorder
         scrollView.autohidesScrollers = true
+        scrollView.documentView = makeCutContainer(for: item)
 
-        let textView = scrollView.documentView as? NSTextView ?? NSTextView()
-        textView.string = layout.fullText
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.isRichText = false
-        textView.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        textView.textColor = .labelColor
-        textView.backgroundColor = .textBackgroundColor
-        textView.textContainerInset = NSSize(width: 8, height: 8)
-        textView.minSize = NSSize(width: 0, height: 0)
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.autoresizingMask = [.width]
-        textView.textContainer?.widthTracksTextView = true
-        textView.textContainer?.containerSize = NSSize(width: scrollView.contentSize.width, height: .greatestFiniteMagnitude)
+        let selectAllButton = NSButton(title: strings.ocrSelectAll, target: self, action: #selector(selectAllButtonClicked))
+        selectAllButton.translatesAutoresizingMaskIntoConstraints = false
+        selectAllButton.bezelStyle = .rounded
+        selectAllButton.setAccessibilityLabel(strings.ocrSelectAll)
 
-        let copyButton = NSButton(title: strings.ocrCopyAll, target: self, action: #selector(copyAllButtonClicked))
+        let copyButton = NSButton(title: strings.ocrCopySelected, target: self, action: #selector(copySelectedButtonClicked))
         copyButton.translatesAutoresizingMaskIntoConstraints = false
         copyButton.bezelStyle = .rounded
-        copyButton.setAccessibilityLabel(strings.ocrCopyAll)
-        copyButton.setAccessibilityHelp(strings.ocrCopyAll)
+        copyButton.setAccessibilityLabel(strings.ocrCopySelected)
+        copyButton.isEnabled = false
+        item.copyButton = copyButton
 
+        let footerStack = NSStackView()
+        footerStack.translatesAutoresizingMaskIntoConstraints = false
+        footerStack.orientation = .horizontal
+        footerStack.alignment = .centerY
+        footerStack.spacing = 12
+
+        let footerSpacer = NSView()
+        footerSpacer.translatesAutoresizingMaskIntoConstraints = false
+        footerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        footerStack.addArrangedSubview(selectAllButton)
+        footerStack.addArrangedSubview(footerSpacer)
+        footerStack.addArrangedSubview(copyButton)
+
+        contentView.addSubview(imageView)
         contentView.addSubview(scrollView)
-        contentView.addSubview(copyButton)
+        contentView.addSubview(footerStack)
 
         NSLayoutConstraint.activate([
+            imageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            imageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            imageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            imageView.heightAnchor.constraint(lessThanOrEqualToConstant: 180),
+            imageView.heightAnchor.constraint(greaterThanOrEqualToConstant: 90),
+
             scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
-            scrollView.bottomAnchor.constraint(equalTo: copyButton.topAnchor, constant: -12),
+            scrollView.topAnchor.constraint(equalTo: imageView.bottomAnchor, constant: 14),
+            scrollView.bottomAnchor.constraint(equalTo: footerStack.topAnchor, constant: -12),
 
-            copyButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            copyButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16),
+            footerStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            footerStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            footerStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16),
         ])
 
         return contentView
     }
 
-    private func update(_ item: OCRTextPanelItem, layout: RecognizedTextLayout) {
-        guard let contentView = item.panel.contentView,
-              let textView = findTextView(in: contentView) else {
-            return
+    private func makeCutContainer(for item: OCRTextPanelItem) -> NSView {
+        let stackView = OCRCutContainerView()
+        stackView.orientation = .vertical
+        stackView.alignment = .leading
+        stackView.spacing = 10
+        stackView.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
+        stackView.translatesAutoresizingMaskIntoConstraints = true
+
+        for row in item.cutLayout.rows {
+            let rowStack = NSStackView()
+            rowStack.orientation = .horizontal
+            rowStack.alignment = .centerY
+            rowStack.spacing = 4
+            rowStack.translatesAutoresizingMaskIntoConstraints = false
+
+            for cut in row.cuts {
+                rowStack.addArrangedSubview(makeCutButton(cut))
+            }
+
+            stackView.addArrangedSubview(rowStack)
         }
 
-        textView.string = layout.fullText
+        stackView.sizeToArrangedContent()
+        return stackView
+    }
+
+    private func makeCutButton(_ cut: RecognizedTextCut) -> NSButton {
+        let button = OCRCutButton(cutID: cut.id)
+        button.title = cut.text
+        button.target = self
+        button.action = #selector(cutButtonClicked)
+        button.bezelStyle = .regularSquare
+        button.isBordered = false
+        button.wantsLayer = true
+        button.layer?.cornerRadius = 4
+        button.setAccessibilityLabel("OCR Cut \(cut.text)")
+        applyCutButtonStyle(button, isSelected: false)
+        return button
+    }
+
+    private func update(_ item: OCRTextPanelItem, screenshot: CapturedScreenshot, strings: AppStrings) {
+        item.panel.contentView = makeContentView(screenshot: screenshot, strings: strings, item: item)
     }
 
     private func installLifecycleCallbacks(for item: OCRTextPanelItem) {
@@ -162,31 +224,77 @@ final class OCRTextPanelController: NSObject {
         return panelItems.first { $0.panel === window }
     }
 
-    private func findTextView(in view: NSView) -> NSTextView? {
-        if let textView = view as? NSTextView {
-            return textView
+    private func findCutButtons(in view: NSView) -> [OCRCutButton] {
+        var buttons: [OCRCutButton] = []
+        if let button = view as? OCRCutButton {
+            buttons.append(button)
         }
 
         for subview in view.subviews {
-            if let textView = findTextView(in: subview) {
-                return textView
-            }
+            buttons.append(contentsOf: findCutButtons(in: subview))
         }
 
         if let scrollView = view as? NSScrollView,
-           let textView = scrollView.documentView as? NSTextView {
-            return textView
+           let documentView = scrollView.documentView {
+            buttons.append(contentsOf: findCutButtons(in: documentView))
         }
 
-        return nil
+        return buttons
     }
 
-    @objc private func copyAllButtonClicked(_ sender: NSButton) {
+    private func refreshSelection(in item: OCRTextPanelItem) {
+        guard let contentView = item.panel.contentView else {
+            return
+        }
+
+        for button in findCutButtons(in: contentView) {
+            applyCutButtonStyle(button, isSelected: item.selectedCutIDs.contains(button.cutID))
+        }
+
+        item.copyButton?.isEnabled = !item.selectedCutIDs.isEmpty
+    }
+
+    private func applyCutButtonStyle(_ button: OCRCutButton, isSelected: Bool) {
+        button.contentTintColor = isSelected ? .controlAccentColor : .labelColor
+        button.layer?.backgroundColor = isSelected
+            ? NSColor.controlAccentColor.withAlphaComponent(0.22).cgColor
+            : NSColor.controlBackgroundColor.withAlphaComponent(0.7).cgColor
+    }
+
+    @objc private func cutButtonClicked(_ sender: OCRCutButton) {
         guard let item = panelItem(for: sender.window) else {
             return
         }
 
-        _ = item.copyAll()
+        if item.selectedCutIDs.contains(sender.cutID) {
+            item.selectedCutIDs.remove(sender.cutID)
+        } else {
+            item.selectedCutIDs.insert(sender.cutID)
+        }
+
+        refreshSelection(in: item)
+    }
+
+    @objc private func selectAllButtonClicked(_ sender: NSButton) {
+        guard let item = panelItem(for: sender.window) else {
+            return
+        }
+
+        item.selectedCutIDs = item.cutLayout.allCutIDs
+        refreshSelection(in: item)
+    }
+
+    @objc private func copySelectedButtonClicked(_ sender: NSButton) {
+        guard let item = panelItem(for: sender.window) else {
+            return
+        }
+
+        let text = item.cutLayout.selectedText(for: item.selectedCutIDs)
+        guard !text.isEmpty else {
+            return
+        }
+
+        _ = item.copyText(text)
     }
 }
 
@@ -213,11 +321,49 @@ private final class OCRTextPanel: NSPanel {
 private final class OCRTextPanelItem {
     let panel: OCRTextPanel
     let screenshotID: UUID
-    var copyAll: () -> Bool
+    var cutLayout: RecognizedTextCutLayout
+    var selectedCutIDs: Set<UUID> = []
+    var copyText: (String) -> Bool
+    weak var copyButton: NSButton?
 
-    init(panel: OCRTextPanel, screenshotID: UUID, copyAll: @escaping () -> Bool) {
+    init(
+        panel: OCRTextPanel,
+        screenshotID: UUID,
+        cutLayout: RecognizedTextCutLayout,
+        copyText: @escaping (String) -> Bool
+    ) {
         self.panel = panel
         self.screenshotID = screenshotID
-        self.copyAll = copyAll
+        self.cutLayout = cutLayout
+        self.copyText = copyText
+    }
+}
+
+private final class OCRCutButton: NSButton {
+    let cutID: UUID
+
+    init(cutID: UUID) {
+        self.cutID = cutID
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+}
+
+private final class OCRCutContainerView: NSStackView {
+    override func layout() {
+        super.layout()
+        sizeToArrangedContent()
+    }
+
+    func sizeToArrangedContent() {
+        let size = fittingSize
+        setFrameSize(NSSize(
+            width: max(1, size.width),
+            height: max(1, size.height)
+        ))
     }
 }

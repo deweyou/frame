@@ -38,6 +38,16 @@ final class AppStringsTests: XCTestCase {
         XCTAssertEqual(chinese.ocrLanguageDisplayName(.japanese), "日文")
     }
 
+    func testOCRScrubSelectionStringsAreLocalized() {
+        let english = AppStrings(language: .en)
+        XCTAssertEqual(english.ocrSelectAll, "Select All")
+        XCTAssertEqual(english.ocrCopySelected, "Copy Selected")
+
+        let chinese = AppStrings(language: .zhHans)
+        XCTAssertEqual(chinese.ocrSelectAll, "全选")
+        XCTAssertEqual(chinese.ocrCopySelected, "复制")
+    }
+
     func testSystemChineseResolvesToSimplifiedChinese() {
         XCTAssertEqual(
             AppStrings.resolvedLanguage(for: .system, preferredLanguages: ["zh-Hans-CN"]),

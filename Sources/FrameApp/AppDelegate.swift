@@ -93,12 +93,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let quickAccessAnchor = ActiveScreenResolver.preferredQuickAccessAnchor()
 
-        selectionOverlayController.startSelection(strings: strings) { [weak self] selection in
+        selectionOverlayController.startSelection(strings: strings) { [weak self] completion in
             guard let self else {
                 return
             }
 
-            guard let selection else {
+            guard let completion else {
                 self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
                 return
             }
@@ -109,17 +109,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
-                    do {
-                        let screenshot = try await self.captureService.capture(selection: selection)
-                        self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
-                        self.showQuickAccess(for: screenshot, anchor: quickAccessAnchor)
-                        NSLog("Frame 截图选区类型：\(selection.kind)")
-                    } catch {
-                        self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
-                        self.showCaptureFailedAlert(error)
+                    switch completion {
+                    case let .capture(selection):
+                        do {
+                            let screenshot = try await self.captureService.capture(selection: selection)
+                            self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+                            self.showQuickAccess(for: screenshot, anchor: quickAccessAnchor)
+                            NSLog("Frame 截图选区类型：\(selection.kind)")
+                        } catch {
+                            self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+                            self.showCaptureFailedAlert(error)
+                        }
+                    case let .recognizeText(selection):
+                        await self.recognizeTextFromSelection(selection)
                     }
                 }
             }
+        }
+    }
+
+    private func recognizeTextFromSelection(_ selection: SelectionCapture) async {
+        let screenshot: CapturedScreenshot
+        do {
+            screenshot = try await captureService.capture(selection: selection)
+        } catch {
+            quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+            showCaptureFailedAlert(error)
+            return
+        }
+
+        quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+
+        do {
+            let layout = try await ocrService.recognizeText(in: screenshot)
+            guard !layout.isEmpty else {
+                showOCRNoTextFoundAlert()
+                return
+            }
+
+            showOCRPanel(layout, for: screenshot)
+            NSLog("Frame 已从截图 HUD 识别文字：选区类型=\(selection.kind)")
+        } catch {
+            showQuickAccessFailedAlert(title: strings.ocrFailedTitle, error: error)
         }
     }
 
@@ -275,9 +306,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             layout: layout,
             for: screenshot,
             strings: strings,
-            copyAll: { [weak self] in
+            copyText: { [weak self] text in
                 guard let self,
-                      self.copyRecognizedText(layout.fullText) else {
+                      self.copyRecognizedText(text) else {
                     return false
                 }
 
