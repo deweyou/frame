@@ -20,6 +20,18 @@ final class AppStringsTests: XCTestCase {
         XCTAssertEqual(strings.quickAccessSave, "保存")
     }
 
+    func testOCRStringsAreLocalized() {
+        let english = AppStrings(language: .en)
+        XCTAssertEqual(english.quickAccessOCR, "Recognize Text")
+        XCTAssertEqual(english.ocrCopyAll, "Copy All")
+        XCTAssertEqual(english.ocrNoTextFound, "No text found")
+
+        let chinese = AppStrings(language: .zhHans)
+        XCTAssertEqual(chinese.quickAccessOCR, "识别文字")
+        XCTAssertEqual(chinese.ocrCopyAll, "复制全部")
+        XCTAssertEqual(chinese.ocrNoTextFound, "未识别到文字")
+    }
+
     func testSystemChineseResolvesToSimplifiedChinese() {
         XCTAssertEqual(
             AppStrings.resolvedLanguage(for: .system, preferredLanguages: ["zh-Hans-CN"]),

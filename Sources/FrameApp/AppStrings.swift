@@ -215,6 +215,13 @@ struct AppStrings {
         }
     }
 
+    var quickAccessOCR: String {
+        switch language {
+        case .zhHans: "识别文字"
+        case .en: "Recognize Text"
+        }
+    }
+
     var quickAccessClose: String {
         switch language {
         case .zhHans: "关闭"
@@ -233,6 +240,48 @@ struct AppStrings {
         switch language {
         case .zhHans: "固定到预览窗口"
         case .en: "Pin to Preview Window"
+        }
+    }
+
+    var ocrPanelTitle: String {
+        switch language {
+        case .zhHans: "识别文字"
+        case .en: "Recognized Text"
+        }
+    }
+
+    var ocrCopyAll: String {
+        switch language {
+        case .zhHans: "复制全部"
+        case .en: "Copy All"
+        }
+    }
+
+    var ocrRecognizing: String {
+        switch language {
+        case .zhHans: "正在识别..."
+        case .en: "Recognizing..."
+        }
+    }
+
+    var ocrNoTextFound: String {
+        switch language {
+        case .zhHans: "未识别到文字"
+        case .en: "No text found"
+        }
+    }
+
+    var ocrFailedTitle: String {
+        switch language {
+        case .zhHans: "文字识别失败"
+        case .en: "Text recognition failed"
+        }
+    }
+
+    var ocrCopied: String {
+        switch language {
+        case .zhHans: "已复制文字"
+        case .en: "Text copied"
         }
     }
 
