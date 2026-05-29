@@ -215,6 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if let layout = recognizedTextLayouts[screenshot.id] {
+            quickAccessPanelController.setOCRStatus(.idle(accessibilityLabel: strings.quickAccessOCR), for: screenshot)
             showOCRPanel(layout, for: screenshot)
             return true
         }
@@ -224,6 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         recognizingScreenshotIDs.insert(screenshot.id)
+        quickAccessPanelController.setOCRStatus(.recognizing(strings.ocrRecognizing), for: screenshot)
         Task { @MainActor [weak self] in
             guard let self else {
                 return
@@ -238,11 +240,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 guard !layout.isEmpty else {
-                    self.showOCRNoTextFoundAlert()
+                    self.quickAccessPanelController.setOCRStatus(
+                        .message(self.strings.ocrNoTextFound, resetAfter: 2.2),
+                        for: screenshot
+                    )
                     return
                 }
 
                 self.recognizedTextLayouts[screenshot.id] = layout
+                self.quickAccessPanelController.setOCRStatus(
+                    .idle(accessibilityLabel: self.strings.quickAccessOCR),
+                    for: screenshot
+                )
                 self.showOCRPanel(layout, for: screenshot)
             } catch {
                 self.recognizingScreenshotIDs.remove(screenshot.id)
@@ -250,6 +259,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
 
+                self.quickAccessPanelController.setOCRStatus(
+                    .message(self.strings.ocrFailedTitle, resetAfter: 2.2),
+                    for: screenshot
+                )
                 self.showQuickAccessFailedAlert(title: self.strings.ocrFailedTitle, error: error)
             }
         }
@@ -263,7 +276,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: screenshot,
             strings: strings,
             copyAll: { [weak self] in
-                self?.copyRecognizedText(layout.fullText) ?? false
+                guard let self,
+                      self.copyRecognizedText(layout.fullText) else {
+                    return false
+                }
+
+                self.quickAccessPanelController.setOCRStatus(
+                    .message(self.strings.ocrCopied, resetAfter: 1.4),
+                    for: screenshot
+                )
+                return true
             }
         )
     }

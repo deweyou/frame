@@ -178,6 +178,50 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         XCTAssertTrue(panel.isVisible)
     }
 
+    func testQuickAccessOCRStatusDisablesButtonAndShowsMessage() throws {
+        _ = NSApplication.shared
+        let screenshot = CapturedScreenshot(
+            pngData: try makePNGData(),
+            image: NSImage(size: NSSize(width: 2, height: 2)),
+            rect: CGRect(x: 0, y: 0, width: 2, height: 2)
+        )
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+
+        controller.show(
+            for: screenshot,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .en),
+            copy: { false },
+            save: { false },
+            recognizeText: { true },
+            openWorkspace: { false },
+            pin: { false },
+            close: {}
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer {
+            panel.close()
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        let ocrButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Recognize Text"))
+        let statusLabel = try XCTUnwrap(findTextField(in: contentView, accessibilityLabel: "OCR Status"))
+
+        controller.setOCRStatus(.recognizing("Recognizing..."), for: screenshot)
+
+        XCTAssertFalse(ocrButton.isEnabled)
+        XCTAssertEqual(statusLabel.stringValue, "Recognizing...")
+        XCTAssertEqual(statusLabel.alphaValue, 1, accuracy: 0.01)
+
+        controller.setOCRStatus(.message("No text found", resetAfter: nil), for: screenshot)
+
+        XCTAssertTrue(ocrButton.isEnabled)
+        XCTAssertEqual(statusLabel.stringValue, "No text found")
+        XCTAssertEqual(statusLabel.alphaValue, 1, accuracy: 0.01)
+    }
+
     func testQuickAccessCanClosePreviewForMatchingScreenshotOnly() throws {
         _ = NSApplication.shared
         let firstScreenshot = CapturedScreenshot(
@@ -378,6 +422,21 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         for subview in view.subviews {
             if let button = findButton(in: subview, accessibilityLabel: accessibilityLabel) {
                 return button
+            }
+        }
+
+        return nil
+    }
+
+    private func findTextField(in view: NSView, accessibilityLabel: String) -> NSTextField? {
+        if let textField = view as? NSTextField,
+           textField.accessibilityLabel() == accessibilityLabel {
+            return textField
+        }
+
+        for subview in view.subviews {
+            if let textField = findTextField(in: subview, accessibilityLabel: accessibilityLabel) {
+                return textField
             }
         }
 
