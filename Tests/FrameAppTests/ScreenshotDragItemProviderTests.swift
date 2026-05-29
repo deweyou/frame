@@ -49,6 +49,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
             strings: AppStrings(language: .zhHans),
             copy: { true },
             save: { true },
+            recognizeText: { true },
             openWorkspace: { true },
             pin: { true },
             close: {}
@@ -91,12 +92,12 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         XCTAssertNotNil(closeButton.layer?.backgroundColor)
 
         let overlayView = try XCTUnwrap(findVisualEffectView(in: previewView))
-        XCTAssertEqual(overlayView.frame.width, 124, accuracy: 0.5)
+        XCTAssertEqual(overlayView.frame.width, 154, accuracy: 0.5)
         XCTAssertEqual(overlayView.frame.height, 28, accuracy: 0.5)
         XCTAssertEqual(overlayView.frame.midX, imageView.frame.midX, accuracy: 0.5)
-        XCTAssertLessThan(overlayView.frame.width, imageView.frame.width * 0.65)
+        XCTAssertLessThan(overlayView.frame.width, imageView.frame.width * 0.8)
 
-        for label in ["保存", "复制", "固定到预览窗口", "打开预览"] {
+        for label in ["保存", "复制", "识别文字", "固定到预览窗口", "打开预览"] {
             let button = try XCTUnwrap(findButton(in: previewView, accessibilityLabel: label))
             let buttonPoint = NSPoint(x: button.bounds.midX, y: button.bounds.midY)
             let previewPoint = previewView.convert(buttonPoint, from: button)
@@ -148,6 +149,35 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         XCTAssertTrue(didSave)
     }
 
+    func testQuickAccessOCRButtonRoutesActionWithoutClosingPreview() throws {
+        _ = NSApplication.shared
+        let screenshot = CapturedScreenshot(
+            pngData: try makePNGData(),
+            image: NSImage(size: NSSize(width: 2, height: 2)),
+            rect: CGRect(x: 0, y: 0, width: 2, height: 2)
+        )
+        var didRecognizeText = false
+
+        let panel = try showPreview(
+            screenshot: screenshot,
+            copy: { false },
+            save: { false },
+            recognizeText: {
+                didRecognizeText = true
+                return true
+            }
+        )
+        defer {
+            panel.close()
+        }
+
+        let ocrButton = try XCTUnwrap(findButton(in: try XCTUnwrap(panel.contentView), accessibilityLabel: "识别文字"))
+        ocrButton.performClick(nil)
+
+        XCTAssertTrue(didRecognizeText)
+        XCTAssertTrue(panel.isVisible)
+    }
+
     func testQuickAccessCanClosePreviewForMatchingScreenshotOnly() throws {
         _ = NSApplication.shared
         let firstScreenshot = CapturedScreenshot(
@@ -170,6 +200,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
             strings: AppStrings(language: .zhHans),
             copy: { true },
             save: { true },
+            recognizeText: { true },
             openWorkspace: { true },
             pin: { true },
             close: {}
@@ -180,6 +211,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
             strings: AppStrings(language: .zhHans),
             copy: { true },
             save: { true },
+            recognizeText: { true },
             openWorkspace: { true },
             pin: { true },
             close: {}
@@ -219,6 +251,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
             strings: AppStrings(language: .zhHans),
             copy: { true },
             save: { true },
+            recognizeText: { true },
             openWorkspace: { true },
             pin: { true },
             close: {
@@ -231,6 +264,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
             strings: AppStrings(language: .zhHans),
             copy: { true },
             save: { true },
+            recognizeText: { true },
             openWorkspace: { true },
             pin: { true },
             close: {
@@ -312,7 +346,8 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
     private func showPreview(
         screenshot: CapturedScreenshot,
         copy: @escaping () -> Bool,
-        save: @escaping () -> Bool
+        save: @escaping () -> Bool,
+        recognizeText: @escaping () -> Bool = { false }
     ) throws -> NSPanel {
         let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
         let controller = QuickAccessPanelController()
@@ -323,6 +358,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
             strings: AppStrings(language: .zhHans),
             copy: copy,
             save: save,
+            recognizeText: recognizeText,
             openWorkspace: { true },
             pin: { true },
             close: {}

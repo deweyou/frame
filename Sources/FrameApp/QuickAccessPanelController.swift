@@ -16,6 +16,7 @@ final class QuickAccessPanelController: NSObject {
         strings: AppStrings = AppStrings.current(),
         copy: @escaping () -> Bool,
         save: @escaping () -> Bool,
+        recognizeText: @escaping () -> Bool = { false },
         openWorkspace: @escaping () -> Bool,
         pin: @escaping () -> Bool,
         close: @escaping () -> Void
@@ -28,6 +29,7 @@ final class QuickAccessPanelController: NSObject {
                 panel: panel,
                 copy: copy,
                 save: save,
+                recognizeText: recognizeText,
                 openWorkspace: openWorkspace,
                 pin: pin,
                 close: close
@@ -149,6 +151,12 @@ final class QuickAccessPanelController: NSObject {
             action: #selector(copyButtonClicked),
             style: .toolbar
         )
+        let ocrButton = makeIconButton(
+            title: strings.quickAccessOCR,
+            symbolName: "text.viewfinder",
+            action: #selector(ocrButtonClicked),
+            style: .toolbar
+        )
         let pinButton = makeIconButton(
             title: strings.quickAccessPin,
             symbolName: "pin",
@@ -164,6 +172,7 @@ final class QuickAccessPanelController: NSObject {
 
         stackView.addArrangedSubview(saveButton)
         stackView.addArrangedSubview(copyButton)
+        stackView.addArrangedSubview(ocrButton)
         stackView.addArrangedSubview(pinButton)
         stackView.addArrangedSubview(openWorkspaceButton)
 
@@ -181,7 +190,7 @@ final class QuickAccessPanelController: NSObject {
 
             overlayView.centerXAnchor.constraint(equalTo: imageView.centerXAnchor),
             overlayView.bottomAnchor.constraint(equalTo: imageView.bottomAnchor, constant: -7),
-            overlayView.widthAnchor.constraint(equalToConstant: 124),
+            overlayView.widthAnchor.constraint(equalToConstant: 154),
             overlayView.heightAnchor.constraint(equalToConstant: 28),
 
             stackView.leadingAnchor.constraint(equalTo: overlayView.leadingAnchor, constant: 7),
@@ -363,6 +372,14 @@ final class QuickAccessPanelController: NSObject {
         }
     }
 
+    @objc private func ocrButtonClicked(_ sender: NSButton) {
+        guard let item = previewItem(for: sender.window) else {
+            return
+        }
+
+        _ = item.recognizeText()
+    }
+
     @objc private func saveButtonClicked(_ sender: NSButton) {
         guard let item = previewItem(for: sender.window) else {
             return
@@ -423,6 +440,7 @@ private final class QuickAccessPreviewItem {
     let panel: NSPanel
     let copy: () -> Bool
     let save: () -> Bool
+    let recognizeText: () -> Bool
     let openWorkspace: () -> Bool
     let pin: () -> Bool
     let close: () -> Void
@@ -433,6 +451,7 @@ private final class QuickAccessPreviewItem {
         panel: NSPanel,
         copy: @escaping () -> Bool,
         save: @escaping () -> Bool,
+        recognizeText: @escaping () -> Bool,
         openWorkspace: @escaping () -> Bool,
         pin: @escaping () -> Bool,
         close: @escaping () -> Void
@@ -441,6 +460,7 @@ private final class QuickAccessPreviewItem {
         self.panel = panel
         self.copy = copy
         self.save = save
+        self.recognizeText = recognizeText
         self.openWorkspace = openWorkspace
         self.pin = pin
         self.close = close
