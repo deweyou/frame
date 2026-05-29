@@ -25,11 +25,17 @@ final class AppStringsTests: XCTestCase {
         XCTAssertEqual(english.quickAccessOCR, "Recognize Text")
         XCTAssertEqual(english.ocrCopyAll, "Copy All")
         XCTAssertEqual(english.ocrNoTextFound, "No text found")
+        XCTAssertEqual(english.settingsOCRLanguages, "OCR Languages")
+        XCTAssertEqual(english.ocrLanguageDisplayName(.simplifiedChinese), "Simplified Chinese")
+        XCTAssertEqual(english.ocrLanguageDisplayName(.japanese), "Japanese")
 
         let chinese = AppStrings(language: .zhHans)
         XCTAssertEqual(chinese.quickAccessOCR, "识别文字")
         XCTAssertEqual(chinese.ocrCopyAll, "复制全部")
         XCTAssertEqual(chinese.ocrNoTextFound, "未识别到文字")
+        XCTAssertEqual(chinese.settingsOCRLanguages, "OCR 识别语言")
+        XCTAssertEqual(chinese.ocrLanguageDisplayName(.simplifiedChinese), "简体中文")
+        XCTAssertEqual(chinese.ocrLanguageDisplayName(.japanese), "日文")
     }
 
     func testSystemChineseResolvesToSimplifiedChinese() {

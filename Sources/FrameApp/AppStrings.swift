@@ -166,6 +166,13 @@ struct AppStrings {
         }
     }
 
+    var settingsOCRLanguages: String {
+        switch language {
+        case .zhHans: "OCR 识别语言"
+        case .en: "OCR Languages"
+        }
+    }
+
     var settingsAppName: String {
         switch language {
         case .zhHans: "应用"
@@ -282,6 +289,61 @@ struct AppStrings {
         switch language {
         case .zhHans: "已复制文字"
         case .en: "Text copied"
+        }
+    }
+
+    func ocrLanguageDisplayName(_ option: OCRLanguageOption) -> String {
+        switch (language, option) {
+        case (.zhHans, .simplifiedChinese): "简体中文"
+        case (.en, .simplifiedChinese): "Simplified Chinese"
+        case (.zhHans, .traditionalChinese): "繁体中文"
+        case (.en, .traditionalChinese): "Traditional Chinese"
+        case (.zhHans, .english): "英文"
+        case (.en, .english): "English"
+        case (.zhHans, .japanese): "日文"
+        case (.en, .japanese): "Japanese"
+        case (.zhHans, .korean): "韩文"
+        case (.en, .korean): "Korean"
+        case (.zhHans, .french): "法文"
+        case (.en, .french): "French"
+        case (.zhHans, .italian): "意大利文"
+        case (.en, .italian): "Italian"
+        case (.zhHans, .german): "德文"
+        case (.en, .german): "German"
+        case (.zhHans, .spanish): "西班牙文"
+        case (.en, .spanish): "Spanish"
+        case (.zhHans, .portugueseBrazil): "葡萄牙文（巴西）"
+        case (.en, .portugueseBrazil): "Portuguese (Brazil)"
+        case (.zhHans, .russian): "俄文"
+        case (.en, .russian): "Russian"
+        case (.zhHans, .ukrainian): "乌克兰文"
+        case (.en, .ukrainian): "Ukrainian"
+        case (.zhHans, .thai): "泰文"
+        case (.en, .thai): "Thai"
+        case (.zhHans, .vietnamese): "越南文"
+        case (.en, .vietnamese): "Vietnamese"
+        case (.zhHans, .arabic): "阿拉伯文"
+        case (.en, .arabic): "Arabic"
+        case (.zhHans, .turkish): "土耳其文"
+        case (.en, .turkish): "Turkish"
+        case (.zhHans, .indonesian): "印度尼西亚文"
+        case (.en, .indonesian): "Indonesian"
+        case (.zhHans, .czech): "捷克文"
+        case (.en, .czech): "Czech"
+        case (.zhHans, .danish): "丹麦文"
+        case (.en, .danish): "Danish"
+        case (.zhHans, .dutch): "荷兰文"
+        case (.en, .dutch): "Dutch"
+        case (.zhHans, .norwegian): "挪威文"
+        case (.en, .norwegian): "Norwegian"
+        case (.zhHans, .malay): "马来文"
+        case (.en, .malay): "Malay"
+        case (.zhHans, .polish): "波兰文"
+        case (.en, .polish): "Polish"
+        case (.zhHans, .romanian): "罗马尼亚文"
+        case (.en, .romanian): "Romanian"
+        case (.zhHans, .swedish): "瑞典文"
+        case (.en, .swedish): "Swedish"
         }
     }
 
