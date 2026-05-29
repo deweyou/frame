@@ -4,6 +4,7 @@ import FrameCore
 @MainActor
 final class OCRTextPanelController: NSObject {
     private var panelItems: [OCRTextPanelItem] = []
+    private weak var activeScrubPanel: NSPanel?
 
     func show(
         layout: RecognizedTextLayout,
@@ -41,6 +42,44 @@ final class OCRTextPanelController: NSObject {
 
         item.panel.close()
         return true
+    }
+
+    func selectCutButtonsForTesting(_ buttons: [NSButton], in panel: NSPanel) {
+        guard let item = panelItem(for: panel) else {
+            return
+        }
+
+        item.selectedCutIDs = Set(buttons.compactMap { button in
+            guard let cutButton = button as? OCRCutButton,
+                  cutButton.window === panel else {
+                return nil
+            }
+
+            return cutButton.cutID
+        })
+        refreshSelection(in: item)
+    }
+
+    func beginScrubSelectionForTesting(from button: NSButton, in panel: NSPanel) {
+        guard let cutButton = button as? OCRCutButton,
+              cutButton.window === panel else {
+            return
+        }
+
+        _ = beginScrub(from: cutButton)
+    }
+
+    func continueScrubSelectionForTesting(through button: NSButton, in panel: NSPanel) {
+        guard let cutButton = button as? OCRCutButton,
+              cutButton.window === panel else {
+            return
+        }
+
+        _ = continueScrub(through: cutButton)
+    }
+
+    func endScrubSelectionForTesting() {
+        endScrub()
     }
 
     private func activatePanel(_ panel: NSPanel) {
@@ -206,6 +245,10 @@ final class OCRTextPanelController: NSObject {
     }
 
     private func removePanel(_ item: OCRTextPanelItem) {
+        if activeScrubPanel === item.panel {
+            endScrub()
+        }
+
         item.panel.onClose = nil
         panelItems.removeAll { $0 === item }
     }
@@ -222,6 +265,10 @@ final class OCRTextPanelController: NSObject {
         }
 
         return panelItems.first { $0.panel === window }
+    }
+
+    private func panelItem(for panel: NSPanel) -> OCRTextPanelItem? {
+        panelItems.first { $0.panel === panel }
     }
 
     private func findCutButtons(in view: NSView) -> [OCRCutButton] {
@@ -262,6 +309,10 @@ final class OCRTextPanelController: NSObject {
     }
 
     @objc private func cutButtonClicked(_ sender: OCRCutButton) {
+        if sender.consumeSuppressesNextAction() {
+            return
+        }
+
         guard let item = panelItem(for: sender.window) else {
             return
         }
@@ -273,6 +324,38 @@ final class OCRTextPanelController: NSObject {
         }
 
         refreshSelection(in: item)
+    }
+
+    fileprivate func beginScrub(from sender: OCRCutButton) -> Bool {
+        guard let item = panelItem(for: sender.window) else {
+            return false
+        }
+
+        activeScrubPanel = item.panel
+        return selectCutIfNeeded(sender, in: item)
+    }
+
+    fileprivate func continueScrub(through sender: OCRCutButton) -> Bool {
+        guard let item = panelItem(for: sender.window),
+              activeScrubPanel === item.panel else {
+            return false
+        }
+
+        return selectCutIfNeeded(sender, in: item)
+    }
+
+    fileprivate func endScrub() {
+        activeScrubPanel = nil
+    }
+
+    private func selectCutIfNeeded(_ sender: OCRCutButton, in item: OCRTextPanelItem) -> Bool {
+        guard !item.selectedCutIDs.contains(sender.cutID) else {
+            return false
+        }
+
+        item.selectedCutIDs.insert(sender.cutID)
+        refreshSelection(in: item)
+        return true
     }
 
     @objc private func selectAllButtonClicked(_ sender: NSButton) {
@@ -339,8 +422,11 @@ private final class OCRTextPanelItem {
     }
 }
 
+@MainActor
 private final class OCRCutButton: NSButton {
     let cutID: UUID
+    private var hoverTrackingArea: NSTrackingArea?
+    private var suppressesNextAction = false
 
     init(cutID: UUID) {
         self.cutID = cutID
@@ -350,6 +436,60 @@ private final class OCRCutButton: NSButton {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         nil
+    }
+
+    override func updateTrackingAreas() {
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .enabledDuringMouseDrag, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        hoverTrackingArea = trackingArea
+
+        super.updateTrackingAreas()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if let controller = target as? OCRTextPanelController,
+           controller.beginScrub(from: self) {
+            suppressesNextAction = true
+        }
+
+        super.mouseDown(with: event)
+        (target as? OCRTextPanelController)?.endScrub()
+        suppressesNextAction = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        suppressesNextAction = true
+        super.mouseDragged(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        super.mouseUp(with: event)
+        (target as? OCRTextPanelController)?.endScrub()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+
+        guard let controller = target as? OCRTextPanelController else {
+            return
+        }
+
+        _ = controller.continueScrub(through: self)
+    }
+
+    fileprivate func consumeSuppressesNextAction() -> Bool {
+        let shouldSuppress = suppressesNextAction
+        suppressesNextAction = false
+        return shouldSuppress
     }
 }
 

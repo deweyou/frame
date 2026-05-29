@@ -207,6 +207,70 @@ final class OCRTextPanelControllerTests: XCTestCase {
         XCTAssertEqual(copiedText, "为什么 hello")
     }
 
+    func testSelectingCutsByIDsEnablesCopySelected() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = OCRTextPanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeScreenshot()
+
+        controller.show(
+            layout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(text: "为什么 hello", bounds: .zero, confidence: 0.9),
+            ]),
+            for: screenshot,
+            strings: AppStrings(language: .en),
+            copyText: { _ in true }
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer { panel.close() }
+        let contentView = try XCTUnwrap(panel.contentView)
+        let cutButtons = findButtons(in: contentView, accessibilityPrefix: "OCR Cut")
+
+        controller.selectCutButtonsForTesting(Array(cutButtons.prefix(2)), in: panel)
+
+        let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected"))
+        XCTAssertTrue(copyButton.isEnabled)
+    }
+
+    func testScrubSelectionOnlyContinuesDuringActiveSession() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = OCRTextPanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeScreenshot()
+        var copiedText: String?
+
+        controller.show(
+            layout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(text: "为什么 hello", bounds: .zero, confidence: 0.9),
+            ]),
+            for: screenshot,
+            strings: AppStrings(language: .en),
+            copyText: { text in
+                copiedText = text
+                return true
+            }
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer { panel.close() }
+        let contentView = try XCTUnwrap(panel.contentView)
+        let cutButtons = findButtons(in: contentView, accessibilityPrefix: "OCR Cut")
+        XCTAssertGreaterThanOrEqual(cutButtons.count, 3)
+
+        controller.beginScrubSelectionForTesting(from: cutButtons[0], in: panel)
+        controller.continueScrubSelectionForTesting(through: cutButtons[1], in: panel)
+        controller.endScrubSelectionForTesting()
+        controller.continueScrubSelectionForTesting(through: cutButtons[2], in: panel)
+
+        let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected"))
+        XCTAssertTrue(copyButton.isEnabled)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(copyButton.action), to: copyButton.target, from: copyButton))
+        XCTAssertEqual(copiedText, "为什")
+    }
+
     func testClosePanelForScreenshotClosesMatchingPanelOnly() throws {
         _ = NSApplication.shared
         let controller = OCRTextPanelController()
