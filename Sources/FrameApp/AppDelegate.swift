@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let clipboardWriter = ClipboardWriter()
     private let settingsWindowController = SettingsWindowController()
     private var strings = AppStrings.current()
+    private var activeQuickAccessScreenshotIDs: Set<UUID> = []
     private var recognizingScreenshotIDs: Set<UUID> = []
     private var recognizedTextLayouts: [UUID: RecognizedTextLayout] = [:]
 
@@ -123,15 +124,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showQuickAccess(for screenshot: CapturedScreenshot, anchor: CGRect?) {
+        activeQuickAccessScreenshotIDs.insert(screenshot.id)
         quickAccessPanelController.show(
             for: screenshot,
             preferredAnchor: anchor,
             strings: strings,
             copy: { [weak self] in
-                self?.copyToClipboard(screenshot) ?? false
+                guard let self else {
+                    return false
+                }
+
+                let didCopy = self.copyToClipboard(screenshot)
+                if didCopy {
+                    self.endQuickAccessLifecycle(for: screenshot)
+                }
+
+                return didCopy
             },
             save: { [weak self] in
-                self?.saveToDesktop(screenshot) ?? false
+                guard let self else {
+                    return false
+                }
+
+                let didSave = self.saveToDesktop(screenshot)
+                if didSave {
+                    self.endQuickAccessLifecycle(for: screenshot)
+                }
+
+                return didSave
             },
             recognizeText: { [weak self] in
                 self?.recognizeText(in: screenshot) ?? false
@@ -140,10 +160,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.openWorkspace(screenshot, kind: .temporaryPreview) ?? false
             },
             pin: { [weak self] in
-                self?.openWorkspace(screenshot, kind: .pinned) ?? false
+                guard let self else {
+                    return false
+                }
+
+                let didOpen = self.openWorkspace(screenshot, kind: .pinned)
+                if didOpen {
+                    self.endQuickAccessLifecycle(for: screenshot)
+                }
+
+                return didOpen
             },
             close: { [weak self] in
-                _ = self?.ocrTextPanelController.closePanel(for: screenshot)
+                self?.endQuickAccessLifecycle(for: screenshot)
                 NSLog("Frame 快速操作已关闭")
             }
         )
@@ -164,6 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 self.quickAccessPanelController.closePreview(for: screenshot, notify: false)
+                self.endQuickAccessLifecycle(for: screenshot)
                 return true
             },
             save: { [weak self] in
@@ -173,12 +203,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 self.quickAccessPanelController.closePreview(for: screenshot, notify: false)
+                self.endQuickAccessLifecycle(for: screenshot)
                 return true
             }
         )
     }
 
     private func recognizeText(in screenshot: CapturedScreenshot) -> Bool {
+        guard activeQuickAccessScreenshotIDs.contains(screenshot.id) else {
+            return false
+        }
+
         if let layout = recognizedTextLayouts[screenshot.id] {
             showOCRPanel(layout, for: screenshot)
             return true
@@ -197,16 +232,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             do {
                 let layout = try await self.ocrService.recognizeText(in: screenshot)
                 self.recognizingScreenshotIDs.remove(screenshot.id)
-                self.recognizedTextLayouts[screenshot.id] = layout
+
+                guard self.activeQuickAccessScreenshotIDs.contains(screenshot.id) else {
+                    return
+                }
 
                 guard !layout.isEmpty else {
                     self.showOCRNoTextFoundAlert()
                     return
                 }
 
+                self.recognizedTextLayouts[screenshot.id] = layout
                 self.showOCRPanel(layout, for: screenshot)
             } catch {
                 self.recognizingScreenshotIDs.remove(screenshot.id)
+                guard self.activeQuickAccessScreenshotIDs.contains(screenshot.id) else {
+                    return
+                }
+
                 self.showQuickAccessFailedAlert(title: self.strings.ocrFailedTitle, error: error)
             }
         }
@@ -241,6 +284,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.messageText = strings.ocrNoTextFound
         alert.addButton(withTitle: strings.ok)
         alert.runModal()
+    }
+
+    private func endQuickAccessLifecycle(for screenshot: CapturedScreenshot) {
+        activeQuickAccessScreenshotIDs.remove(screenshot.id)
+        recognizingScreenshotIDs.remove(screenshot.id)
+        recognizedTextLayouts.removeValue(forKey: screenshot.id)
+        _ = ocrTextPanelController.closePanel(for: screenshot)
     }
 
     private func copyToClipboard(_ screenshot: CapturedScreenshot) -> Bool {
