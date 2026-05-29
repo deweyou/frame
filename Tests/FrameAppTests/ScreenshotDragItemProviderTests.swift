@@ -128,7 +128,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         }
 
         let copyButton = try XCTUnwrap(findButton(in: try XCTUnwrap(copyPanel.contentView), accessibilityLabel: "复制"))
-        copyButton.performClick(nil)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(copyButton.action), to: copyButton.target, from: copyButton))
         XCTAssertTrue(didCopy)
 
         var didSave = false
@@ -145,7 +145,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         }
 
         let saveButton = try XCTUnwrap(findButton(in: try XCTUnwrap(savePanel.contentView), accessibilityLabel: "保存"))
-        saveButton.performClick(nil)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(saveButton.action), to: saveButton.target, from: saveButton))
         XCTAssertTrue(didSave)
     }
 
@@ -172,7 +172,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         }
 
         let ocrButton = try XCTUnwrap(findButton(in: try XCTUnwrap(panel.contentView), accessibilityLabel: "识别文字"))
-        ocrButton.performClick(nil)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(ocrButton.action), to: ocrButton.target, from: ocrButton))
 
         XCTAssertTrue(didRecognizeText)
         XCTAssertTrue(panel.isVisible)

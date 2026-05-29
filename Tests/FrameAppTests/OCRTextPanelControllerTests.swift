@@ -100,7 +100,7 @@ final class OCRTextPanelControllerTests: XCTestCase {
         defer { panel.close() }
 
         let button = try XCTUnwrap(findButton(in: try XCTUnwrap(panel.contentView), accessibilityLabel: "Copy All"))
-        button.performClick(nil)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(button.action), to: button.target, from: button))
         XCTAssertTrue(didCopyAll)
     }
 
