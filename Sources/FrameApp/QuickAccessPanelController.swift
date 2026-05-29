@@ -16,7 +16,7 @@ final class QuickAccessPanelController: NSObject {
         strings: AppStrings = AppStrings.current(),
         copy: @escaping () -> Bool,
         save: @escaping () -> Bool,
-        recognizeText: @escaping () -> Bool = { false },
+        recognizeText: @escaping () -> Bool,
         openWorkspace: @escaping () -> Bool,
         pin: @escaping () -> Bool,
         close: @escaping () -> Void

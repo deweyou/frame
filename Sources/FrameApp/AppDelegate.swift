@@ -11,9 +11,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let captureService = CaptureService()
     private let quickAccessPanelController = QuickAccessPanelController()
     private let imageWorkspacePanelController = ImageWorkspacePanelController()
+    private let ocrService = OCRService()
+    private let ocrTextPanelController = OCRTextPanelController()
     private let clipboardWriter = ClipboardWriter()
     private let settingsWindowController = SettingsWindowController()
     private var strings = AppStrings.current()
+    private var recognizingScreenshotIDs: Set<UUID> = []
+    private var recognizedTextLayouts: [UUID: RecognizedTextLayout] = [:]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         strings = AppStrings.current()
@@ -129,13 +133,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             save: { [weak self] in
                 self?.saveToDesktop(screenshot) ?? false
             },
+            recognizeText: { [weak self] in
+                self?.recognizeText(in: screenshot) ?? false
+            },
             openWorkspace: { [weak self] in
                 self?.openWorkspace(screenshot, kind: .temporaryPreview) ?? false
             },
             pin: { [weak self] in
                 self?.openWorkspace(screenshot, kind: .pinned) ?? false
             },
-            close: {
+            close: { [weak self] in
+                _ = self?.ocrTextPanelController.closePanel(for: screenshot)
                 NSLog("Frame 快速操作已关闭")
             }
         )
@@ -168,6 +176,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             }
         )
+    }
+
+    private func recognizeText(in screenshot: CapturedScreenshot) -> Bool {
+        if let layout = recognizedTextLayouts[screenshot.id] {
+            showOCRPanel(layout, for: screenshot)
+            return true
+        }
+
+        guard !recognizingScreenshotIDs.contains(screenshot.id) else {
+            return true
+        }
+
+        recognizingScreenshotIDs.insert(screenshot.id)
+        Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            do {
+                let layout = try await self.ocrService.recognizeText(in: screenshot)
+                self.recognizingScreenshotIDs.remove(screenshot.id)
+                self.recognizedTextLayouts[screenshot.id] = layout
+
+                guard !layout.isEmpty else {
+                    self.showOCRNoTextFoundAlert()
+                    return
+                }
+
+                self.showOCRPanel(layout, for: screenshot)
+            } catch {
+                self.recognizingScreenshotIDs.remove(screenshot.id)
+                self.showQuickAccessFailedAlert(title: self.strings.ocrFailedTitle, error: error)
+            }
+        }
+
+        return true
+    }
+
+    private func showOCRPanel(_ layout: RecognizedTextLayout, for screenshot: CapturedScreenshot) {
+        ocrTextPanelController.show(
+            layout: layout,
+            for: screenshot,
+            strings: strings,
+            copyAll: { [weak self] in
+                self?.copyRecognizedText(layout.fullText) ?? false
+            }
+        )
+    }
+
+    private func copyRecognizedText(_ text: String) -> Bool {
+        do {
+            try clipboardWriter.write(text: text)
+            NSLog("Frame 已复制识别文字到剪贴板")
+            return true
+        } catch {
+            showQuickAccessFailedAlert(title: strings.copyFailedTitle, error: error)
+            return false
+        }
+    }
+
+    private func showOCRNoTextFoundAlert() {
+        let alert = NSAlert()
+        alert.messageText = strings.ocrNoTextFound
+        alert.addButton(withTitle: strings.ok)
+        alert.runModal()
     }
 
     private func copyToClipboard(_ screenshot: CapturedScreenshot) -> Bool {
