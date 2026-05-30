@@ -358,6 +358,7 @@ private struct GeneralSettingsView: View {
     @State private var selectedShortcut = SettingsStore.screenshotShortcut()
     @State private var hasScreenRecordingAccess = ScreenRecordingPermission.hasAccess
     @State private var selectedLanguage = SettingsStore.appLanguage()
+    @State private var selectedOCRLanguageIdentifiers = Set(SettingsStore.ocrRecognitionLanguages())
     @State private var screenshotDirectoryPath = (try? SettingsStore.screenshotDirectory().path) ?? ""
 
     var body: some View {
@@ -397,6 +398,25 @@ private struct GeneralSettingsView: View {
                     onLanguageChange(newLanguage)
                 }
 
+                LabeledContent(strings.settingsOCRLanguages) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(OCRLanguageOption.allCases) { option in
+                            Toggle(
+                                strings.ocrLanguageDisplayName(option),
+                                isOn: Binding(
+                                    get: {
+                                        selectedOCRLanguageIdentifiers.contains(option.rawValue)
+                                    },
+                                    set: { isSelected in
+                                        updateOCRLanguage(option, isSelected: isSelected)
+                                    }
+                                )
+                            )
+                        }
+                    }
+                    .accessibilityLabel(strings.settingsOCRLanguages)
+                }
+
                 LabeledContent(strings.settingsScreenRecordingPermission) {
                     HStack(spacing: 8) {
                         Text(hasScreenRecordingAccess ? strings.settingsPermissionGranted : strings.settingsPermissionMissing)
@@ -431,6 +451,19 @@ private struct GeneralSettingsView: View {
     private func resetScreenshotDirectory() {
         onResetScreenshotDirectory()
         screenshotDirectoryPath = (try? SettingsStore.screenshotDirectory().path) ?? ""
+    }
+
+    private func updateOCRLanguage(_ option: OCRLanguageOption, isSelected: Bool) {
+        if isSelected {
+            selectedOCRLanguageIdentifiers.insert(option.rawValue)
+        } else {
+            selectedOCRLanguageIdentifiers.remove(option.rawValue)
+        }
+
+        let validatedIdentifiers = SettingsStore.setOCRRecognitionLanguages(
+            Array(selectedOCRLanguageIdentifiers)
+        )
+        selectedOCRLanguageIdentifiers = Set(validatedIdentifiers)
     }
 
     private func checkPermission() {

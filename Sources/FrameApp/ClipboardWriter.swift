@@ -1,24 +1,31 @@
 import AppKit
 
-@MainActor
-final class ClipboardWriter {
-    func write(image: NSImage) throws {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
+struct ClipboardWriter {
+    private let pasteboard: NSPasteboard
 
+    init(pasteboard: NSPasteboard = .general) {
+        self.pasteboard = pasteboard
+    }
+
+    func write(image: NSImage) throws {
+        pasteboard.clearContents()
         guard pasteboard.writeObjects([image]) else {
+            throw ClipboardWriterError.writeFailed
+        }
+    }
+
+    func write(text: String) throws {
+        pasteboard.clearContents()
+        guard pasteboard.setString(text, forType: .string) else {
             throw ClipboardWriterError.writeFailed
         }
     }
 }
 
-private enum ClipboardWriterError: Error, LocalizedError {
+enum ClipboardWriterError: LocalizedError {
     case writeFailed
 
     var errorDescription: String? {
-        switch self {
-        case .writeFailed:
-            "无法将截图写入系统剪贴板。"
-        }
+        "Failed to write to the clipboard."
     }
 }

@@ -49,6 +49,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
             strings: AppStrings(language: .zhHans),
             copy: { true },
             save: { true },
+            recognizeText: { true },
             openWorkspace: { true },
             pin: { true },
             close: {}
@@ -91,12 +92,12 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         XCTAssertNotNil(closeButton.layer?.backgroundColor)
 
         let overlayView = try XCTUnwrap(findVisualEffectView(in: previewView))
-        XCTAssertEqual(overlayView.frame.width, 124, accuracy: 0.5)
+        XCTAssertEqual(overlayView.frame.width, 154, accuracy: 0.5)
         XCTAssertEqual(overlayView.frame.height, 28, accuracy: 0.5)
         XCTAssertEqual(overlayView.frame.midX, imageView.frame.midX, accuracy: 0.5)
-        XCTAssertLessThan(overlayView.frame.width, imageView.frame.width * 0.65)
+        XCTAssertLessThan(overlayView.frame.width, imageView.frame.width * 0.8)
 
-        for label in ["保存", "复制", "固定到预览窗口", "打开预览"] {
+        for label in ["保存", "复制", "识别文字", "固定到预览窗口", "打开预览"] {
             let button = try XCTUnwrap(findButton(in: previewView, accessibilityLabel: label))
             let buttonPoint = NSPoint(x: button.bounds.midX, y: button.bounds.midY)
             let previewPoint = previewView.convert(buttonPoint, from: button)
@@ -127,7 +128,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         }
 
         let copyButton = try XCTUnwrap(findButton(in: try XCTUnwrap(copyPanel.contentView), accessibilityLabel: "复制"))
-        copyButton.performClick(nil)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(copyButton.action), to: copyButton.target, from: copyButton))
         XCTAssertTrue(didCopy)
 
         var didSave = false
@@ -144,8 +145,84 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         }
 
         let saveButton = try XCTUnwrap(findButton(in: try XCTUnwrap(savePanel.contentView), accessibilityLabel: "保存"))
-        saveButton.performClick(nil)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(saveButton.action), to: saveButton.target, from: saveButton))
         XCTAssertTrue(didSave)
+    }
+
+    func testQuickAccessOCRButtonRoutesActionWithoutClosingPreview() throws {
+        _ = NSApplication.shared
+        let screenshot = CapturedScreenshot(
+            pngData: try makePNGData(),
+            image: NSImage(size: NSSize(width: 2, height: 2)),
+            rect: CGRect(x: 0, y: 0, width: 2, height: 2)
+        )
+        var didRecognizeText = false
+
+        let panel = try showPreview(
+            screenshot: screenshot,
+            copy: { false },
+            save: { false },
+            recognizeText: {
+                didRecognizeText = true
+                return true
+            }
+        )
+        defer {
+            panel.close()
+        }
+
+        let ocrButton = try XCTUnwrap(findButton(in: try XCTUnwrap(panel.contentView), accessibilityLabel: "识别文字"))
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(ocrButton.action), to: ocrButton.target, from: ocrButton))
+
+        XCTAssertTrue(didRecognizeText)
+        XCTAssertTrue(panel.isVisible)
+    }
+
+    func testQuickAccessOCRStatusDisablesButtonAndShowsMessage() throws {
+        _ = NSApplication.shared
+        let screenshot = CapturedScreenshot(
+            pngData: try makePNGData(),
+            image: NSImage(size: NSSize(width: 2, height: 2)),
+            rect: CGRect(x: 0, y: 0, width: 2, height: 2)
+        )
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+
+        controller.show(
+            for: screenshot,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .en),
+            copy: { false },
+            save: { false },
+            recognizeText: { true },
+            openWorkspace: { false },
+            pin: { false },
+            close: {}
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer {
+            panel.close()
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        let ocrButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Recognize Text"))
+        let statusLabel = try XCTUnwrap(findTextField(in: contentView, accessibilityLabel: "OCR Status"))
+        let progressIndicator = try XCTUnwrap(findProgressIndicator(in: contentView, accessibilityLabel: "Recognizing..."))
+
+        controller.setOCRStatus(.recognizing("Recognizing..."), for: screenshot)
+
+        XCTAssertFalse(ocrButton.isEnabled)
+        XCTAssertFalse(progressIndicator.isHidden)
+        XCTAssertEqual(statusLabel.stringValue, "")
+        XCTAssertEqual(statusLabel.alphaValue, 0, accuracy: 0.01)
+
+        controller.setOCRStatus(.message("No text found", resetAfter: nil), for: screenshot)
+
+        XCTAssertTrue(ocrButton.isEnabled)
+        XCTAssertTrue(progressIndicator.isHidden)
+        XCTAssertEqual(statusLabel.stringValue, "No text found")
+        XCTAssertEqual(statusLabel.alphaValue, 1, accuracy: 0.01)
     }
 
     func testQuickAccessCanClosePreviewForMatchingScreenshotOnly() throws {
@@ -170,6 +247,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
             strings: AppStrings(language: .zhHans),
             copy: { true },
             save: { true },
+            recognizeText: { true },
             openWorkspace: { true },
             pin: { true },
             close: {}
@@ -180,6 +258,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
             strings: AppStrings(language: .zhHans),
             copy: { true },
             save: { true },
+            recognizeText: { true },
             openWorkspace: { true },
             pin: { true },
             close: {}
@@ -219,6 +298,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
             strings: AppStrings(language: .zhHans),
             copy: { true },
             save: { true },
+            recognizeText: { true },
             openWorkspace: { true },
             pin: { true },
             close: {
@@ -231,6 +311,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
             strings: AppStrings(language: .zhHans),
             copy: { true },
             save: { true },
+            recognizeText: { true },
             openWorkspace: { true },
             pin: { true },
             close: {
@@ -312,7 +393,8 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
     private func showPreview(
         screenshot: CapturedScreenshot,
         copy: @escaping () -> Bool,
-        save: @escaping () -> Bool
+        save: @escaping () -> Bool,
+        recognizeText: @escaping () -> Bool = { false }
     ) throws -> NSPanel {
         let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
         let controller = QuickAccessPanelController()
@@ -323,6 +405,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
             strings: AppStrings(language: .zhHans),
             copy: copy,
             save: save,
+            recognizeText: recognizeText,
             openWorkspace: { true },
             pin: { true },
             close: {}
@@ -342,6 +425,36 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         for subview in view.subviews {
             if let button = findButton(in: subview, accessibilityLabel: accessibilityLabel) {
                 return button
+            }
+        }
+
+        return nil
+    }
+
+    private func findTextField(in view: NSView, accessibilityLabel: String) -> NSTextField? {
+        if let textField = view as? NSTextField,
+           textField.accessibilityLabel() == accessibilityLabel {
+            return textField
+        }
+
+        for subview in view.subviews {
+            if let textField = findTextField(in: subview, accessibilityLabel: accessibilityLabel) {
+                return textField
+            }
+        }
+
+        return nil
+    }
+
+    private func findProgressIndicator(in view: NSView, accessibilityLabel: String) -> NSProgressIndicator? {
+        if let progressIndicator = view as? NSProgressIndicator,
+           progressIndicator.accessibilityLabel() == accessibilityLabel {
+            return progressIndicator
+        }
+
+        for subview in view.subviews {
+            if let progressIndicator = findProgressIndicator(in: subview, accessibilityLabel: accessibilityLabel) {
+                return progressIndicator
             }
         }
 

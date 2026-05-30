@@ -29,6 +29,8 @@ scripts/package-app.sh
 
 The packaging script creates `.build/app/Frame.app` and signs it for local testing. It uses ad-hoc signing by default, or `FRAME_CODESIGN_IDENTITY` when a stable local Code Signing identity is available.
 
+For user-facing GUI changes, final handoff must explicitly ask whether to replace the local test app unless the user already declined or replacement was already completed in the same turn.
+
 When replacing the user's local app or preparing a repeat GUI test build, do not use the default ad-hoc package. Always run this exact stable-signing flow:
 
 ```sh

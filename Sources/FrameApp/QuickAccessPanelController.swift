@@ -16,18 +16,24 @@ final class QuickAccessPanelController: NSObject {
         strings: AppStrings = AppStrings.current(),
         copy: @escaping () -> Bool,
         save: @escaping () -> Bool,
+        recognizeText: @escaping () -> Bool,
         openWorkspace: @escaping () -> Bool,
         pin: @escaping () -> Bool,
         close: @escaping () -> Void
     ) {
         let panel = makePanel(for: captured.image)
-        panel.contentView = makeContentView(for: captured, strings: strings)
+        let content = makeContentView(for: captured, strings: strings)
+        panel.contentView = content.view
         previewItems.append(
             QuickAccessPreviewItem(
                 screenshotID: captured.id,
                 panel: panel,
+                ocrButton: content.ocrButton,
+                ocrProgressIndicator: content.ocrProgressIndicator,
+                statusLabel: content.statusLabel,
                 copy: copy,
                 save: save,
+                recognizeText: recognizeText,
                 openWorkspace: openWorkspace,
                 pin: pin,
                 close: close
@@ -47,6 +53,60 @@ final class QuickAccessPanelController: NSObject {
 
         closePreview(item, notify: notify)
         return true
+    }
+
+    func setOCRStatus(_ status: QuickAccessOCRStatus, for screenshot: CapturedScreenshot) {
+        guard let item = previewItems.first(where: { $0.screenshotID == screenshot.id }) else {
+            return
+        }
+
+        item.statusResetWorkItem?.cancel()
+        item.statusResetWorkItem = nil
+
+        switch status {
+        case let .idle(accessibilityLabel):
+            item.ocrButton.isEnabled = true
+            item.ocrButton.alphaValue = 1
+            item.ocrButton.setAccessibilityHelp(accessibilityLabel)
+            item.ocrButton.toolTip = accessibilityLabel
+            item.ocrProgressIndicator.stopAnimation(nil)
+            item.ocrProgressIndicator.isHidden = true
+            item.statusLabel.alphaValue = 0
+            item.statusLabel.stringValue = ""
+        case let .recognizing(message):
+            item.ocrButton.isEnabled = false
+            item.ocrButton.alphaValue = 0.18
+            item.ocrButton.setAccessibilityHelp(message)
+            item.ocrButton.toolTip = nil
+            item.ocrProgressIndicator.isHidden = false
+            item.ocrProgressIndicator.startAnimation(nil)
+            item.statusLabel.alphaValue = 0
+            item.statusLabel.stringValue = ""
+        case let .message(message, resetAfter):
+            item.ocrButton.isEnabled = true
+            item.ocrButton.alphaValue = 1
+            item.ocrProgressIndicator.stopAnimation(nil)
+            item.ocrProgressIndicator.isHidden = true
+            item.statusLabel.stringValue = message
+            item.statusLabel.alphaValue = 1
+            if let resetAfter {
+                let workItem = DispatchWorkItem { [weak self, weak item] in
+                    guard let self,
+                          let item,
+                          self.previewItems.contains(where: { $0 === item }) else {
+                        return
+                    }
+
+                    item.statusLabel.alphaValue = 0
+                    item.statusLabel.stringValue = ""
+                }
+                item.statusResetWorkItem = workItem
+                DispatchQueue.main.asyncAfter(
+                    deadline: .now() + .milliseconds(Int(resetAfter * 1000)),
+                    execute: workItem
+                )
+            }
+        }
     }
 
     func temporarilyHidePreviews() {
@@ -95,7 +155,7 @@ final class QuickAccessPanelController: NSObject {
         return panel
     }
 
-    private func makeContentView(for screenshot: CapturedScreenshot, strings: AppStrings) -> NSView {
+    private func makeContentView(for screenshot: CapturedScreenshot, strings: AppStrings) -> QuickAccessContent {
         let contentView = ScreenshotPreviewView()
         contentView.wantsLayer = true
         contentView.onHoverChanged = { [weak contentView] isHovered in
@@ -123,6 +183,21 @@ final class QuickAccessPanelController: NSObject {
         overlayView.layer?.masksToBounds = true
         overlayView.alphaValue = 0
 
+        let statusLabel = NSTextField(labelWithString: "")
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        statusLabel.alignment = .center
+        statusLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        statusLabel.textColor = .labelColor
+        statusLabel.lineBreakMode = .byTruncatingTail
+        statusLabel.alphaValue = 0
+        statusLabel.wantsLayer = true
+        statusLabel.layer?.cornerRadius = 10
+        statusLabel.layer?.cornerCurve = .continuous
+        statusLabel.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.88).cgColor
+        statusLabel.layer?.borderWidth = 0.5
+        statusLabel.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
+        statusLabel.setAccessibilityLabel("OCR Status")
+
         let stackView = NSStackView()
         stackView.orientation = .horizontal
         stackView.alignment = .centerY
@@ -149,6 +224,19 @@ final class QuickAccessPanelController: NSObject {
             action: #selector(copyButtonClicked),
             style: .toolbar
         )
+        let ocrButton = makeIconButton(
+            title: strings.quickAccessOCR,
+            symbolName: "text.viewfinder",
+            action: #selector(ocrButtonClicked),
+            style: .toolbar
+        )
+        let ocrProgressIndicator = NSProgressIndicator()
+        ocrProgressIndicator.translatesAutoresizingMaskIntoConstraints = false
+        ocrProgressIndicator.style = .spinning
+        ocrProgressIndicator.controlSize = .small
+        ocrProgressIndicator.isDisplayedWhenStopped = false
+        ocrProgressIndicator.isHidden = true
+        ocrProgressIndicator.setAccessibilityLabel(strings.ocrRecognizing)
         let pinButton = makeIconButton(
             title: strings.quickAccessPin,
             symbolName: "pin",
@@ -164,6 +252,7 @@ final class QuickAccessPanelController: NSObject {
 
         stackView.addArrangedSubview(saveButton)
         stackView.addArrangedSubview(copyButton)
+        stackView.addArrangedSubview(ocrButton)
         stackView.addArrangedSubview(pinButton)
         stackView.addArrangedSubview(openWorkspaceButton)
 
@@ -171,7 +260,9 @@ final class QuickAccessPanelController: NSObject {
         contentView.addSubview(imageView)
         contentView.addSubview(overlayView)
         contentView.addSubview(closeButton)
+        contentView.addSubview(statusLabel)
         overlayView.addSubview(stackView)
+        overlayView.addSubview(ocrProgressIndicator)
 
         NSLayoutConstraint.activate([
             imageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
@@ -181,13 +272,23 @@ final class QuickAccessPanelController: NSObject {
 
             overlayView.centerXAnchor.constraint(equalTo: imageView.centerXAnchor),
             overlayView.bottomAnchor.constraint(equalTo: imageView.bottomAnchor, constant: -7),
-            overlayView.widthAnchor.constraint(equalToConstant: 124),
+            overlayView.widthAnchor.constraint(equalToConstant: 154),
             overlayView.heightAnchor.constraint(equalToConstant: 28),
+
+            statusLabel.centerXAnchor.constraint(equalTo: imageView.centerXAnchor),
+            statusLabel.bottomAnchor.constraint(equalTo: overlayView.topAnchor, constant: -6),
+            statusLabel.widthAnchor.constraint(lessThanOrEqualTo: imageView.widthAnchor, constant: -24),
+            statusLabel.heightAnchor.constraint(equalToConstant: 22),
 
             stackView.leadingAnchor.constraint(equalTo: overlayView.leadingAnchor, constant: 7),
             stackView.trailingAnchor.constraint(equalTo: overlayView.trailingAnchor, constant: -7),
             stackView.topAnchor.constraint(equalTo: overlayView.topAnchor, constant: 4),
             stackView.bottomAnchor.constraint(equalTo: overlayView.bottomAnchor, constant: -4),
+
+            ocrProgressIndicator.centerXAnchor.constraint(equalTo: ocrButton.centerXAnchor),
+            ocrProgressIndicator.centerYAnchor.constraint(equalTo: ocrButton.centerYAnchor),
+            ocrProgressIndicator.widthAnchor.constraint(equalToConstant: 14),
+            ocrProgressIndicator.heightAnchor.constraint(equalToConstant: 14),
 
             closeButton.trailingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: -cornerButtonInset),
             closeButton.topAnchor.constraint(equalTo: imageView.topAnchor, constant: cornerButtonInset),
@@ -195,7 +296,12 @@ final class QuickAccessPanelController: NSObject {
             closeButton.heightAnchor.constraint(equalToConstant: floatingButtonDiameter),
         ])
 
-        return contentView
+        return QuickAccessContent(
+            view: contentView,
+            ocrButton: ocrButton,
+            ocrProgressIndicator: ocrProgressIndicator,
+            statusLabel: statusLabel
+        )
     }
 
     private enum IconButtonStyle {
@@ -363,6 +469,14 @@ final class QuickAccessPanelController: NSObject {
         }
     }
 
+    @objc private func ocrButtonClicked(_ sender: NSButton) {
+        guard let item = previewItem(for: sender.window) else {
+            return
+        }
+
+        _ = item.recognizeText()
+    }
+
     @objc private func saveButtonClicked(_ sender: NSButton) {
         guard let item = previewItem(for: sender.window) else {
             return
@@ -408,6 +522,7 @@ final class QuickAccessPanelController: NSObject {
     }
 
     private func closePreview(_ item: QuickAccessPreviewItem, notify: Bool) {
+        item.statusResetWorkItem?.cancel()
         item.panel.close()
         previewItems.removeAll { $0 === item }
         repositionPreviewStack(preferredAnchor: ActiveScreenResolver.preferredQuickAccessFollowAnchor(), force: true)
@@ -418,29 +533,55 @@ final class QuickAccessPanelController: NSObject {
     }
 }
 
+enum QuickAccessOCRStatus: Equatable {
+    case idle(accessibilityLabel: String)
+    case recognizing(String)
+    case message(String, resetAfter: TimeInterval?)
+}
+
+private struct QuickAccessContent {
+    let view: NSView
+    let ocrButton: NSButton
+    let ocrProgressIndicator: NSProgressIndicator
+    let statusLabel: NSTextField
+}
+
 private final class QuickAccessPreviewItem {
     let screenshotID: UUID
     let panel: NSPanel
+    let ocrButton: NSButton
+    let ocrProgressIndicator: NSProgressIndicator
+    let statusLabel: NSTextField
     let copy: () -> Bool
     let save: () -> Bool
+    let recognizeText: () -> Bool
     let openWorkspace: () -> Bool
     let pin: () -> Bool
     let close: () -> Void
     var isTemporarilyHidden = false
+    var statusResetWorkItem: DispatchWorkItem?
 
     init(
         screenshotID: UUID,
         panel: NSPanel,
+        ocrButton: NSButton,
+        ocrProgressIndicator: NSProgressIndicator,
+        statusLabel: NSTextField,
         copy: @escaping () -> Bool,
         save: @escaping () -> Bool,
+        recognizeText: @escaping () -> Bool,
         openWorkspace: @escaping () -> Bool,
         pin: @escaping () -> Bool,
         close: @escaping () -> Void
     ) {
         self.screenshotID = screenshotID
         self.panel = panel
+        self.ocrButton = ocrButton
+        self.ocrProgressIndicator = ocrProgressIndicator
+        self.statusLabel = statusLabel
         self.copy = copy
         self.save = save
+        self.recognizeText = recognizeText
         self.openWorkspace = openWorkspace
         self.pin = pin
         self.close = close

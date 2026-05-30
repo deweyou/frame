@@ -43,13 +43,13 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         let copyPanel = try showWorkspace(copy: { true }, save: { false })
         let copyButton = try XCTUnwrap(findButton(in: try XCTUnwrap(copyPanel.contentView), accessibilityLabel: "Copy"))
 
-        copyButton.performClick(nil)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(copyButton.action), to: copyButton.target, from: copyButton))
         XCTAssertFalse(copyPanel.isVisible)
 
         let downloadPanel = try showWorkspace(copy: { false }, save: { true })
         let downloadButton = try XCTUnwrap(findButton(in: try XCTUnwrap(downloadPanel.contentView), accessibilityLabel: "Download"))
 
-        downloadButton.performClick(nil)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(downloadButton.action), to: downloadButton.target, from: downloadButton))
         XCTAssertFalse(downloadPanel.isVisible)
     }
 

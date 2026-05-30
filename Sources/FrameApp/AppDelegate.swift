@@ -11,9 +11,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let captureService = CaptureService()
     private let quickAccessPanelController = QuickAccessPanelController()
     private let imageWorkspacePanelController = ImageWorkspacePanelController()
+    private let ocrService = OCRService()
+    private let ocrTextPanelController = OCRTextPanelController()
     private let clipboardWriter = ClipboardWriter()
     private let settingsWindowController = SettingsWindowController()
     private var strings = AppStrings.current()
+    private var activeQuickAccessScreenshotIDs: Set<UUID> = []
+    private var recognizingScreenshotIDs: Set<UUID> = []
+    private var recognizedTextLayouts: [UUID: RecognizedTextLayout] = [:]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         strings = AppStrings.current()
@@ -88,12 +93,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let quickAccessAnchor = ActiveScreenResolver.preferredQuickAccessAnchor()
 
-        selectionOverlayController.startSelection(strings: strings) { [weak self] selection in
+        selectionOverlayController.startSelection(strings: strings) { [weak self] completion in
             guard let self else {
                 return
             }
 
-            guard let selection else {
+            guard let completion else {
                 self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
                 return
             }
@@ -104,38 +109,101 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
-                    do {
-                        let screenshot = try await self.captureService.capture(selection: selection)
-                        self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
-                        self.showQuickAccess(for: screenshot, anchor: quickAccessAnchor)
-                        NSLog("Frame 截图选区类型：\(selection.kind)")
-                    } catch {
-                        self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
-                        self.showCaptureFailedAlert(error)
+                    switch completion {
+                    case let .capture(selection):
+                        do {
+                            let screenshot = try await self.captureService.capture(selection: selection)
+                            self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+                            self.showQuickAccess(for: screenshot, anchor: quickAccessAnchor)
+                            NSLog("Frame 截图选区类型：\(selection.kind)")
+                        } catch {
+                            self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+                            self.showCaptureFailedAlert(error)
+                        }
+                    case let .recognizeText(selection):
+                        await self.recognizeTextFromSelection(selection)
                     }
                 }
             }
         }
     }
 
+    private func recognizeTextFromSelection(_ selection: SelectionCapture) async {
+        let screenshot: CapturedScreenshot
+        do {
+            screenshot = try await captureService.capture(selection: selection)
+        } catch {
+            quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+            showCaptureFailedAlert(error)
+            return
+        }
+
+        quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+
+        do {
+            let layout = try await ocrService.recognizeText(in: screenshot)
+            guard !layout.isEmpty else {
+                showOCRNoTextFoundAlert()
+                return
+            }
+
+            showOCRPanel(layout, for: screenshot)
+            NSLog("Frame 已从截图 HUD 识别文字：选区类型=\(selection.kind)")
+        } catch {
+            showQuickAccessFailedAlert(title: strings.ocrFailedTitle, error: error)
+        }
+    }
+
     private func showQuickAccess(for screenshot: CapturedScreenshot, anchor: CGRect?) {
+        activeQuickAccessScreenshotIDs.insert(screenshot.id)
         quickAccessPanelController.show(
             for: screenshot,
             preferredAnchor: anchor,
             strings: strings,
             copy: { [weak self] in
-                self?.copyToClipboard(screenshot) ?? false
+                guard let self else {
+                    return false
+                }
+
+                let didCopy = self.copyToClipboard(screenshot)
+                if didCopy {
+                    self.endQuickAccessLifecycle(for: screenshot)
+                }
+
+                return didCopy
             },
             save: { [weak self] in
-                self?.saveToDesktop(screenshot) ?? false
+                guard let self else {
+                    return false
+                }
+
+                let didSave = self.saveToDesktop(screenshot)
+                if didSave {
+                    self.endQuickAccessLifecycle(for: screenshot)
+                }
+
+                return didSave
+            },
+            recognizeText: { [weak self] in
+                self?.recognizeText(in: screenshot) ?? false
             },
             openWorkspace: { [weak self] in
                 self?.openWorkspace(screenshot, kind: .temporaryPreview) ?? false
             },
             pin: { [weak self] in
-                self?.openWorkspace(screenshot, kind: .pinned) ?? false
+                guard let self else {
+                    return false
+                }
+
+                let didOpen = self.openWorkspace(screenshot, kind: .pinned)
+                if didOpen {
+                    self.endQuickAccessLifecycle(for: screenshot)
+                }
+
+                return didOpen
             },
-            close: {
+            close: { [weak self] in
+                self?.endQuickAccessLifecycle(for: screenshot)
                 NSLog("Frame 快速操作已关闭")
             }
         )
@@ -156,6 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 self.quickAccessPanelController.closePreview(for: screenshot, notify: false)
+                self.endQuickAccessLifecycle(for: screenshot)
                 return true
             },
             save: { [weak self] in
@@ -165,9 +234,116 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 self.quickAccessPanelController.closePreview(for: screenshot, notify: false)
+                self.endQuickAccessLifecycle(for: screenshot)
                 return true
             }
         )
+    }
+
+    private func recognizeText(in screenshot: CapturedScreenshot) -> Bool {
+        guard activeQuickAccessScreenshotIDs.contains(screenshot.id) else {
+            return false
+        }
+
+        if let layout = recognizedTextLayouts[screenshot.id] {
+            quickAccessPanelController.setOCRStatus(.idle(accessibilityLabel: strings.quickAccessOCR), for: screenshot)
+            showOCRPanel(layout, for: screenshot)
+            return true
+        }
+
+        guard !recognizingScreenshotIDs.contains(screenshot.id) else {
+            return true
+        }
+
+        recognizingScreenshotIDs.insert(screenshot.id)
+        quickAccessPanelController.setOCRStatus(.recognizing(strings.ocrRecognizing), for: screenshot)
+        Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            do {
+                let layout = try await self.ocrService.recognizeText(in: screenshot)
+                self.recognizingScreenshotIDs.remove(screenshot.id)
+
+                guard self.activeQuickAccessScreenshotIDs.contains(screenshot.id) else {
+                    return
+                }
+
+                guard !layout.isEmpty else {
+                    self.quickAccessPanelController.setOCRStatus(
+                        .message(self.strings.ocrNoTextFound, resetAfter: 2.2),
+                        for: screenshot
+                    )
+                    return
+                }
+
+                self.recognizedTextLayouts[screenshot.id] = layout
+                self.quickAccessPanelController.setOCRStatus(
+                    .idle(accessibilityLabel: self.strings.quickAccessOCR),
+                    for: screenshot
+                )
+                self.showOCRPanel(layout, for: screenshot)
+            } catch {
+                self.recognizingScreenshotIDs.remove(screenshot.id)
+                guard self.activeQuickAccessScreenshotIDs.contains(screenshot.id) else {
+                    return
+                }
+
+                self.quickAccessPanelController.setOCRStatus(
+                    .message(self.strings.ocrFailedTitle, resetAfter: 2.2),
+                    for: screenshot
+                )
+                self.showQuickAccessFailedAlert(title: self.strings.ocrFailedTitle, error: error)
+            }
+        }
+
+        return true
+    }
+
+    private func showOCRPanel(_ layout: RecognizedTextLayout, for screenshot: CapturedScreenshot) {
+        ocrTextPanelController.show(
+            layout: layout,
+            for: screenshot,
+            strings: strings,
+            copyText: { [weak self] text in
+                guard let self,
+                      self.copyRecognizedText(text) else {
+                    return false
+                }
+
+                self.quickAccessPanelController.setOCRStatus(
+                    .message(self.strings.ocrCopied, resetAfter: 1.4),
+                    for: screenshot
+                )
+                return true
+            }
+        )
+    }
+
+    private func copyRecognizedText(_ text: String) -> Bool {
+        do {
+            try clipboardWriter.write(text: text)
+            NSLog("Frame 已复制识别文字到剪贴板")
+            return true
+        } catch {
+            showQuickAccessFailedAlert(title: strings.copyFailedTitle, error: error)
+            return false
+        }
+    }
+
+    private func showOCRNoTextFoundAlert() {
+        let alert = NSAlert()
+        alert.messageText = strings.ocrNoTextFound
+        alert.addButton(withTitle: strings.ok)
+        alert.runModal()
+    }
+
+    private func endQuickAccessLifecycle(for screenshot: CapturedScreenshot) {
+        activeQuickAccessScreenshotIDs.remove(screenshot.id)
+        recognizingScreenshotIDs.remove(screenshot.id)
+        recognizedTextLayouts.removeValue(forKey: screenshot.id)
+        _ = ocrTextPanelController.closePanel(for: screenshot)
     }
 
     private func copyToClipboard(_ screenshot: CapturedScreenshot) -> Bool {

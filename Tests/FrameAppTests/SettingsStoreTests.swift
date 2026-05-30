@@ -28,6 +28,41 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(SettingsStore.appLanguage(defaults: defaults), .en)
     }
 
+    func testOCRLanguagesDefaultToChineseEnglishJapaneseAndKorean() {
+        XCTAssertEqual(
+            SettingsStore.ocrRecognitionLanguages(defaults: defaults),
+            ["zh-Hans", "zh-Hant", "en-US", "ja-JP", "ko-KR"]
+        )
+    }
+
+    func testOCRLanguagesPersistSelectedIdentifiers() {
+        SettingsStore.setOCRRecognitionLanguages(["en-US", "fr-FR"], defaults: defaults)
+
+        XCTAssertEqual(SettingsStore.ocrRecognitionLanguages(defaults: defaults), ["en-US", "fr-FR"])
+    }
+
+    func testOCRLanguagesFilterInvalidIdentifiers() {
+        defaults.set(["en-US", "bad-language", "zh-Hans"], forKey: SettingsStore.ocrRecognitionLanguagesKey)
+
+        XCTAssertEqual(SettingsStore.ocrRecognitionLanguages(defaults: defaults), ["en-US", "zh-Hans"])
+    }
+
+    func testOCRLanguagesFallBackToDefaultsWhenPersistedListIsEmptyOrInvalid() {
+        SettingsStore.setOCRRecognitionLanguages([], defaults: defaults)
+
+        XCTAssertEqual(
+            SettingsStore.ocrRecognitionLanguages(defaults: defaults),
+            OCRLanguageOption.defaultIdentifiers
+        )
+
+        defaults.set(["bad-language"], forKey: SettingsStore.ocrRecognitionLanguagesKey)
+
+        XCTAssertEqual(
+            SettingsStore.ocrRecognitionLanguages(defaults: defaults),
+            OCRLanguageOption.defaultIdentifiers
+        )
+    }
+
     func testScreenshotDirectoryDefaultsToDesktop() throws {
         let desktop = URL(fileURLWithPath: "/Users/test/Desktop", isDirectory: true)
         let directory = try SettingsStore.screenshotDirectory(

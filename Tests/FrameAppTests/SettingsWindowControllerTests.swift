@@ -34,6 +34,16 @@ final class SettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(window.minSize.height, 480, accuracy: 0.5)
     }
 
+    func testOCRLanguageSettingsExposeDefaultOptions() {
+        XCTAssertEqual(OCRLanguageOption.allCases.map(\.rawValue).count, 25)
+        XCTAssertEqual(OCRLanguageOption.defaultIdentifiers.count, 5)
+        XCTAssertTrue(OCRLanguageOption.defaultIdentifiers.contains("zh-Hans"))
+        XCTAssertTrue(OCRLanguageOption.defaultIdentifiers.contains("zh-Hant"))
+        XCTAssertTrue(OCRLanguageOption.defaultIdentifiers.contains("en-US"))
+        XCTAssertTrue(OCRLanguageOption.defaultIdentifiers.contains("ja-JP"))
+        XCTAssertTrue(OCRLanguageOption.defaultIdentifiers.contains("ko-KR"))
+    }
+
     func testSettingsWindowPlacementCentersInsideActiveVisibleFrame() {
         let visibleFrame = CGRect(x: 1440, y: 80, width: 1200, height: 800)
         let frame = SettingsWindowLayout.centeredFrame(

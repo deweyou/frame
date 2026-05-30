@@ -223,4 +223,170 @@ struct FrameCoreTests {
         #expect(selection.midX == screen.midX)
         #expect(selection.midY == screen.midY)
     }
+
+    @Test
+    func testRecognizedTextLayoutOrdersLinesTopToBottomThenLeftToRight() {
+        let lines = [
+            RecognizedTextLine(text: "third", bounds: NormalizedImageRect(x: 0.1, y: 0.1, width: 0.2, height: 0.08), confidence: 0.8),
+            RecognizedTextLine(text: "second", bounds: NormalizedImageRect(x: 0.4, y: 0.7, width: 0.2, height: 0.08), confidence: 0.9),
+            RecognizedTextLine(text: "first", bounds: NormalizedImageRect(x: 0.1, y: 0.7, width: 0.2, height: 0.08), confidence: 0.95),
+        ]
+
+        let layout = RecognizedTextLayout(lines: lines)
+
+        #expect(layout.lines.map(\.text) == ["first", "second", "third"])
+        #expect(layout.fullText == "first second\nthird")
+    }
+
+    @Test
+    func testRecognizedTextLayoutDropsEmptyLinesAndKeepsMetadata() {
+        let line = RecognizedTextLine(
+            text: "hello",
+            bounds: NormalizedImageRect(x: 0.2, y: 0.3, width: 0.4, height: 0.1),
+            confidence: 0.72
+        )
+
+        let layout = RecognizedTextLayout(lines: [
+            RecognizedTextLine(text: " ", bounds: .zero, confidence: nil),
+            line,
+        ])
+
+        #expect(layout.lines == [line])
+        #expect(layout.fullText == "hello")
+        #expect(layout.lines[0].bounds == line.bounds)
+        #expect(layout.lines[0].confidence == 0.72)
+    }
+
+    @Test
+    func testRecognizedTextLayoutEmptyResultsHaveEmptyText() {
+        let layout = RecognizedTextLayout(lines: [])
+
+        #expect(layout.lines.isEmpty)
+        #expect(layout.fullText == "")
+        #expect(layout.isEmpty)
+    }
+
+    @Test
+    func testRecognizedTextLayoutUsesDeterministicTieBreakersWithinRows() {
+        let lines = [
+            RecognizedTextLine(text: "wide", bounds: NormalizedImageRect(x: 0.2, y: 0.5, width: 0.3, height: 0.1), confidence: nil),
+            RecognizedTextLine(text: "higher", bounds: NormalizedImageRect(x: 0.2, y: 0.51, width: 0.2, height: 0.1), confidence: nil),
+            RecognizedTextLine(text: "narrow", bounds: NormalizedImageRect(x: 0.2, y: 0.5, width: 0.2, height: 0.1), confidence: nil),
+            RecognizedTextLine(text: "right", bounds: NormalizedImageRect(x: 0.2001, y: 0.5, width: 0.1, height: 0.1), confidence: nil),
+        ]
+
+        let layout = RecognizedTextLayout(lines: lines)
+
+        #expect(layout.lines.map(\.text) == ["higher", "narrow", "wide", "right"])
+        #expect(layout.fullText == "higher narrow wide right")
+    }
+
+    @Test
+    func testRecognizedTextLayoutSeparatesRowsPastToleranceBoundary() {
+        let sameRowTop = RecognizedTextLine(text: "same-top", bounds: NormalizedImageRect(x: 0.1, y: 0.56, width: 0.2, height: 0.1), confidence: nil)
+        let sameRowBottom = RecognizedTextLine(text: "same-bottom", bounds: NormalizedImageRect(x: 0.4, y: 0.5, width: 0.2, height: 0.1), confidence: nil)
+        let nextRow = RecognizedTextLine(text: "next", bounds: NormalizedImageRect(x: 0.1, y: 0.439, width: 0.2, height: 0.1), confidence: nil)
+
+        let layout = RecognizedTextLayout(lines: [
+            nextRow,
+            sameRowBottom,
+            sameRowTop,
+        ])
+
+        #expect(layout.lines.map(\.text) == ["same-top", "same-bottom", "next"])
+        #expect(layout.fullText == "same-top same-bottom\nnext")
+    }
+
+    @Test
+    func testRecognizedTextCutLayoutTokenizesCJKCharactersAndLatinRuns() {
+        let layout = RecognizedTextCutLayout(
+            textLayout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(
+                    text: "为什么 ListV4/tanstack 全量",
+                    bounds: NormalizedImageRect(x: 0.1, y: 0.7, width: 0.8, height: 0.1),
+                    confidence: 0.9
+                ),
+            ])
+        )
+
+        #expect(layout.rows.count == 1)
+        #expect(layout.rows[0].cuts.map(\.text) == ["为", "什", "么", "ListV4/tanstack", "全", "量"])
+    }
+
+    @Test
+    func testRecognizedTextCutLayoutSplitsPureCodeJoinerPunctuation() {
+        let layout = RecognizedTextCutLayout(
+            textLayout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(
+                    text: "... @@ //",
+                    bounds: NormalizedImageRect(x: 0.1, y: 0.7, width: 0.8, height: 0.1),
+                    confidence: nil
+                ),
+            ])
+        )
+
+        #expect(layout.rows.count == 1)
+        #expect(layout.rows[0].cuts.map(\.text) == [".", ".", ".", "@", "@", "/", "/"])
+    }
+
+    @Test
+    func testRecognizedTextCutLayoutRestrictsWordRunsToASCIILatinAndDigits() {
+        let layout = RecognizedTextCutLayout(
+            textLayout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(
+                    text: "abc αβ АБ café",
+                    bounds: NormalizedImageRect(x: 0.1, y: 0.7, width: 0.8, height: 0.1),
+                    confidence: nil
+                ),
+            ])
+        )
+
+        #expect(layout.rows.count == 1)
+        #expect(layout.rows[0].cuts.map(\.text) == ["abc", "α", "β", "А", "Б", "caf", "é"])
+    }
+
+    @Test
+    func testRecognizedTextCutLayoutCopiesSelectedCutsInVisualOrder() {
+        let layout = RecognizedTextCutLayout(
+            textLayout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(
+                    text: "第二行",
+                    bounds: NormalizedImageRect(x: 0.1, y: 0.4, width: 0.4, height: 0.1),
+                    confidence: nil
+                ),
+                RecognizedTextLine(
+                    text: "Hello world",
+                    bounds: NormalizedImageRect(x: 0.1, y: 0.7, width: 0.4, height: 0.1),
+                    confidence: nil
+                ),
+            ])
+        )
+
+        let selected = Set(layout.rows.flatMap(\.cuts).map(\.id).filter { id in
+            layout.cut(for: id)?.text != "world"
+        })
+
+        #expect(layout.selectedText(for: selected) == "Hello\n第二行")
+    }
+
+    @Test
+    func testRecognizedTextCutLayoutSkipsEmptyRowsFromTextLayout() {
+        let layout = RecognizedTextCutLayout(
+            textLayout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(
+                    text: "   ",
+                    bounds: NormalizedImageRect(x: 0, y: 0, width: 1, height: 0.1),
+                    confidence: nil
+                ),
+                RecognizedTextLine(
+                    text: "visible",
+                    bounds: NormalizedImageRect(x: 0, y: 0.5, width: 1, height: 0.1),
+                    confidence: nil
+                ),
+            ])
+        )
+
+        #expect(layout.rows.count == 1)
+        #expect(layout.rows[0].cuts.map(\.text) == ["visible"])
+    }
 }
