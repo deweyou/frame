@@ -236,6 +236,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.quickAccessPanelController.closePreview(for: screenshot, notify: false)
                 self.endQuickAccessLifecycle(for: screenshot)
                 return true
+            },
+            recognizeText: { [weak self] screenshot in
+                guard let self else {
+                    throw OCRServiceError.cgImageUnavailable
+                }
+
+                return try await self.ocrService.recognizeText(in: screenshot)
+            },
+            copyRecognizedText: { [weak self] text in
+                self?.copyRecognizedText(text) ?? false
             }
         )
     }

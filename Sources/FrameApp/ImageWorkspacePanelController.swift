@@ -9,7 +9,9 @@ final class ImageWorkspacePanelController: NSObject {
         screenshot: CapturedScreenshot,
         kind: ImageWorkspaceKind,
         copy: @escaping () -> Bool,
-        save: @escaping () -> Bool
+        save: @escaping () -> Bool,
+        recognizeText: ((CapturedScreenshot) async throws -> RecognizedTextLayout)? = nil,
+        copyRecognizedText: ((String) -> Bool)? = nil
     ) -> Bool {
         if kind == .temporaryPreview,
            let existingItem = workspaceItem(for: screenshot, kind: kind) {
@@ -23,12 +25,15 @@ final class ImageWorkspacePanelController: NSObject {
             panel: panel,
             screenshot: screenshot,
             copy: copy,
-            save: save
+            save: save,
+            recognizeText: recognizeText,
+            copyRecognizedText: copyRecognizedText
         )
 
         panel.contentView = makeContentView(for: item)
         workspaceItems.append(item)
         installLifecycleCallbacks(for: item)
+        startAutomaticOCRIfNeeded(for: item)
 
         activateWorkspace(item)
         return true
@@ -153,6 +158,15 @@ final class ImageWorkspacePanelController: NSObject {
         imageView.translatesAutoresizingMaskIntoConstraints = false
         imageView.menuProvider = contextMenuProvider
 
+        let textSelectionOverlay = ImageWorkspaceTextSelectionOverlayView(
+            imageSize: item.screenshot.image.size,
+            copyText: item.copyRecognizedText ?? { _ in false }
+        )
+        textSelectionOverlay.translatesAutoresizingMaskIntoConstraints = false
+        textSelectionOverlay.isHidden = true
+        textSelectionOverlay.menuProvider = contextMenuProvider
+        item.textSelectionOverlay = textSelectionOverlay
+
         let toolbar = ImageWorkspaceToolbarView()
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         toolbar.setAccessibilityLabel("Image Workspace Toolbar")
@@ -220,6 +234,7 @@ final class ImageWorkspacePanelController: NSObject {
         contentView.addSubview(imageContainer)
         contentView.addSubview(toolbar)
         imageContainer.addSubview(imageView)
+        imageContainer.addSubview(textSelectionOverlay)
         toolbar.addSubview(toolbarStack)
         toolbarStack.addArrangedSubview(toolStack)
         toolbarStack.addArrangedSubview(spacer)
@@ -237,6 +252,11 @@ final class ImageWorkspacePanelController: NSObject {
             imageView.trailingAnchor.constraint(equalTo: imageContainer.trailingAnchor),
             imageView.topAnchor.constraint(equalTo: imageContainer.topAnchor),
             imageView.bottomAnchor.constraint(equalTo: imageContainer.bottomAnchor),
+
+            textSelectionOverlay.leadingAnchor.constraint(equalTo: imageContainer.leadingAnchor),
+            textSelectionOverlay.trailingAnchor.constraint(equalTo: imageContainer.trailingAnchor),
+            textSelectionOverlay.topAnchor.constraint(equalTo: imageContainer.topAnchor),
+            textSelectionOverlay.bottomAnchor.constraint(equalTo: imageContainer.bottomAnchor),
 
             toolbar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: ImageWorkspaceLayout.toolbarLeading),
             toolbar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -ImageWorkspaceLayout.toolbarTrailing),
@@ -328,6 +348,38 @@ final class ImageWorkspacePanelController: NSObject {
             }
 
             self?.removeWorkspace(item)
+        }
+    }
+
+    private func startAutomaticOCRIfNeeded(for item: ImageWorkspaceItem) {
+        guard item.state.kind == .temporaryPreview,
+              let recognizeText = item.recognizeText,
+              let textSelectionOverlay = item.textSelectionOverlay else {
+            return
+        }
+
+        item.ocrTask = Task { @MainActor [weak self, weak item, weak textSelectionOverlay] in
+            guard let self,
+                  let item,
+                  let textSelectionOverlay else {
+                return
+            }
+
+            do {
+                let layout = try await recognizeText(item.screenshot)
+                guard self.workspaceItems.contains(where: { $0 === item }) else {
+                    return
+                }
+
+                textSelectionOverlay.setRecognizedTextLayout(layout)
+            } catch {
+                guard self.workspaceItems.contains(where: { $0 === item }) else {
+                    return
+                }
+
+                textSelectionOverlay.isHidden = true
+                NSLog("Frame 预览编辑自动 OCR 失败: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -495,6 +547,7 @@ final class ImageWorkspacePanelController: NSObject {
     }
 
     private func removeWorkspace(_ item: ImageWorkspaceItem) {
+        item.ocrTask?.cancel()
         for observer in item.notificationObservers {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -597,21 +650,29 @@ private final class ImageWorkspaceItem {
     let screenshot: CapturedScreenshot
     let copy: () -> Bool
     let save: () -> Bool
+    let recognizeText: ((CapturedScreenshot) async throws -> RecognizedTextLayout)?
+    let copyRecognizedText: ((String) -> Bool)?
     var notificationObservers: [NSObjectProtocol] = []
     var toolButtons: [(tool: ImageEditingTool, button: NSButton)] = []
+    weak var textSelectionOverlay: ImageWorkspaceTextSelectionOverlayView?
+    var ocrTask: Task<Void, Never>?
 
     init(
         state: ImageWorkspaceState,
         panel: ImageWorkspacePanel,
         screenshot: CapturedScreenshot,
         copy: @escaping () -> Bool,
-        save: @escaping () -> Bool
+        save: @escaping () -> Bool,
+        recognizeText: ((CapturedScreenshot) async throws -> RecognizedTextLayout)?,
+        copyRecognizedText: ((String) -> Bool)?
     ) {
         self.state = state
         self.panel = panel
         self.screenshot = screenshot
         self.copy = copy
         self.save = save
+        self.recognizeText = recognizeText
+        self.copyRecognizedText = copyRecognizedText
     }
 }
 

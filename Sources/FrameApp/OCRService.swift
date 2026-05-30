@@ -46,7 +46,11 @@ final class OCRService: Sendable {
                 return makeRecognizedTextLine(
                     text: candidate.string,
                     normalizedBounds: observation.boundingBox,
-                    confidence: candidate.confidence
+                    confidence: candidate.confidence,
+                    tokens: makeRecognizedTextTokens(
+                        in: candidate,
+                        lineBounds: observation.boundingBox
+                    )
                 )
             }
 
@@ -67,7 +71,8 @@ func configureTextRecognitionRequest(
 func makeRecognizedTextLine(
     text: String,
     normalizedBounds: CGRect,
-    confidence: Float?
+    confidence: Float?,
+    tokens: [RecognizedTextToken] = []
 ) -> RecognizedTextLine {
     RecognizedTextLine(
         text: text,
@@ -77,10 +82,43 @@ func makeRecognizedTextLine(
             width: normalizedBounds.width,
             height: normalizedBounds.height
         ),
-        confidence: confidence
+        confidence: confidence,
+        tokens: tokens
     )
 }
 
 func makeRecognizedTextLayout(lines: [RecognizedTextLine]) -> RecognizedTextLayout {
     RecognizedTextLayout(lines: lines)
+}
+
+func makeRecognizedTextTokens(
+    in recognizedText: VNRecognizedText,
+    lineBounds: CGRect
+) -> [RecognizedTextToken] {
+    let fallbackBounds = NormalizedImageRect(
+        x: lineBounds.origin.x,
+        y: lineBounds.origin.y,
+        width: lineBounds.width,
+        height: lineBounds.height
+    )
+
+    return RecognizedTextCutLayout.tokenizerCandidates(in: recognizedText.string).map { candidate in
+        let tokenBounds: NormalizedImageRect
+        if let observation = try? recognizedText.boundingBox(for: candidate.range) {
+            tokenBounds = NormalizedImageRect(
+                x: observation.boundingBox.origin.x,
+                y: observation.boundingBox.origin.y,
+                width: observation.boundingBox.width,
+                height: observation.boundingBox.height
+            )
+        } else {
+            tokenBounds = fallbackBounds
+        }
+
+        return RecognizedTextToken(
+            text: candidate.text,
+            bounds: tokenBounds,
+            needsLeadingSpace: candidate.needsLeadingSpace
+        )
+    }
 }

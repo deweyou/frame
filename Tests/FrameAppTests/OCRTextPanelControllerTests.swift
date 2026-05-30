@@ -33,7 +33,8 @@ final class OCRTextPanelControllerTests: XCTestCase {
         XCTAssertEqual(cutButtons.map(\.title), ["为", "什", "么", "hello"])
         for button in cutButtons {
             XCTAssertEqual(button.layer?.borderWidth, 1)
-            XCTAssertGreaterThanOrEqual(button.intrinsicContentSize.height, 28)
+            XCTAssertGreaterThanOrEqual(button.intrinsicContentSize.height, 24)
+            XCTAssertLessThan(button.intrinsicContentSize.height, 28)
             XCTAssertGreaterThan(button.intrinsicContentSize.width, button.attributedTitle.size().width)
             XCTAssertEqual(button.layer?.borderColor, NSColor.separatorColor.withAlphaComponent(0.35).cgColor)
         }
@@ -126,6 +127,7 @@ final class OCRTextPanelControllerTests: XCTestCase {
         let scrollView = try XCTUnwrap(findScrollView(in: contentView))
         let documentView = try XCTUnwrap(scrollView.documentView)
         XCTAssertEqual(findButtons(in: contentView, accessibilityPrefix: "OCR Cut").count, lines.count)
+        XCTAssertFalse(scrollView.hasVerticalScroller)
         XCTAssertFalse(scrollView.hasHorizontalScroller)
         XCTAssertGreaterThan(documentView.frame.height, scrollView.contentView.bounds.height)
         XCTAssertGreaterThan(documentView.frame.height, 500)
@@ -156,6 +158,7 @@ final class OCRTextPanelControllerTests: XCTestCase {
         let documentView = try XCTUnwrap(scrollView.documentView)
         let cutButtons = findButtons(in: contentView, accessibilityPrefix: "OCR Cut")
         XCTAssertGreaterThan(cutButtons.count, 12)
+        XCTAssertFalse(scrollView.hasVerticalScroller)
         XCTAssertFalse(scrollView.hasHorizontalScroller)
         XCTAssertEqual(documentView.frame.width, scrollView.contentView.bounds.width, accuracy: 1)
         XCTAssertGreaterThan(Set(cutButtons.map { round($0.frame.minY) }).count, 1)
