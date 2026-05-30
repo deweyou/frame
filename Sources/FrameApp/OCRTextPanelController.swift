@@ -139,7 +139,7 @@ final class OCRTextPanelController: NSObject {
 
         let scrollView = OCRCutScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.hasVerticalScroller = true
+        scrollView.hasVerticalScroller = false
         scrollView.hasHorizontalScroller = false
         scrollView.borderType = .noBorder
         scrollView.autohidesScrollers = true
@@ -199,9 +199,9 @@ final class OCRTextPanelController: NSObject {
 
     private func makeCutContainer(for item: OCRTextPanelItem) -> NSView {
         let stackView = OCRCutContainerView()
-        stackView.edgeInsets = NSEdgeInsets(top: 10, left: 10, bottom: 10, right: 10)
-        stackView.rowSpacing = 10
-        stackView.itemSpacing = 6
+        stackView.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
+        stackView.rowSpacing = 6
+        stackView.itemSpacing = 4
 
         for row in item.cutLayout.rows {
             stackView.addCutRow(row.cuts.map(makeCutButton))
@@ -219,8 +219,8 @@ final class OCRTextPanelController: NSObject {
         button.bezelStyle = .regularSquare
         button.isBordered = false
         button.wantsLayer = true
-        button.font = .systemFont(ofSize: 15, weight: .regular)
-        button.layer?.cornerRadius = 5
+        button.font = .systemFont(ofSize: 13, weight: .regular)
+        button.layer?.cornerRadius = 4
         button.layer?.masksToBounds = true
         button.setAccessibilityLabel("OCR Cut \(cut.text)")
         applyCutButtonStyle(button, isSelected: false)
@@ -626,7 +626,7 @@ private final class OCRCutButton: NSButton {
 
     override var intrinsicContentSize: NSSize {
         let size = super.intrinsicContentSize
-        return NSSize(width: size.width + 12, height: max(28, size.height + 6))
+        return NSSize(width: size.width + 8, height: max(24, size.height + 4))
     }
 }
 

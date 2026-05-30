@@ -25,11 +25,34 @@ public struct RecognizedTextLine: Equatable, Sendable {
     public let text: String
     public let bounds: NormalizedImageRect
     public let confidence: Float?
+    public let tokens: [RecognizedTextToken]
 
     public init(text: String, bounds: NormalizedImageRect, confidence: Float?) {
+        self.init(text: text, bounds: bounds, confidence: confidence, tokens: [])
+    }
+
+    public init(
+        text: String,
+        bounds: NormalizedImageRect,
+        confidence: Float?,
+        tokens: [RecognizedTextToken] = []
+    ) {
         self.text = text
         self.bounds = bounds
         self.confidence = confidence
+        self.tokens = tokens
+    }
+}
+
+public struct RecognizedTextToken: Equatable, Sendable {
+    public let text: String
+    public let bounds: NormalizedImageRect
+    public let needsLeadingSpace: Bool
+
+    public init(text: String, bounds: NormalizedImageRect, needsLeadingSpace: Bool) {
+        self.text = text
+        self.bounds = bounds
+        self.needsLeadingSpace = needsLeadingSpace
     }
 }
 

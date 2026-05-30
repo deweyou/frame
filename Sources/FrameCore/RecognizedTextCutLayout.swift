@@ -35,16 +35,26 @@ public struct RecognizedTextCutRow: Equatable, Sendable {
     }
 }
 
+public struct RecognizedTextTokenCandidate: Equatable {
+    public let text: String
+    public let range: Range<String.Index>
+    public let needsLeadingSpace: Bool
+
+    public init(text: String, range: Range<String.Index>, needsLeadingSpace: Bool) {
+        self.text = text
+        self.range = range
+        self.needsLeadingSpace = needsLeadingSpace
+    }
+}
+
 public struct RecognizedTextCutLayout: Equatable, Sendable {
     public let rows: [RecognizedTextCutRow]
 
     public init(textLayout: RecognizedTextLayout) {
         self.rows = textLayout.lines.enumerated().compactMap { lineIndex, line in
-            let tokenizedCuts = Self.tokenize(
-                line.text,
-                lineIndex: lineIndex,
-                lineBounds: line.bounds
-            )
+            let tokenizedCuts = line.tokens.isEmpty
+                ? Self.tokenize(line.text, lineIndex: lineIndex, lineBounds: line.bounds)
+                : Self.cuts(from: line.tokens, lineIndex: lineIndex)
             let cuts = tokenizedCuts.isEmpty
                 ? Self.fallbackCut(for: line, lineIndex: lineIndex)
                 : tokenizedCuts
@@ -84,43 +94,71 @@ public struct RecognizedTextCutLayout: Equatable, Sendable {
         lineIndex: Int,
         lineBounds: NormalizedImageRect
     ) -> [RecognizedTextCut] {
-        var cuts: [RecognizedTextCut] = []
+        tokenizerCandidates(in: text).enumerated().map { tokenIndex, candidate in
+            RecognizedTextCut(
+                text: candidate.text,
+                lineIndex: lineIndex,
+                tokenIndex: tokenIndex,
+                bounds: lineBounds,
+                needsLeadingSpace: candidate.needsLeadingSpace
+            )
+        }
+    }
+
+    private static func cuts(from tokens: [RecognizedTextToken], lineIndex: Int) -> [RecognizedTextCut] {
+        tokens.enumerated().compactMap { tokenIndex, token in
+            guard !token.text.isEmpty else {
+                return nil
+            }
+
+            return RecognizedTextCut(
+                text: token.text,
+                lineIndex: lineIndex,
+                tokenIndex: tokenIndex,
+                bounds: token.bounds,
+                needsLeadingSpace: token.needsLeadingSpace
+            )
+        }
+    }
+
+    public static func tokenizerCandidates(in text: String) -> [RecognizedTextTokenCandidate] {
+        var candidates: [RecognizedTextTokenCandidate] = []
         var token = ""
+        var tokenStartIndex: String.Index?
         var tokenNeedsLeadingSpace = false
         var sawWhitespace = false
 
-        func flushToken() {
-            guard !token.isEmpty else {
+        func flushToken(endIndex: String.Index) {
+            guard !token.isEmpty,
+                  let startIndex = tokenStartIndex else {
                 return
             }
 
-            cuts.append(RecognizedTextCut(
+            candidates.append(RecognizedTextTokenCandidate(
                 text: token,
-                lineIndex: lineIndex,
-                tokenIndex: cuts.count,
-                bounds: lineBounds,
+                range: startIndex..<endIndex,
                 needsLeadingSpace: tokenNeedsLeadingSpace
             ))
             token = ""
+            tokenStartIndex = nil
             tokenNeedsLeadingSpace = false
         }
 
-        let characters = Array(text)
-        for (index, character) in characters.enumerated() {
+        for index in text.indices {
+            let character = text[index]
             if character.isWhitespace {
-                flushToken()
+                flushToken(endIndex: index)
                 sawWhitespace = true
                 continue
             }
 
             if character.isSingleCharacterTextCut {
-                flushToken()
-                cuts.append(RecognizedTextCut(
+                flushToken(endIndex: index)
+                let nextIndex = text.index(after: index)
+                candidates.append(RecognizedTextTokenCandidate(
                     text: String(character),
-                    lineIndex: lineIndex,
-                    tokenIndex: cuts.count,
-                    bounds: lineBounds,
-                    needsLeadingSpace: sawWhitespace && !cuts.isEmpty
+                    range: index..<nextIndex,
+                    needsLeadingSpace: sawWhitespace && !candidates.isEmpty
                 ))
                 sawWhitespace = false
                 continue
@@ -128,7 +166,8 @@ public struct RecognizedTextCutLayout: Equatable, Sendable {
 
             if character.isASCIIWordRunCharacter {
                 if token.isEmpty {
-                    tokenNeedsLeadingSpace = sawWhitespace && !cuts.isEmpty
+                    tokenStartIndex = index
+                    tokenNeedsLeadingSpace = sawWhitespace && !candidates.isEmpty
                 }
                 token.append(character)
                 sawWhitespace = false
@@ -137,25 +176,25 @@ public struct RecognizedTextCutLayout: Equatable, Sendable {
 
             if character.isCodeJoiner,
                !token.isEmpty,
-               characters.dropFirst(index + 1).first?.isASCIIWordRunCharacter == true {
+               text.index(after: index) < text.endIndex,
+               text[text.index(after: index)].isASCIIWordRunCharacter {
                 token.append(character)
                 sawWhitespace = false
                 continue
             }
 
-            flushToken()
-            cuts.append(RecognizedTextCut(
+            flushToken(endIndex: index)
+            let nextIndex = text.index(after: index)
+            candidates.append(RecognizedTextTokenCandidate(
                 text: String(character),
-                lineIndex: lineIndex,
-                tokenIndex: cuts.count,
-                bounds: lineBounds,
-                needsLeadingSpace: sawWhitespace && !cuts.isEmpty
+                range: index..<nextIndex,
+                needsLeadingSpace: sawWhitespace && !candidates.isEmpty
             ))
             sawWhitespace = false
         }
 
-        flushToken()
-        return cuts
+        flushToken(endIndex: text.endIndex)
+        return candidates
     }
 
     private static func fallbackCut(

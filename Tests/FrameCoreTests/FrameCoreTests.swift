@@ -314,6 +314,39 @@ struct FrameCoreTests {
     }
 
     @Test
+    func testRecognizedTextTokenizerCandidatesPreserveStringRanges() {
+        let text = "为什么 ListV4/tanstack 全量"
+        let candidates = RecognizedTextCutLayout.tokenizerCandidates(in: text)
+
+        #expect(candidates.map(\.text) == ["为", "什", "么", "ListV4/tanstack", "全", "量"])
+        #expect(candidates.map { String(text[$0.range]) } == candidates.map(\.text))
+        #expect(candidates.map(\.needsLeadingSpace) == [false, false, false, true, true, false])
+    }
+
+    @Test
+    func testRecognizedTextCutLayoutPrefersLineTokenBounds() {
+        let tokenBounds = NormalizedImageRect(x: 0.2, y: 0.72, width: 0.1, height: 0.04)
+        let lineBounds = NormalizedImageRect(x: 0.1, y: 0.7, width: 0.8, height: 0.1)
+        let layout = RecognizedTextCutLayout(
+            textLayout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(
+                    text: "Hello",
+                    bounds: lineBounds,
+                    confidence: 0.9,
+                    tokens: [
+                        RecognizedTextToken(text: "Hello", bounds: tokenBounds, needsLeadingSpace: false),
+                    ]
+                ),
+            ])
+        )
+
+        #expect(layout.rows.count == 1)
+        #expect(layout.rows[0].cuts.count == 1)
+        #expect(layout.rows[0].cuts[0].text == "Hello")
+        #expect(layout.rows[0].cuts[0].bounds == tokenBounds)
+    }
+
+    @Test
     func testRecognizedTextCutLayoutSplitsPureCodeJoinerPunctuation() {
         let layout = RecognizedTextCutLayout(
             textLayout: RecognizedTextLayout(lines: [

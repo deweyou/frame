@@ -80,6 +80,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         }
 
         let imageContainer = try XCTUnwrap(findView(in: contentView, accessibilityLabel: "Pinned Image Container"))
+        XCTAssertNil(findTextSelectionOverlay(in: contentView))
         let closeFrame = try XCTUnwrap(panel.standardWindowButton(.closeButton))
             .convert(try XCTUnwrap(panel.standardWindowButton(.closeButton)).bounds, to: contentView)
         XCTAssertEqual(imageContainer.frame.minX, contentView.bounds.minX, accuracy: 0.5)
@@ -296,9 +297,160 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         XCTAssertEqual(saveCount, 0)
     }
 
+    func testTemporaryWorkspaceAutomaticallyLoadsOCRTextOverlay() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = ImageWorkspacePanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeScreenshot()
+        var recognizeCount = 0
+        var copiedText: String?
+
+        XCTAssertTrue(controller.show(
+            screenshot: screenshot,
+            kind: .temporaryPreview,
+            copy: { true },
+            save: { true },
+            recognizeText: { _ in
+                recognizeCount += 1
+                return RecognizedTextLayout(lines: [
+                    RecognizedTextLine(
+                        text: "Frame",
+                        bounds: NormalizedImageRect(x: 0.1, y: 0.2, width: 0.2, height: 0.1),
+                        confidence: 0.9,
+                        tokens: [
+                            RecognizedTextToken(
+                                text: "Frame",
+                                bounds: NormalizedImageRect(x: 0.1, y: 0.2, width: 0.2, height: 0.1),
+                                needsLeadingSpace: false
+                            ),
+                        ]
+                    ),
+                ])
+            },
+            copyRecognizedText: { text in
+                copiedText = text
+                return true
+            }
+        ))
+
+        let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
+        defer {
+            panel.close()
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let overlay = try XCTUnwrap(findTextSelectionOverlay(in: contentView))
+
+        let didLoadTextOverlay = waitUntil { overlay.hasRecognizedText }
+        XCTAssertTrue(didLoadTextOverlay)
+        XCTAssertEqual(recognizeCount, 1)
+
+        let selectionPoint = NSPoint(x: overlay.bounds.width * 0.2, y: overlay.bounds.height * 0.25)
+        overlay.mouseDown(with: try makeMouseButtonEvent(
+            type: .leftMouseDown,
+            point: overlay.convert(selectionPoint, to: nil),
+            panel: panel
+        ))
+        overlay.mouseUp(with: try makeMouseButtonEvent(
+            type: .leftMouseUp,
+            point: overlay.convert(selectionPoint, to: nil),
+            panel: panel
+        ))
+        overlay.keyDown(with: try makeKeyEvent("c", modifiers: .command, panel: panel))
+
+        XCTAssertEqual(copiedText, "Frame")
+    }
+
     func testLiveCornerResizeKeepsInitialResizeAxisStableForPreviewAndPin() throws {
         try assertLiveCornerResizeKeepsInitialResizeAxisStable(kind: .temporaryPreview)
         try assertLiveCornerResizeKeepsInitialResizeAxisStable(kind: .pinned)
+    }
+
+    func testImageTextSelectionOverlayCopiesDraggedSelection() throws {
+        _ = NSApplication.shared
+        var copiedText: String?
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let overlay = ImageWorkspaceTextSelectionOverlayView(
+            imageSize: CGSize(width: 320, height: 240),
+            copyText: { text in
+                copiedText = text
+                return true
+            }
+        )
+        overlay.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = overlay
+        panel.orderFrontRegardless()
+        defer {
+            panel.contentView = nil
+            panel.close()
+        }
+        XCTAssertFalse(overlay.mouseDownCanMoveWindow)
+
+        overlay.setRecognizedTextLayout(RecognizedTextLayout(lines: [
+            RecognizedTextLine(
+                text: "你好啊",
+                bounds: NormalizedImageRect(x: 0.1, y: 0.2, width: 0.2, height: 0.1),
+                confidence: 0.9,
+                tokens: [
+                    RecognizedTextToken(
+                        text: "你",
+                        bounds: NormalizedImageRect(x: 0.1, y: 0.2, width: 0.08, height: 0.1),
+                        needsLeadingSpace: false
+                    ),
+                    RecognizedTextToken(
+                        text: "好",
+                        bounds: NormalizedImageRect(x: 0.2, y: 0.2, width: 0.08, height: 0.1),
+                        needsLeadingSpace: false
+                    ),
+                    RecognizedTextToken(
+                        text: "啊",
+                        bounds: NormalizedImageRect(x: 0.3, y: 0.2, width: 0.08, height: 0.1),
+                        needsLeadingSpace: false
+                    ),
+                ]
+            ),
+        ]))
+        overlay.resetCursorRects()
+
+        overlay.mouseDown(with: try makeMouseButtonEvent(
+            type: .leftMouseDown,
+            point: overlay.convert(NSPoint(x: 45, y: 60), to: nil),
+            panel: panel
+        ))
+        overlay.mouseDragged(with: try makeMouseButtonEvent(
+            type: .leftMouseDragged,
+            point: overlay.convert(NSPoint(x: 73, y: 60), to: nil),
+            panel: panel
+        ))
+        overlay.mouseDragged(with: try makeMouseButtonEvent(
+            type: .leftMouseDragged,
+            point: overlay.convert(NSPoint(x: 105, y: 60), to: nil),
+            panel: panel
+        ))
+        overlay.mouseUp(with: try makeMouseButtonEvent(
+            type: .leftMouseUp,
+            point: overlay.convert(NSPoint(x: 105, y: 60), to: nil),
+            panel: panel
+        ))
+
+        XCTAssertEqual(overlay.selectedTextForTesting, "你好啊")
+        overlay.keyDown(with: try makeKeyEvent("c", modifiers: .command, panel: panel))
+        XCTAssertEqual(copiedText, "你好啊")
+
+        copiedText = nil
+        let menu = try XCTUnwrap(overlay.menu(for: try makeRightClickEvent(windowNumber: panel.windowNumber)))
+        let copyMenuItem = try XCTUnwrap(menu.item(withTitle: "Copy"))
+        let copyTarget = try XCTUnwrap(copyMenuItem.target as? NSObject)
+        let copyAction = try XCTUnwrap(copyMenuItem.action)
+        XCTAssertTrue(copyTarget.responds(to: copyAction))
+        copyTarget.perform(copyAction, with: copyMenuItem)
+        XCTAssertEqual(copiedText, "你好啊")
     }
 
     private func assertLiveCornerResizeKeepsInitialResizeAxisStable(kind: ImageWorkspaceKind) throws {
@@ -417,6 +569,20 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         return nil
     }
 
+    private func findTextSelectionOverlay(in view: NSView) -> ImageWorkspaceTextSelectionOverlayView? {
+        if let overlay = view as? ImageWorkspaceTextSelectionOverlayView {
+            return overlay
+        }
+
+        for subview in view.subviews {
+            if let overlay = findTextSelectionOverlay(in: subview) {
+                return overlay
+            }
+        }
+
+        return nil
+    }
+
     private func workspacePanels(excluding windowIDs: Set<ObjectIdentifier>) -> [NSPanel] {
         NSApp.windows.compactMap { window in
             guard !windowIDs.contains(ObjectIdentifier(window)) else {
@@ -448,5 +614,54 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
             clickCount: 1,
             pressure: 1
         ))
+    }
+
+    private func makeMouseButtonEvent(type: NSEvent.EventType, point: NSPoint, panel: NSPanel) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.mouseEvent(
+            with: type,
+            location: point,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: panel.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: type == .leftMouseUp ? 0 : 1
+        ))
+    }
+
+    private func makeKeyEvent(
+        _ character: String,
+        modifiers: NSEvent.ModifierFlags,
+        panel: NSPanel
+    ) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: modifiers,
+            timestamp: 0,
+            windowNumber: panel.windowNumber,
+            context: nil,
+            characters: character,
+            charactersIgnoringModifiers: character,
+            isARepeat: false,
+            keyCode: 0
+        ))
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 1,
+        condition: () -> Bool
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() {
+                return true
+            }
+
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+        }
+
+        return condition()
     }
 }
