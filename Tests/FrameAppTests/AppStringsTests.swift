@@ -41,10 +41,12 @@ final class AppStringsTests: XCTestCase {
     func testOCRScrubSelectionStringsAreLocalized() {
         let english = AppStrings(language: .en)
         XCTAssertEqual(english.ocrSelectAll, "Select All")
+        XCTAssertEqual(english.ocrDeselectAll, "Clear")
         XCTAssertEqual(english.ocrCopySelected, "Copy Selected")
 
         let chinese = AppStrings(language: .zhHans)
         XCTAssertEqual(chinese.ocrSelectAll, "全选")
+        XCTAssertEqual(chinese.ocrDeselectAll, "清空")
         XCTAssertEqual(chinese.ocrCopySelected, "复制")
     }
 

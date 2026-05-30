@@ -29,6 +29,7 @@ final class QuickAccessPanelController: NSObject {
                 screenshotID: captured.id,
                 panel: panel,
                 ocrButton: content.ocrButton,
+                ocrProgressIndicator: content.ocrProgressIndicator,
                 statusLabel: content.statusLabel,
                 copy: copy,
                 save: save,
@@ -65,16 +66,27 @@ final class QuickAccessPanelController: NSObject {
         switch status {
         case let .idle(accessibilityLabel):
             item.ocrButton.isEnabled = true
+            item.ocrButton.alphaValue = 1
             item.ocrButton.setAccessibilityHelp(accessibilityLabel)
             item.ocrButton.toolTip = accessibilityLabel
+            item.ocrProgressIndicator.stopAnimation(nil)
+            item.ocrProgressIndicator.isHidden = true
             item.statusLabel.alphaValue = 0
             item.statusLabel.stringValue = ""
         case let .recognizing(message):
             item.ocrButton.isEnabled = false
-            item.statusLabel.stringValue = message
-            item.statusLabel.alphaValue = 1
+            item.ocrButton.alphaValue = 0.18
+            item.ocrButton.setAccessibilityHelp(message)
+            item.ocrButton.toolTip = nil
+            item.ocrProgressIndicator.isHidden = false
+            item.ocrProgressIndicator.startAnimation(nil)
+            item.statusLabel.alphaValue = 0
+            item.statusLabel.stringValue = ""
         case let .message(message, resetAfter):
             item.ocrButton.isEnabled = true
+            item.ocrButton.alphaValue = 1
+            item.ocrProgressIndicator.stopAnimation(nil)
+            item.ocrProgressIndicator.isHidden = true
             item.statusLabel.stringValue = message
             item.statusLabel.alphaValue = 1
             if let resetAfter {
@@ -218,6 +230,13 @@ final class QuickAccessPanelController: NSObject {
             action: #selector(ocrButtonClicked),
             style: .toolbar
         )
+        let ocrProgressIndicator = NSProgressIndicator()
+        ocrProgressIndicator.translatesAutoresizingMaskIntoConstraints = false
+        ocrProgressIndicator.style = .spinning
+        ocrProgressIndicator.controlSize = .small
+        ocrProgressIndicator.isDisplayedWhenStopped = false
+        ocrProgressIndicator.isHidden = true
+        ocrProgressIndicator.setAccessibilityLabel(strings.ocrRecognizing)
         let pinButton = makeIconButton(
             title: strings.quickAccessPin,
             symbolName: "pin",
@@ -243,6 +262,7 @@ final class QuickAccessPanelController: NSObject {
         contentView.addSubview(closeButton)
         contentView.addSubview(statusLabel)
         overlayView.addSubview(stackView)
+        overlayView.addSubview(ocrProgressIndicator)
 
         NSLayoutConstraint.activate([
             imageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
@@ -265,13 +285,23 @@ final class QuickAccessPanelController: NSObject {
             stackView.topAnchor.constraint(equalTo: overlayView.topAnchor, constant: 4),
             stackView.bottomAnchor.constraint(equalTo: overlayView.bottomAnchor, constant: -4),
 
+            ocrProgressIndicator.centerXAnchor.constraint(equalTo: ocrButton.centerXAnchor),
+            ocrProgressIndicator.centerYAnchor.constraint(equalTo: ocrButton.centerYAnchor),
+            ocrProgressIndicator.widthAnchor.constraint(equalToConstant: 14),
+            ocrProgressIndicator.heightAnchor.constraint(equalToConstant: 14),
+
             closeButton.trailingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: -cornerButtonInset),
             closeButton.topAnchor.constraint(equalTo: imageView.topAnchor, constant: cornerButtonInset),
             closeButton.widthAnchor.constraint(equalToConstant: floatingButtonDiameter),
             closeButton.heightAnchor.constraint(equalToConstant: floatingButtonDiameter),
         ])
 
-        return QuickAccessContent(view: contentView, ocrButton: ocrButton, statusLabel: statusLabel)
+        return QuickAccessContent(
+            view: contentView,
+            ocrButton: ocrButton,
+            ocrProgressIndicator: ocrProgressIndicator,
+            statusLabel: statusLabel
+        )
     }
 
     private enum IconButtonStyle {
@@ -512,6 +542,7 @@ enum QuickAccessOCRStatus: Equatable {
 private struct QuickAccessContent {
     let view: NSView
     let ocrButton: NSButton
+    let ocrProgressIndicator: NSProgressIndicator
     let statusLabel: NSTextField
 }
 
@@ -519,6 +550,7 @@ private final class QuickAccessPreviewItem {
     let screenshotID: UUID
     let panel: NSPanel
     let ocrButton: NSButton
+    let ocrProgressIndicator: NSProgressIndicator
     let statusLabel: NSTextField
     let copy: () -> Bool
     let save: () -> Bool
@@ -533,6 +565,7 @@ private final class QuickAccessPreviewItem {
         screenshotID: UUID,
         panel: NSPanel,
         ocrButton: NSButton,
+        ocrProgressIndicator: NSProgressIndicator,
         statusLabel: NSTextField,
         copy: @escaping () -> Bool,
         save: @escaping () -> Bool,
@@ -544,6 +577,7 @@ private final class QuickAccessPreviewItem {
         self.screenshotID = screenshotID
         self.panel = panel
         self.ocrButton = ocrButton
+        self.ocrProgressIndicator = ocrProgressIndicator
         self.statusLabel = statusLabel
         self.copy = copy
         self.save = save

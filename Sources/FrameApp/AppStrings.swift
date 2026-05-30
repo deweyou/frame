@@ -271,6 +271,13 @@ struct AppStrings {
         }
     }
 
+    var ocrDeselectAll: String {
+        switch language {
+        case .zhHans: "清空"
+        case .en: "Clear"
+        }
+    }
+
     var ocrCopySelected: String {
         switch language {
         case .zhHans: "复制"

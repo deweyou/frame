@@ -12,15 +12,17 @@ final class SelectionOverlayWindow {
         initialGlobalRect: CGRect?,
         showsCenteredHUDWhenEmpty: Bool,
         placeholderText: String,
+        ocrActionText: String,
         onInteraction: @escaping () -> Void,
         onWindowSelectionRequested: @escaping (CGPoint) -> WindowCandidate?,
-        onComplete: @escaping (SelectionCapture?) -> Void
+        onComplete: @escaping (SelectionOverlayCompletion?) -> Void
     ) {
         overlayView = SelectionOverlayView(
             screen: screen,
             initialGlobalRect: initialGlobalRect,
             showsCenteredHUDWhenEmpty: showsCenteredHUDWhenEmpty,
             placeholderText: placeholderText,
+            ocrActionText: ocrActionText,
             onInteraction: onInteraction,
             onWindowSelectionRequested: onWindowSelectionRequested,
             onComplete: onComplete
@@ -106,17 +108,19 @@ private final class SelectionOverlayNativeWindow: NSWindow {
 
 @MainActor
 private final class SelectionOverlayView: NSView {
-    private let hudSize = CGSize(width: 176, height: 42)
+    private let hudSize = CGSize(width: 225, height: 42)
     private let screenFrame: CGRect
     private let onInteraction: () -> Void
     private let onWindowSelectionRequested: (CGPoint) -> WindowCandidate?
-    private let onComplete: (SelectionCapture?) -> Void
+    private let onComplete: (SelectionOverlayCompletion?) -> Void
     private let hudStackView = NSStackView()
     private let modeView = NSVisualEffectView()
+    private let ocrView = NSVisualEffectView()
     private let sizeView = NSVisualEffectView()
     private let sizeControl = HUDSizeControl()
     private let placeholderView = NSVisualEffectView()
     private let placeholderLabel: NSTextField
+    private let ocrActionText: String
     private let tooltipView = HUDTooltipView()
     private var pendingTooltipTask: Task<Void, Never>?
     private var hudTheme: HUDTheme = .lightContent
@@ -134,15 +138,17 @@ private final class SelectionOverlayView: NSView {
         initialGlobalRect: CGRect?,
         showsCenteredHUDWhenEmpty: Bool,
         placeholderText: String,
+        ocrActionText: String,
         onInteraction: @escaping () -> Void,
         onWindowSelectionRequested: @escaping (CGPoint) -> WindowCandidate?,
-        onComplete: @escaping (SelectionCapture?) -> Void
+        onComplete: @escaping (SelectionOverlayCompletion?) -> Void
     ) {
         self.screenFrame = screen.frame
         self.showsCenteredHUDWhenEmpty = showsCenteredHUDWhenEmpty
         self.onInteraction = onInteraction
         self.onWindowSelectionRequested = onWindowSelectionRequested
         self.onComplete = onComplete
+        self.ocrActionText = ocrActionText
         self.placeholderLabel = NSTextField(labelWithString: placeholderText)
 
         super.init(frame: CGRect(origin: .zero, size: screen.frame.size))
@@ -325,35 +331,48 @@ private final class SelectionOverlayView: NSView {
         modeView.isHidden = true
         modeView.addSubview(makeRegionModeButton())
 
+        configureGlass(ocrView, cornerRadius: 21)
+        ocrView.isHidden = true
+        ocrView.addSubview(makeOCRButton())
+
         configureGlass(sizeView, cornerRadius: 21)
         sizeView.isHidden = true
         sizeView.addSubview(sizeControl)
         configureSizeControl()
 
         hudStackView.addArrangedSubview(modeView)
+        hudStackView.addArrangedSubview(ocrView)
         hudStackView.addArrangedSubview(sizeView)
         addSubview(hudStackView)
         tooltipView.isHidden = true
         addSubview(tooltipView)
 
-        guard let modeButton = modeView.subviews.first else {
+        guard let modeButton = modeView.subviews.first,
+              let ocrButton = ocrView.subviews.first else {
             return
         }
 
         NSLayoutConstraint.activate([
             modeView.widthAnchor.constraint(equalToConstant: 42),
             modeView.heightAnchor.constraint(equalToConstant: hudSize.height),
+            ocrView.widthAnchor.constraint(equalToConstant: 42),
+            ocrView.heightAnchor.constraint(equalToConstant: hudSize.height),
             sizeView.widthAnchor.constraint(equalToConstant: 127),
             sizeView.heightAnchor.constraint(equalToConstant: hudSize.height),
         ])
 
         modeButton.translatesAutoresizingMaskIntoConstraints = false
+        ocrButton.translatesAutoresizingMaskIntoConstraints = false
         sizeControl.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             modeButton.centerXAnchor.constraint(equalTo: modeView.centerXAnchor),
             modeButton.centerYAnchor.constraint(equalTo: modeView.centerYAnchor),
             modeButton.widthAnchor.constraint(equalToConstant: 42),
             modeButton.heightAnchor.constraint(equalToConstant: 42),
+            ocrButton.centerXAnchor.constraint(equalTo: ocrView.centerXAnchor),
+            ocrButton.centerYAnchor.constraint(equalTo: ocrView.centerYAnchor),
+            ocrButton.widthAnchor.constraint(equalToConstant: 42),
+            ocrButton.heightAnchor.constraint(equalToConstant: 42),
             sizeControl.leadingAnchor.constraint(equalTo: sizeView.leadingAnchor),
             sizeControl.trailingAnchor.constraint(equalTo: sizeView.trailingAnchor),
             sizeControl.topAnchor.constraint(equalTo: sizeView.topAnchor),
@@ -412,6 +431,24 @@ private final class SelectionOverlayView: NSView {
         return button
     }
 
+    private func makeOCRButton() -> NSButton {
+        let button = HUDIconButton(
+            symbolName: "text.viewfinder",
+            accessibilityDescription: ocrActionText
+        )
+        button.target = self
+        button.action = #selector(ocrButtonClicked)
+        button.onHoverChange = { [weak self, weak button] isHovering in
+            guard let self else {
+                return
+            }
+
+            self.setHUDTooltip(isHovering ? self.ocrActionText : nil, anchorView: button)
+        }
+        button.contentTintColor = hudTheme.foregroundColor
+        return button
+    }
+
     private func configureSizeControl() {
         sizeControl.onWidthCommit = { [weak self] width in
             self?.applySizeEdit(.width, value: width)
@@ -432,7 +469,7 @@ private final class SelectionOverlayView: NSView {
 
     private func applyHUDTheme(_ theme: HUDTheme) {
         hudTheme = theme
-        [modeView, sizeView].forEach { view in
+        [modeView, ocrView, sizeView].forEach { view in
             view.layer?.borderColor = theme.borderColor.cgColor
             view.layer?.backgroundColor = theme.backgroundColor.cgColor
         }
@@ -441,6 +478,8 @@ private final class SelectionOverlayView: NSView {
         placeholderLabel.textColor = theme.foregroundColor
         modeButton?.contentTintColor = theme.foregroundColor
         modeButton?.hoverColor = theme.hoverColor
+        ocrButton?.contentTintColor = theme.foregroundColor
+        ocrButton?.hoverColor = theme.hoverColor
         tooltipView.applyTheme(theme)
         if let displayedLocalRect {
             updateSizeControl(
@@ -545,17 +584,27 @@ private final class SelectionOverlayView: NSView {
         tooltipView.isHidden = false
     }
 
-    private func completeSelection(with selection: SelectionCapture?) {
+    private func completeSelection(with completion: SelectionOverlayCompletion?) {
         guard !hasCompleted else {
             return
         }
 
         hasCompleted = true
-        onComplete(selection)
+        onComplete(completion)
     }
 
     @objc private func regionModeButtonClicked() {
         confirmSelection()
+    }
+
+    @objc private func ocrButtonClicked() {
+        guard let activeSelection,
+              SelectionGeometry.isValidSelection(activeSelection.rect) else {
+            NSSound.beep()
+            return
+        }
+
+        completeSelection(with: .recognizeText(activeSelection))
     }
 
     private func confirmSelection() {
@@ -565,7 +614,7 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
-        completeSelection(with: activeSelection)
+        completeSelection(with: .capture(activeSelection))
     }
 
     private func selectWindowCandidate(at localPoint: CGPoint) {
@@ -591,6 +640,7 @@ private final class SelectionOverlayView: NSView {
         guard let displayedLocalRect else {
             hudStackView.isHidden = true
             modeView.isHidden = true
+            ocrView.isHidden = true
             sizeView.isHidden = true
             placeholderView.isHidden = !showsCenteredHUDWhenEmpty
             updateSizeControl(width: 0, height: 0)
@@ -603,6 +653,7 @@ private final class SelectionOverlayView: NSView {
         placeholderView.isHidden = true
         hudStackView.isHidden = false
         modeView.isHidden = false
+        ocrView.isHidden = false
         sizeView.isHidden = false
         updateSizeControl(
             width: Int(displayedLocalRect.width.rounded()),
@@ -679,6 +730,10 @@ private final class SelectionOverlayView: NSView {
 
     private var modeButton: HUDIconButton? {
         modeView.subviews.first as? HUDIconButton
+    }
+
+    private var ocrButton: HUDIconButton? {
+        ocrView.subviews.first as? HUDIconButton
     }
 
     private var displayedLocalRect: CGRect? {

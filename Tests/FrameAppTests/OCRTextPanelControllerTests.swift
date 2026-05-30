@@ -7,7 +7,7 @@ import XCTest
 final class OCRTextPanelControllerTests: XCTestCase {
     private var retainedControllers: [OCRTextPanelController] = []
 
-    func testOCRPanelShowsScreenshotPreviewCutsAndDisabledCopyButton() throws {
+    func testOCRPanelShowsClearCutsWithoutScreenshotPreviewAndDisabledCopyButton() throws {
         _ = NSApplication.shared
         let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
         let controller = OCRTextPanelController()
@@ -28,11 +28,20 @@ final class OCRTextPanelControllerTests: XCTestCase {
         let contentView = try XCTUnwrap(panel.contentView)
         panel.contentView?.layoutSubtreeIfNeeded()
 
-        XCTAssertNotNil(findImageView(in: contentView))
-        XCTAssertEqual(findButtons(in: contentView, accessibilityPrefix: "OCR Cut").map(\.title), ["为", "什", "么", "hello"])
+        XCTAssertNil(findImageView(in: contentView))
+        let cutButtons = findButtons(in: contentView, accessibilityPrefix: "OCR Cut")
+        XCTAssertEqual(cutButtons.map(\.title), ["为", "什", "么", "hello"])
+        for button in cutButtons {
+            XCTAssertEqual(button.layer?.borderWidth, 1)
+            XCTAssertGreaterThanOrEqual(button.intrinsicContentSize.height, 28)
+            XCTAssertGreaterThan(button.intrinsicContentSize.width, button.attributedTitle.size().width)
+            XCTAssertEqual(button.layer?.borderColor, NSColor.separatorColor.withAlphaComponent(0.35).cgColor)
+        }
 
         let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected"))
         XCTAssertFalse(copyButton.isEnabled)
+        let copyAllButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy All"))
+        XCTAssertTrue(copyAllButton.isEnabled)
     }
 
     func testOCRPanelReusesExistingWindowForSameScreenshot() throws {
@@ -75,6 +84,7 @@ final class OCRTextPanelControllerTests: XCTestCase {
         let selectAllButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Select All"))
         XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(selectAllButton.action), to: selectAllButton.target, from: selectAllButton))
         XCTAssertTrue(try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected")).isEnabled)
+        XCTAssertNotNil(findButton(in: contentView, accessibilityLabel: "Clear"))
 
         controller.show(
             layout: RecognizedTextLayout(lines: [
@@ -88,6 +98,7 @@ final class OCRTextPanelControllerTests: XCTestCase {
         contentView = try XCTUnwrap(panel.contentView)
         XCTAssertEqual(findButtons(in: contentView, accessibilityPrefix: "OCR Cut").map(\.title), ["world"])
         XCTAssertFalse(try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected")).isEnabled)
+        XCTAssertNotNil(findButton(in: contentView, accessibilityLabel: "Select All"))
     }
 
     func testOCRPanelCutDocumentExpandsBeyondViewportForManyRows() throws {
@@ -115,8 +126,39 @@ final class OCRTextPanelControllerTests: XCTestCase {
         let scrollView = try XCTUnwrap(findScrollView(in: contentView))
         let documentView = try XCTUnwrap(scrollView.documentView)
         XCTAssertEqual(findButtons(in: contentView, accessibilityPrefix: "OCR Cut").count, lines.count)
+        XCTAssertFalse(scrollView.hasHorizontalScroller)
         XCTAssertGreaterThan(documentView.frame.height, scrollView.contentView.bounds.height)
         XCTAssertGreaterThan(documentView.frame.height, 500)
+    }
+
+    func testOCRPanelWrapsCutsInsteadOfScrollingHorizontally() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = OCRTextPanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeScreenshot()
+
+        controller.show(
+            layout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(text: "一二三四五六七八九十十一十二十三十四十五十六", bounds: .zero, confidence: 0.9),
+            ]),
+            for: screenshot,
+            strings: AppStrings(language: .en),
+            copyText: { _ in true }
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer { panel.close() }
+        let contentView = try XCTUnwrap(panel.contentView)
+        panel.contentView?.layoutSubtreeIfNeeded()
+
+        let scrollView = try XCTUnwrap(findScrollView(in: contentView))
+        let documentView = try XCTUnwrap(scrollView.documentView)
+        let cutButtons = findButtons(in: contentView, accessibilityPrefix: "OCR Cut")
+        XCTAssertGreaterThan(cutButtons.count, 12)
+        XCTAssertFalse(scrollView.hasHorizontalScroller)
+        XCTAssertEqual(documentView.frame.width, scrollView.contentView.bounds.width, accuracy: 1)
+        XCTAssertGreaterThan(Set(cutButtons.map { round($0.frame.minY) }).count, 1)
     }
 
     func testOCRPanelFooterButtonsUseOrderedStackLayout() throws {
@@ -144,9 +186,15 @@ final class OCRTextPanelControllerTests: XCTestCase {
         let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected"))
         let footerStack = try XCTUnwrap(selectAllButton.superview as? NSStackView)
         XCTAssertTrue(copyButton.superview === footerStack)
+        let copyAllButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy All"))
+        XCTAssertTrue(copyAllButton.superview === footerStack)
         XCTAssertLessThan(
             footerStack.arrangedSubviews.firstIndex(of: selectAllButton) ?? .max,
             footerStack.arrangedSubviews.firstIndex(of: copyButton) ?? .min
+        )
+        XCTAssertLessThan(
+            footerStack.arrangedSubviews.firstIndex(of: copyButton) ?? .max,
+            footerStack.arrangedSubviews.firstIndex(of: copyAllButton) ?? .min
         )
         XCTAssertGreaterThanOrEqual(copyButton.frame.minX, selectAllButton.frame.maxX + footerStack.spacing)
     }
@@ -207,6 +255,111 @@ final class OCRTextPanelControllerTests: XCTestCase {
         XCTAssertEqual(copiedText, "为什么 hello")
     }
 
+    func testSelectAllButtonTogglesToDeselectAll() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = OCRTextPanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeScreenshot()
+
+        controller.show(
+            layout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(text: "为什么 hello", bounds: .zero, confidence: 0.9),
+            ]),
+            for: screenshot,
+            strings: AppStrings(language: .en),
+            copyText: { _ in true }
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer { panel.close() }
+        let contentView = try XCTUnwrap(panel.contentView)
+
+        let selectAllButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Select All"))
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(selectAllButton.action), to: selectAllButton.target, from: selectAllButton))
+        let deselectAllButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Clear"))
+        XCTAssertTrue(try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected")).isEnabled)
+
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(deselectAllButton.action), to: deselectAllButton.target, from: deselectAllButton))
+        XCTAssertFalse(try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected")).isEnabled)
+        XCTAssertNotNil(findButton(in: contentView, accessibilityLabel: "Select All"))
+    }
+
+    func testCopyAllIsAvailableWithoutSelection() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = OCRTextPanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeScreenshot()
+        var copiedText: String?
+
+        controller.show(
+            layout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(text: "为什么 hello", bounds: .zero, confidence: 0.9),
+            ]),
+            for: screenshot,
+            strings: AppStrings(language: .en),
+            copyText: { text in
+                copiedText = text
+                return true
+            }
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer { panel.close() }
+        let contentView = try XCTUnwrap(panel.contentView)
+
+        XCTAssertFalse(try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected")).isEnabled)
+        let copyAllButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy All"))
+        XCTAssertTrue(copyAllButton.isEnabled)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(copyAllButton.action), to: copyAllButton.target, from: copyAllButton))
+        XCTAssertEqual(copiedText, "为什么 hello")
+    }
+
+    func testCommandASelectsAllCuts() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = OCRTextPanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeScreenshot()
+        var copiedText: String?
+
+        controller.show(
+            layout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(text: "为什么 hello", bounds: .zero, confidence: 0.9),
+            ]),
+            for: screenshot,
+            strings: AppStrings(language: .en),
+            copyText: { text in
+                copiedText = text
+                return true
+            }
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer { panel.close() }
+        let contentView = try XCTUnwrap(panel.contentView)
+
+        let event = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: .command,
+            timestamp: 0,
+            windowNumber: panel.windowNumber,
+            context: nil,
+            characters: "a",
+            charactersIgnoringModifiers: "a",
+            isARepeat: false,
+            keyCode: 0
+        ))
+        XCTAssertTrue(panel.performKeyEquivalent(with: event))
+
+        let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected"))
+        XCTAssertTrue(copyButton.isEnabled)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(copyButton.action), to: copyButton.target, from: copyButton))
+        XCTAssertEqual(copiedText, "为什么 hello")
+    }
+
     func testSelectingCutsByIDsEnablesCopySelected() throws {
         _ = NSApplication.shared
         let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
@@ -232,6 +385,75 @@ final class OCRTextPanelControllerTests: XCTestCase {
 
         let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected"))
         XCTAssertTrue(copyButton.isEnabled)
+    }
+
+    func testShiftSelectingCutSelectsRangeFromPreviousSelection() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = OCRTextPanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeScreenshot()
+        var copiedText: String?
+
+        controller.show(
+            layout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(text: "为什么 hello", bounds: .zero, confidence: 0.9),
+            ]),
+            for: screenshot,
+            strings: AppStrings(language: .en),
+            copyText: { text in
+                copiedText = text
+                return true
+            }
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer { panel.close() }
+        let contentView = try XCTUnwrap(panel.contentView)
+        let cutButtons = findButtons(in: contentView, accessibilityPrefix: "OCR Cut")
+        XCTAssertGreaterThanOrEqual(cutButtons.count, 4)
+
+        controller.selectCutButtonsForTesting([cutButtons[0]], in: panel)
+        controller.shiftSelectCutButtonForTesting(cutButtons[2], in: panel)
+
+        let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected"))
+        XCTAssertTrue(copyButton.isEnabled)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(copyButton.action), to: copyButton.target, from: copyButton))
+        XCTAssertEqual(copiedText, "为什么")
+    }
+
+    func testShiftSelectingWithoutAnchorSelectsClickedCut() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = OCRTextPanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeScreenshot()
+        var copiedText: String?
+
+        controller.show(
+            layout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(text: "为什么 hello", bounds: .zero, confidence: 0.9),
+            ]),
+            for: screenshot,
+            strings: AppStrings(language: .en),
+            copyText: { text in
+                copiedText = text
+                return true
+            }
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer { panel.close() }
+        let contentView = try XCTUnwrap(panel.contentView)
+        let cutButtons = findButtons(in: contentView, accessibilityPrefix: "OCR Cut")
+        XCTAssertGreaterThanOrEqual(cutButtons.count, 4)
+
+        controller.shiftSelectCutButtonForTesting(cutButtons[3], in: panel)
+
+        let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected"))
+        XCTAssertTrue(copyButton.isEnabled)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(copyButton.action), to: copyButton.target, from: copyButton))
+        XCTAssertEqual(copiedText, "hello")
     }
 
     func testScrubSelectionOnlyContinuesDuringActiveSession() throws {
@@ -269,6 +491,46 @@ final class OCRTextPanelControllerTests: XCTestCase {
         XCTAssertTrue(copyButton.isEnabled)
         XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(copyButton.action), to: copyButton.target, from: copyButton))
         XCTAssertEqual(copiedText, "为什")
+    }
+
+    func testScrubSelectionFollowsDraggedWindowPointAcrossCuts() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = OCRTextPanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeScreenshot()
+        var copiedText: String?
+
+        controller.show(
+            layout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(text: "为什么 hello", bounds: .zero, confidence: 0.9),
+            ]),
+            for: screenshot,
+            strings: AppStrings(language: .en),
+            copyText: { text in
+                copiedText = text
+                return true
+            }
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer { panel.close() }
+        let contentView = try XCTUnwrap(panel.contentView)
+        panel.contentView?.layoutSubtreeIfNeeded()
+        let cutButtons = findButtons(in: contentView, accessibilityPrefix: "OCR Cut")
+        XCTAssertGreaterThanOrEqual(cutButtons.count, 3)
+
+        controller.beginScrubSelectionForTesting(from: cutButtons[0], in: panel)
+        for button in cutButtons[1...2] {
+            let point = button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
+            controller.continueScrubSelectionForTesting(atWindowPoint: point, in: panel)
+        }
+        controller.endScrubSelectionForTesting()
+
+        let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected"))
+        XCTAssertTrue(copyButton.isEnabled)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(copyButton.action), to: copyButton.target, from: copyButton))
+        XCTAssertEqual(copiedText, "为什么")
     }
 
     func testClosePanelForScreenshotClosesMatchingPanelOnly() throws {

@@ -208,16 +208,19 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         let contentView = try XCTUnwrap(panel.contentView)
         let ocrButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Recognize Text"))
         let statusLabel = try XCTUnwrap(findTextField(in: contentView, accessibilityLabel: "OCR Status"))
+        let progressIndicator = try XCTUnwrap(findProgressIndicator(in: contentView, accessibilityLabel: "Recognizing..."))
 
         controller.setOCRStatus(.recognizing("Recognizing..."), for: screenshot)
 
         XCTAssertFalse(ocrButton.isEnabled)
-        XCTAssertEqual(statusLabel.stringValue, "Recognizing...")
-        XCTAssertEqual(statusLabel.alphaValue, 1, accuracy: 0.01)
+        XCTAssertFalse(progressIndicator.isHidden)
+        XCTAssertEqual(statusLabel.stringValue, "")
+        XCTAssertEqual(statusLabel.alphaValue, 0, accuracy: 0.01)
 
         controller.setOCRStatus(.message("No text found", resetAfter: nil), for: screenshot)
 
         XCTAssertTrue(ocrButton.isEnabled)
+        XCTAssertTrue(progressIndicator.isHidden)
         XCTAssertEqual(statusLabel.stringValue, "No text found")
         XCTAssertEqual(statusLabel.alphaValue, 1, accuracy: 0.01)
     }
@@ -437,6 +440,21 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         for subview in view.subviews {
             if let textField = findTextField(in: subview, accessibilityLabel: accessibilityLabel) {
                 return textField
+            }
+        }
+
+        return nil
+    }
+
+    private func findProgressIndicator(in view: NSView, accessibilityLabel: String) -> NSProgressIndicator? {
+        if let progressIndicator = view as? NSProgressIndicator,
+           progressIndicator.accessibilityLabel() == accessibilityLabel {
+            return progressIndicator
+        }
+
+        for subview in view.subviews {
+            if let progressIndicator = findProgressIndicator(in: subview, accessibilityLabel: accessibilityLabel) {
+                return progressIndicator
             }
         }
 

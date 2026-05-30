@@ -4,14 +4,14 @@ import FrameCore
 @MainActor
 final class SelectionOverlayController {
     private var overlayWindows: [SelectionOverlayWindow] = []
-    private var completion: ((SelectionCapture?) -> Void)?
+    private var completion: ((SelectionOverlayCompletion?) -> Void)?
     private var keyMonitor: Any?
     private var lastSelectionHistory: SelectionHistory?
     private let windowCandidateProvider = WindowCandidateProvider()
 
     func startSelection(
         strings: AppStrings = AppStrings.current(),
-        completion: @escaping (SelectionCapture?) -> Void
+        completion: @escaping (SelectionOverlayCompletion?) -> Void
     ) {
         finishSelection(with: nil)
 
@@ -38,6 +38,7 @@ final class SelectionOverlayController {
                 initialGlobalRect: initialRect,
                 showsCenteredHUDWhenEmpty: screen === activeScreen,
                 placeholderText: strings.capturePlaceholder,
+                ocrActionText: strings.quickAccessOCR,
                 onInteraction: { [weak self] in
                     guard let createdWindow else {
                         return
@@ -48,8 +49,8 @@ final class SelectionOverlayController {
                 onWindowSelectionRequested: { [weak self] globalPoint in
                     self?.windowCandidateProvider.candidate(at: globalPoint)
                 },
-                onComplete: { [weak self] selection in
-                    self?.finishSelection(with: selection)
+                onComplete: { [weak self] completion in
+                    self?.finishSelection(with: completion)
                 }
             )
             createdWindow = window
@@ -105,7 +106,7 @@ final class SelectionOverlayController {
         return intersection.width * intersection.height
     }
 
-    private func finishSelection(with selection: SelectionCapture?) {
+    private func finishSelection(with completionResult: SelectionOverlayCompletion?) {
         guard let completion else {
             return
         }
@@ -113,7 +114,7 @@ final class SelectionOverlayController {
         self.completion = nil
         removeKeyMonitor()
 
-        if let selection {
+        if let selection = completionResult?.selection {
             lastSelectionHistory = SelectionHistory(
                 rect: selection.rect,
                 displayID: displayID(for: screen(containing: selection.rect))
@@ -126,7 +127,7 @@ final class SelectionOverlayController {
         }
         overlayWindows.removeAll()
 
-        completion(selection)
+        completion(completionResult)
     }
 
     private func confirmCurrentSelection() {
@@ -140,7 +141,7 @@ final class SelectionOverlayController {
             return
         }
 
-        finishSelection(with: selection)
+        finishSelection(with: .capture(selection))
     }
 
     private func installKeyMonitor() {
