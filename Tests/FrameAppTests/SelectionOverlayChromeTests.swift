@@ -38,6 +38,20 @@ final class SelectionOverlayChromeTests: XCTestCase {
         XCTAssertLessThanOrEqual(brightStyle.alpha, 0.72)
         XCTAssertLessThanOrEqual(darkStyle.alpha, 0.9)
     }
+
+    func testHUDBackgroundEstimateIgnoresSparseDarkForegroundText() {
+        let samples = Array(repeating: CGFloat(0.88), count: 80)
+            + Array(repeating: CGFloat(0.08), count: 20)
+
+        XCTAssertEqual(ScreenLuminanceSampler.estimatedBackgroundLuminance(from: samples), 0.88)
+    }
+
+    func testHUDBackgroundEstimateKeepsMostlyDarkBackgroundDark() {
+        let samples = Array(repeating: CGFloat(0.14), count: 80)
+            + Array(repeating: CGFloat(0.78), count: 20)
+
+        XCTAssertEqual(ScreenLuminanceSampler.estimatedBackgroundLuminance(from: samples), 0.14)
+    }
 }
 
 private extension SelectionChromeCornerPath {

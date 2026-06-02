@@ -121,3 +121,18 @@ system tool, not a branded dashboard.
   separate disabled action reserved for future edited-image persistence.
 - It should stay lightweight and dismissible, without blocking normal system
   usage.
+
+## Capture History
+
+- Capture History is a recovery browser, not a file manager. Prefer preview
+  tiles over table rows so screenshot content remains the primary surface.
+- Use a native macOS window with system traffic-light controls, a transparent
+  titlebar, and `fullSizeContentView`. Avoid a fully custom borderless window
+  unless the product intentionally gives up standard window behavior.
+- The titlebar chrome should blend with the content background. Keep the
+  traffic-light safe area clear, and place compact filters in the titlebar
+  rather than adding a separate toolbar band.
+- History tiles follow the Quick Access visual language: rounded image preview,
+  fine translucent border, compact metadata, and icon-only hover HUD actions.
+- Keep history actions hidden until the tile is hovered. Metadata should remain
+  one compact line below the preview and must not reintroduce table columns.

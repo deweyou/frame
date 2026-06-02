@@ -22,7 +22,8 @@ final class SettingsWindowControllerTests: XCTestCase {
             onCheckPermission: {},
             onLanguageChange: { _ in },
             onChooseScreenshotDirectory: { nil },
-            onResetScreenshotDirectory: {}
+            onResetScreenshotDirectory: {},
+            onClearCaptureHistory: {}
         )
 
         let window = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) })

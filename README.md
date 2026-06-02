@@ -15,6 +15,7 @@ Screenshots are often a tiny step inside a larger workflow: explaining an idea, 
 - Works across multiple displays.
 - Shows a small Quick Access preview after capture.
 - Lets you copy, save, or close from hover actions.
+- Keeps a local Capture History so recent captures can be recovered.
 
 ## What Frame Does
 
@@ -22,6 +23,7 @@ Screenshots are often a tiny step inside a larger workflow: explaining an idea, 
 - PNG output: saved files use the `Frame yyyy-MM-dd HH.mm.ss.png` filename format.
 - Clipboard copy: copy the captured image for pasting into chat, docs, or other apps.
 - Desktop save: save the PNG to the current user's Desktop.
+- Local capture history: recover recent captures from the menu bar. History is enabled by default, keeps captures for 7 days, and uses a 2 GB local cache limit.
 - Multi-display selection: show capture overlays across connected displays and account for Retina scale and screen coordinates.
 - Permission guidance: explain missing Screen Recording permission and open the relevant system settings.
 
@@ -29,7 +31,7 @@ Screenshots are often a tiny step inside a larger workflow: explaining an idea, 
 
 Frame uses macOS screen capture APIs, so it needs Screen Recording permission.
 
-The capture flow runs locally. Frame does not upload screenshots, keep screenshot history, require an account, or sync captures to a cloud service. Save writes a PNG only when you choose to save. Copy writes the image only to the system clipboard.
+The capture flow runs locally. Frame does not upload screenshots, require an account, or sync captures to a cloud service. Capture History stores recent captures only in Frame's local Application Support cache and can be disabled or cleared from Settings. Save writes a separate PNG only when you choose to save. Copy writes the image only to the system clipboard.
 
 If macOS says Frame can directly access screen content, that is the standard system wording for screenshot utilities. See [macOS Permissions](docs/permissions.md) for details.
 
@@ -39,8 +41,6 @@ Frame currently does not include:
 
 - screen recording
 - annotation tools
-- OCR
-- screenshot history
 - cloud sync or share links
 - scrolling capture
 

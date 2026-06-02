@@ -11,10 +11,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let captureService = CaptureService()
     private let quickAccessPanelController = QuickAccessPanelController()
     private let imageWorkspacePanelController = ImageWorkspacePanelController()
+    private let captureHistoryStore = CaptureHistoryStore()
     private let ocrService = OCRService()
     private let ocrTextPanelController = OCRTextPanelController()
     private let clipboardWriter = ClipboardWriter()
     private let settingsWindowController = SettingsWindowController()
+    private var captureHistoryWindowController: CaptureHistoryWindowController?
     private var strings = AppStrings.current()
     private var activeQuickAccessScreenshotIDs: Set<UUID> = []
     private var recognizingScreenshotIDs: Set<UUID> = []
@@ -27,10 +29,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onCapture: { [weak self] in
                 self?.onCapture()
             },
+            onHistory: { [weak self] in
+                self?.onHistory()
+            },
             onSettings: { [weak self] in
                 self?.onSettings()
             }
         )
+
+        try? captureHistoryStore.cleanup()
 
         let hotKeyController = HotKeyController(shortcut: SettingsStore.screenshotShortcut())
         hotKeyController.onScreenshot = { [weak self] in
@@ -79,8 +86,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onResetScreenshotDirectory: {
                 SettingsStore.resetScreenshotDirectory()
+            },
+            onClearCaptureHistory: { [weak self] in
+                try? self?.captureHistoryStore.clear()
             }
         )
+    }
+
+    @objc func onHistory() {
+        showCaptureHistory()
     }
 
     func startCaptureFlow() {
@@ -113,6 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     case let .capture(selection):
                         do {
                             let screenshot = try await self.captureService.capture(selection: selection)
+                            self.storeInCaptureHistory(screenshot)
                             self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
                             self.showQuickAccess(for: screenshot, anchor: quickAccessAnchor)
                             NSLog("Frame 截图选区类型：\(selection.kind)")
@@ -211,6 +226,91 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSLog(
             "Frame 已捕获截图：rect=\(screenshot.rect.debugDescription), pngSize=\(screenshot.pngData.count) bytes"
         )
+    }
+
+    private func showCaptureHistory() {
+        let controller = captureHistoryWindowController ?? CaptureHistoryWindowController(
+            store: captureHistoryStore,
+            restore: { [weak self] record in
+                self?.restoreHistoryRecord(record)
+            },
+            copy: { [weak self] record in
+                self?.copyHistoryRecord(record)
+            },
+            save: { [weak self] record in
+                self?.saveHistoryRecord(record)
+            },
+            delete: { [weak self] record in
+                self?.deleteHistoryRecord(record)
+            }
+        )
+        captureHistoryWindowController = controller
+        controller.show(strings: strings)
+    }
+
+    private func storeInCaptureHistory(_ screenshot: CapturedScreenshot) {
+        do {
+            _ = try captureHistoryStore.addScreenshot(screenshot)
+        } catch {
+            NSLog("Frame 写入截图历史失败: \(error.localizedDescription)")
+        }
+    }
+
+    private func screenshot(from record: CaptureHistoryRecord) throws -> CapturedScreenshot {
+        let data = try captureHistoryStore.data(for: record)
+        guard let image = NSImage(data: data) else {
+            throw CaptureHistoryError.imageDecodeFailed
+        }
+
+        return CapturedScreenshot(pngData: data, image: image, rect: record.rect)
+    }
+
+    private func restoreHistoryRecord(_ record: CaptureHistoryRecord) {
+        guard record.kind == .screenshot else {
+            NSWorkspace.shared.open(captureHistoryStore.fileURL(for: record))
+            return
+        }
+
+        do {
+            showQuickAccess(
+                for: try screenshot(from: record),
+                anchor: ActiveScreenResolver.preferredQuickAccessFollowAnchor()
+            )
+        } catch {
+            showQuickAccessFailedAlert(title: strings.captureFailedTitle, error: error)
+        }
+    }
+
+    private func copyHistoryRecord(_ record: CaptureHistoryRecord) {
+        guard record.kind == .screenshot else {
+            return
+        }
+
+        do {
+            _ = copyToClipboard(try screenshot(from: record))
+        } catch {
+            showQuickAccessFailedAlert(title: strings.copyFailedTitle, error: error)
+        }
+    }
+
+    private func saveHistoryRecord(_ record: CaptureHistoryRecord) {
+        guard record.kind == .screenshot else {
+            return
+        }
+
+        do {
+            _ = saveToDesktop(try screenshot(from: record))
+        } catch {
+            showQuickAccessFailedAlert(title: strings.saveFailedTitle, error: error)
+        }
+    }
+
+    private func deleteHistoryRecord(_ record: CaptureHistoryRecord) {
+        do {
+            try captureHistoryStore.delete(recordID: record.id)
+        } catch {
+            showQuickAccessFailedAlert(title: strings.captureHistoryDelete, error: error)
+        }
     }
 
     private func openWorkspace(_ screenshot: CapturedScreenshot, kind: ImageWorkspaceKind) -> Bool {
@@ -457,5 +557,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.informativeText = error.localizedDescription
         alert.addButton(withTitle: strings.ok)
         alert.runModal()
+    }
+}
+
+private enum CaptureHistoryError: Error, LocalizedError {
+    case imageDecodeFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .imageDecodeFailed:
+            "Could not decode the cached capture image."
+        }
     }
 }

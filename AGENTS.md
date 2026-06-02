@@ -1,9 +1,3 @@
-<!-- deweyou-agent:start -->
-## Dewey Workflow
-
-This repository uses Dewey's personal agent workflow. Inspect `.agents/` before making changes, then run `deweyou-cli agent context --format markdown` and follow the returned rules, skill index, asset paths, and runtime notices.
-<!-- deweyou-agent:end -->
-
 ## Project Context
 
 Frame is a native macOS screenshot utility. The current implemented scope focuses on the local screenshot loop:

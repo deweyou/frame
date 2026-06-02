@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import FrameApp
 @testable import FrameCore
@@ -25,5 +26,19 @@ final class SelectionOverlayCompletionTests: XCTestCase {
 
         XCTAssertEqual(completion.selection.rect, selection.rect)
         XCTAssertEqual(completion.selection.kind, selection.kind)
+    }
+
+    @MainActor
+    func testCancelSelectionRestoresCursor() {
+        _ = NSApplication.shared
+        var didResetCursor = false
+        let controller = SelectionOverlayController(resetCursor: {
+            didResetCursor = true
+        })
+
+        controller.startSelection { _ in }
+        controller.cancelSelection()
+
+        XCTAssertTrue(didResetCursor)
     }
 }

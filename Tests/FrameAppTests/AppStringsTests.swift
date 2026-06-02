@@ -6,18 +6,28 @@ final class AppStringsTests: XCTestCase {
         let strings = AppStrings(language: .en)
 
         XCTAssertEqual(strings.menuCapture, "Capture")
+        XCTAssertEqual(strings.menuCaptureHistory, "Capture History")
         XCTAssertEqual(strings.settingsTitle, "Settings")
+        XCTAssertEqual(strings.settingsCaptureHistory, "Local history")
         XCTAssertEqual(strings.capturePlaceholder, "Drag to select an area")
         XCTAssertEqual(strings.quickAccessSave, "Save")
+        XCTAssertEqual(strings.captureHistoryTitle, "Capture History")
+        XCTAssertEqual(strings.captureHistoryEmpty, "No local history yet")
+        XCTAssertEqual(strings.captureHistoryRestore, "Restore")
     }
 
     func testExplicitChineseStrings() {
         let strings = AppStrings(language: .zhHans)
 
         XCTAssertEqual(strings.menuCapture, "截图")
+        XCTAssertEqual(strings.menuCaptureHistory, "截图历史")
         XCTAssertEqual(strings.settingsTitle, "设置")
+        XCTAssertEqual(strings.settingsCaptureHistory, "本地历史")
         XCTAssertEqual(strings.capturePlaceholder, "拖拽以选择截图区域")
         XCTAssertEqual(strings.quickAccessSave, "保存")
+        XCTAssertEqual(strings.captureHistoryTitle, "截图历史")
+        XCTAssertEqual(strings.captureHistoryEmpty, "暂无本地历史")
+        XCTAssertEqual(strings.captureHistoryRestore, "恢复")
     }
 
     func testOCRStringsAreLocalized() {
