@@ -6,6 +6,9 @@ enum SettingsStore {
     static let appLanguageKey = "appLanguage"
     static let screenshotDirectoryKey = "screenshotDirectory"
     static let ocrRecognitionLanguagesKey = "ocrRecognitionLanguages"
+    static let captureHistoryEnabledKey = "captureHistoryEnabled"
+    static let captureHistoryRetentionKey = "captureHistoryRetention"
+    static let captureHistorySizeLimitKey = "captureHistorySizeLimit"
 
     static func screenshotShortcut(defaults: UserDefaults = .standard) -> ScreenshotShortcut {
         ScreenshotShortcut.persistedValue(for: defaults.string(forKey: screenshotShortcutKey))
@@ -68,5 +71,41 @@ enum SettingsStore {
 
     static func resetScreenshotDirectory(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: screenshotDirectoryKey)
+    }
+
+    static func isCaptureHistoryEnabled(defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: captureHistoryEnabledKey) != nil else {
+            return true
+        }
+
+        return defaults.bool(forKey: captureHistoryEnabledKey)
+    }
+
+    static func setCaptureHistoryEnabled(_ isEnabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(isEnabled, forKey: captureHistoryEnabledKey)
+    }
+
+    static func captureHistoryRetention(defaults: UserDefaults = .standard) -> CaptureHistoryRetention {
+        CaptureHistoryRetention(rawValue: defaults.string(forKey: captureHistoryRetentionKey) ?? "")
+            ?? .sevenDays
+    }
+
+    static func setCaptureHistoryRetention(
+        _ retention: CaptureHistoryRetention,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(retention.rawValue, forKey: captureHistoryRetentionKey)
+    }
+
+    static func captureHistorySizeLimit(defaults: UserDefaults = .standard) -> CaptureHistorySizeLimit {
+        CaptureHistorySizeLimit(rawValue: defaults.string(forKey: captureHistorySizeLimitKey) ?? "")
+            ?? .twoGB
+    }
+
+    static func setCaptureHistorySizeLimit(
+        _ sizeLimit: CaptureHistorySizeLimit,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(sizeLimit.rawValue, forKey: captureHistorySizeLimitKey)
     }
 }

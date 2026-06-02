@@ -5,12 +5,16 @@ flowchart TD
     HotKey[Hot key or menu] --> Overlay[Selection overlays]
     Overlay --> Selection[Region or window selection]
     Selection --> Capture[CaptureService]
+    Capture --> History[Local capture history]
     Capture --> QuickAccess[Quick Access preview]
     QuickAccess --> Output[Copy, save/download, drag, preview, pin]
     QuickAccess --> Workspace[Image workspace]
+    History --> Workspace
+    History --> Output
     Settings[SettingsStore and AppStrings] --> Overlay
     Settings --> QuickAccess
     Settings --> Output
+    Settings --> History
 ```
 
 Frame is a native macOS menu bar app. AppKit owns the runtime because the product depends on system-level behavior: status items, global hotkeys, Screen Recording permission, full-screen overlay windows, pasteboard access, and local file output.
@@ -30,9 +34,9 @@ background-aware contrast, and direct-manipulation capture behavior.
 
 1. `FrameApplication` starts `NSApplication` with accessory activation policy.
 2. `AppDelegate` creates the menu bar item, hotkey controller, overlay controller, capture service, active-screen resolver, and output writers.
-3. `StatusItemController` exposes menu commands for screenshot, settings, and quit.
-4. `SettingsWindowController` hosts the SwiftUI settings window, including screenshot shortcut selection, screenshot save location, language selection, Screen Recording permission checks, and about/version details.
-5. `SettingsStore` persists user-facing app settings in `UserDefaults`: shortcut, screenshot save directory, and language preference.
+3. `StatusItemController` exposes menu commands for screenshot, capture history, settings, and quit.
+4. `SettingsWindowController` hosts the SwiftUI settings window, including screenshot shortcut selection, screenshot save location, local history controls, language selection, Screen Recording permission checks, and about/version details.
+5. `SettingsStore` persists user-facing app settings in `UserDefaults`: shortcut, screenshot save directory, local history preferences, OCR languages, and language preference.
 6. `AppStrings` centralizes user-facing copy for Simplified Chinese and English. The language setting can follow the system language or force either supported language.
 7. `HotKeyController` registers the selected screenshot shortcut through Carbon and routes it to the screenshot flow.
 8. `ScreenRecordingPermission` checks and requests macOS Screen Recording access.
@@ -45,6 +49,8 @@ background-aware contrast, and direct-manipulation capture behavior.
 15. `ImageWorkspacePanelController` presents movable and resizable preview/edit workspace windows for preview sessions, plus separate image-only pinned windows. Preview/edit windows use native macOS close controls plus a top toolbar that leaves captured pixels unobstructed. Copy and download close both the preview/edit workspace and the originating Quick Access preview on success; edited-image save remains disabled until editing ships. Pinned windows expose copy, download, and edit through a context menu while keeping the pinned image open.
 16. `ClipboardWriter` writes the captured image to `NSPasteboard`.
 17. `ScreenshotFileWriter` saves PNG data to the configured screenshot directory using `ScreenshotNaming`, defaulting to Desktop when no custom directory is stored.
+18. `CaptureHistoryStore` writes recent captures to `Application Support/Frame/History`, stores metadata in a JSON index, enforces retention and size limits, and keeps these cached files separate from user-saved files.
+19. `CaptureHistoryWindowController` lists recent local captures and reuses the existing copy, save, delete, and preview workspace behavior for row actions.
 
 ## Boundaries
 
@@ -67,6 +73,7 @@ AppKit-specific code stays in `FrameApp`. Keep permission, capture, pasteboard, 
 - Local development should use a stable self-signed Code Signing identity through `FRAME_CODESIGN_IDENTITY` to reduce TCC permission churn.
 - Screen Recording permission is sensitive to bundle identity, path, and signature. Keep local testing on a stable app path such as `~/Applications/Frame.app`.
 - Localization currently uses the code-level `AppStrings` boundary instead of `.strings` resources to keep SwiftPM packaging simple for v0.1. Keep callers on `AppStrings` so a future resource-backed migration stays local.
+- Local history is a recovery cache, not the user's saved-file library. Its defaults are enabled, 7-day retention, and a 2 GB capacity limit. Cleanup deletes only Frame-owned cached files under Application Support.
 
 ---
-*Last updated: 2026-05-28 | Reason: document local settings, localization, and capture placeholder behavior*
+*Last updated: 2026-05-31 | Reason: document local capture history cache and UI boundary*

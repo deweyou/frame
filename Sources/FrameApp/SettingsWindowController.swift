@@ -13,7 +13,8 @@ final class SettingsWindowController {
         onCheckPermission: @escaping @MainActor () -> Void,
         onLanguageChange: @escaping @MainActor (AppLanguage) -> Void,
         onChooseScreenshotDirectory: @escaping @MainActor () -> URL?,
-        onResetScreenshotDirectory: @escaping @MainActor () -> Void
+        onResetScreenshotDirectory: @escaping @MainActor () -> Void,
+        onClearCaptureHistory: @escaping @MainActor () -> Void
     ) {
         if let window {
             splitViewController?.update(strings: strings)
@@ -29,7 +30,8 @@ final class SettingsWindowController {
             onCheckPermission: onCheckPermission,
             onLanguageChange: onLanguageChange,
             onChooseScreenshotDirectory: onChooseScreenshotDirectory,
-            onResetScreenshotDirectory: onResetScreenshotDirectory
+            onResetScreenshotDirectory: onResetScreenshotDirectory,
+            onClearCaptureHistory: onClearCaptureHistory
         )
 
         let window = NSWindow(
@@ -123,7 +125,8 @@ private final class SettingsSplitViewController: NSSplitViewController {
         onCheckPermission: @escaping @MainActor () -> Void,
         onLanguageChange: @escaping @MainActor (AppLanguage) -> Void,
         onChooseScreenshotDirectory: @escaping @MainActor () -> URL?,
-        onResetScreenshotDirectory: @escaping @MainActor () -> Void
+        onResetScreenshotDirectory: @escaping @MainActor () -> Void,
+        onClearCaptureHistory: @escaping @MainActor () -> Void
     ) {
         detailViewController = SettingsDetailViewController(
             strings: strings,
@@ -131,7 +134,8 @@ private final class SettingsSplitViewController: NSSplitViewController {
             onCheckPermission: onCheckPermission,
             onLanguageChange: onLanguageChange,
             onChooseScreenshotDirectory: onChooseScreenshotDirectory,
-            onResetScreenshotDirectory: onResetScreenshotDirectory
+            onResetScreenshotDirectory: onResetScreenshotDirectory,
+            onClearCaptureHistory: onClearCaptureHistory
         )
 
         sidebarViewController = SettingsSidebarViewController(strings: strings)
@@ -296,6 +300,7 @@ private final class SettingsDetailViewController: NSHostingController<AnyView> {
     private let onLanguageChange: @MainActor (AppLanguage) -> Void
     private let onChooseScreenshotDirectory: @MainActor () -> URL?
     private let onResetScreenshotDirectory: @MainActor () -> Void
+    private let onClearCaptureHistory: @MainActor () -> Void
     private var strings: AppStrings
     private var currentSection: SettingsSection = .general
 
@@ -305,7 +310,8 @@ private final class SettingsDetailViewController: NSHostingController<AnyView> {
         onCheckPermission: @escaping @MainActor () -> Void,
         onLanguageChange: @escaping @MainActor (AppLanguage) -> Void,
         onChooseScreenshotDirectory: @escaping @MainActor () -> URL?,
-        onResetScreenshotDirectory: @escaping @MainActor () -> Void
+        onResetScreenshotDirectory: @escaping @MainActor () -> Void,
+        onClearCaptureHistory: @escaping @MainActor () -> Void
     ) {
         self.strings = strings
         self.onShortcutChange = onShortcutChange
@@ -313,6 +319,7 @@ private final class SettingsDetailViewController: NSHostingController<AnyView> {
         self.onLanguageChange = onLanguageChange
         self.onChooseScreenshotDirectory = onChooseScreenshotDirectory
         self.onResetScreenshotDirectory = onResetScreenshotDirectory
+        self.onClearCaptureHistory = onClearCaptureHistory
         super.init(rootView: AnyView(EmptyView()))
     }
 
@@ -333,7 +340,8 @@ private final class SettingsDetailViewController: NSHostingController<AnyView> {
                     onCheckPermission: onCheckPermission,
                     onLanguageChange: onLanguageChange,
                     onChooseScreenshotDirectory: onChooseScreenshotDirectory,
-                    onResetScreenshotDirectory: onResetScreenshotDirectory
+                    onResetScreenshotDirectory: onResetScreenshotDirectory,
+                    onClearCaptureHistory: onClearCaptureHistory
                 )
             )
         case .about:
@@ -354,12 +362,16 @@ private struct GeneralSettingsView: View {
     let onLanguageChange: @MainActor (AppLanguage) -> Void
     let onChooseScreenshotDirectory: @MainActor () -> URL?
     let onResetScreenshotDirectory: @MainActor () -> Void
+    let onClearCaptureHistory: @MainActor () -> Void
 
     @State private var selectedShortcut = SettingsStore.screenshotShortcut()
     @State private var hasScreenRecordingAccess = ScreenRecordingPermission.hasAccess
     @State private var selectedLanguage = SettingsStore.appLanguage()
     @State private var selectedOCRLanguageIdentifiers = Set(SettingsStore.ocrRecognitionLanguages())
     @State private var screenshotDirectoryPath = (try? SettingsStore.screenshotDirectory().path) ?? ""
+    @State private var isCaptureHistoryEnabled = SettingsStore.isCaptureHistoryEnabled()
+    @State private var selectedCaptureHistoryRetention = SettingsStore.captureHistoryRetention()
+    @State private var selectedCaptureHistorySizeLimit = SettingsStore.captureHistorySizeLimit()
 
     var body: some View {
         SettingsPane(title: strings.settingsGeneral) {
@@ -415,6 +427,39 @@ private struct GeneralSettingsView: View {
                         }
                     }
                     .accessibilityLabel(strings.settingsOCRLanguages)
+                }
+
+                LabeledContent(strings.settingsCaptureHistory) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle(strings.settingsCaptureHistoryEnabled, isOn: $isCaptureHistoryEnabled)
+                            .onChange(of: isCaptureHistoryEnabled) { _, isEnabled in
+                                SettingsStore.setCaptureHistoryEnabled(isEnabled)
+                            }
+
+                        Picker(strings.settingsCaptureHistoryRetention, selection: $selectedCaptureHistoryRetention) {
+                            ForEach(CaptureHistoryRetention.allCases) { retention in
+                                Text(retention.displayName(strings: strings))
+                                    .tag(retention)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .onChange(of: selectedCaptureHistoryRetention) { _, retention in
+                            SettingsStore.setCaptureHistoryRetention(retention)
+                        }
+
+                        Picker(strings.settingsCaptureHistorySizeLimit, selection: $selectedCaptureHistorySizeLimit) {
+                            ForEach(CaptureHistorySizeLimit.settingsCases) { sizeLimit in
+                                Text(sizeLimit.displayName(strings: strings))
+                                    .tag(sizeLimit)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .onChange(of: selectedCaptureHistorySizeLimit) { _, sizeLimit in
+                            SettingsStore.setCaptureHistorySizeLimit(sizeLimit)
+                        }
+
+                        Button(strings.settingsCaptureHistoryClear, action: onClearCaptureHistory)
+                    }
                 }
 
                 LabeledContent(strings.settingsScreenRecordingPermission) {

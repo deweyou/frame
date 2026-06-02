@@ -332,6 +332,8 @@ final class QuickAccessPanelController: NSObject {
         button.setAccessibilityLabel(title)
         button.setAccessibilityHelp(title)
         if style == .floatingCorner {
+            button.usesManualIconRendering = true
+            button.ignoresHighlight = true
             button.controlSize = .mini
             button.contentTintColor = NSColor.black.withAlphaComponent(0.82)
             button.wantsLayer = true
@@ -753,10 +755,80 @@ private final class ScreenshotPreviewView: NSView {
 }
 
 private final class PointingHandButton: NSButton {
+    private let manualIconLayer = CALayer()
     private var trackingArea: NSTrackingArea?
+    private var manualIconImage: NSImage?
+    var ignoresHighlight = false {
+        didSet {
+            configureHighlightBehavior()
+        }
+    }
+    var usesManualIconRendering = false {
+        didSet {
+            configureManualIconRendering()
+        }
+    }
+
+    override var state: NSControl.StateValue {
+        get {
+            super.state
+        }
+        set {
+            super.state = ignoresHighlight ? .off : newValue
+        }
+    }
 
     override var alignmentRectInsets: NSEdgeInsets {
         NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+    }
+
+    override var image: NSImage? {
+        get {
+            usesManualIconRendering ? manualIconImage : super.image
+        }
+        set {
+            if usesManualIconRendering {
+                manualIconImage = newValue
+                updateManualIcon()
+            } else {
+                super.image = newValue
+            }
+        }
+    }
+
+    override var contentTintColor: NSColor? {
+        didSet {
+            updateManualIcon()
+        }
+    }
+
+    override func highlight(_ flag: Bool) {
+        guard !ignoresHighlight else {
+            clearHighlightState()
+            return
+        }
+
+        super.highlight(flag)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if ignoresHighlight {
+            clearHighlightState()
+        }
+
+        super.draw(dirtyRect)
+    }
+
+    override func layout() {
+        super.layout()
+
+        guard usesManualIconRendering else {
+            return
+        }
+
+        let iconSize = min(bounds.width, bounds.height, 9.5)
+        manualIconLayer.bounds = CGRect(x: 0, y: 0, width: iconSize, height: iconSize)
+        manualIconLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
@@ -801,6 +873,55 @@ private final class PointingHandButton: NSButton {
 
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
+    }
+
+    private func configureHighlightBehavior() {
+        guard ignoresHighlight else {
+            return
+        }
+
+        if let cell = cell as? NSButtonCell {
+            cell.highlightsBy = []
+            cell.showsStateBy = []
+        }
+        clearHighlightState()
+    }
+
+    private func configureManualIconRendering() {
+        guard usesManualIconRendering else {
+            manualIconLayer.removeFromSuperlayer()
+            if super.image == nil {
+                super.image = manualIconImage
+            }
+            return
+        }
+
+        manualIconImage = super.image
+        super.image = nil
+        wantsLayer = true
+        layer?.addSublayer(manualIconLayer)
+        manualIconLayer.contentsGravity = .resizeAspect
+        updateManualIcon()
+        needsLayout = true
+    }
+
+    private func updateManualIcon() {
+        guard usesManualIconRendering else {
+            return
+        }
+
+        manualIconLayer.contents = manualIconImage?.cgImage(
+            forProposedRect: nil,
+            context: nil,
+            hints: [.ctm: NSAffineTransform()]
+        )
+        manualIconLayer.contentsScale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        manualIconLayer.compositingFilter = nil
+    }
+
+    private func clearHighlightState() {
+        cell?.isHighlighted = false
+        super.state = .off
     }
 }
 

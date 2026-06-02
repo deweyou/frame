@@ -8,6 +8,11 @@ final class SelectionOverlayController {
     private var keyMonitor: Any?
     private var lastSelectionHistory: SelectionHistory?
     private let windowCandidateProvider = WindowCandidateProvider()
+    private let resetCursor: () -> Void
+
+    init(resetCursor: @escaping () -> Void = { NSCursor.arrow.set() }) {
+        self.resetCursor = resetCursor
+    }
 
     func startSelection(
         strings: AppStrings = AppStrings.current(),
@@ -46,8 +51,11 @@ final class SelectionOverlayController {
 
                     self?.activate(createdWindow)
                 },
-                onWindowSelectionRequested: { [weak self] globalPoint in
-                    self?.windowCandidateProvider.candidate(at: globalPoint)
+                onWindowSelectionRequested: { [weak self] globalPoint, overlayWindowNumber in
+                    self?.windowCandidateProvider.candidate(
+                        at: globalPoint,
+                        belowWindowNumber: overlayWindowNumber
+                    )
                 },
                 onComplete: { [weak self] completion in
                     self?.finishSelection(with: completion)
@@ -126,8 +134,13 @@ final class SelectionOverlayController {
             window.close()
         }
         overlayWindows.removeAll()
+        resetCursor()
 
         completion(completionResult)
+    }
+
+    func cancelSelection() {
+        finishSelection(with: nil)
     }
 
     private func confirmCurrentSelection() {

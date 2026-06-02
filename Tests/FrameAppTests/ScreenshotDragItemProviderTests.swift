@@ -90,6 +90,23 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         XCTAssertEqual(closeButton.layer?.borderWidth ?? 0, 0.5, accuracy: 0.1)
         XCTAssertGreaterThan(closeButton.layer?.shadowOpacity ?? 0, 0)
         XCTAssertNotNil(closeButton.layer?.backgroundColor)
+        let closeButtonBackground = closeButton.layer?.backgroundColor
+        let closeButtonCell = try XCTUnwrap(closeButton.cell as? NSButtonCell)
+        XCTAssertTrue(closeButtonCell.highlightsBy.isEmpty)
+        XCTAssertTrue(closeButtonCell.showsStateBy.isEmpty)
+        XCTAssertNil(closeButtonCell.image)
+        XCTAssertNotNil(closeButton.image)
+        closeButton.highlight(true)
+        XCTAssertFalse(closeButton.cell?.isHighlighted == true)
+        XCTAssertEqual(closeButton.state, .off)
+        XCTAssertEqual(closeButton.layer?.backgroundColor, closeButtonBackground)
+        closeButton.highlight(false)
+        closeButton.state = .on
+        XCTAssertEqual(closeButton.state, .off)
+        closeButton.cell?.isHighlighted = true
+        closeButton.needsDisplay = true
+        closeButton.displayIfNeeded()
+        XCTAssertFalse(closeButton.cell?.isHighlighted == true)
 
         let overlayView = try XCTUnwrap(findVisualEffectView(in: previewView))
         XCTAssertEqual(overlayView.frame.width, 154, accuracy: 0.5)

@@ -4,22 +4,46 @@ import FrameCore
 
 @MainActor
 struct WindowCandidateProvider {
-    private let currentProcessID = pid_t(ProcessInfo.processInfo.processIdentifier)
+    private let currentProcessID: pid_t
     private let minimumCandidateSize = CGSize(width: 48, height: 48)
+    private let windowInfoProvider: (CGWindowListOption, CGWindowID) -> [[String: Any]]
 
-    func candidate(at point: CGPoint) -> WindowCandidate? {
-        windowInfos()
-            .compactMap(candidate(from:))
-            .first { $0.bounds.contains(point) }
+    init(
+        currentProcessID: pid_t = pid_t(ProcessInfo.processInfo.processIdentifier),
+        windowInfoProvider: @escaping (CGWindowListOption, CGWindowID) -> [[String: Any]] = { options, relativeToWindow in
+            CGWindowListCopyWindowInfo(options, relativeToWindow) as? [[String: Any]] ?? []
+        }
+    ) {
+        self.currentProcessID = currentProcessID
+        self.windowInfoProvider = windowInfoProvider
     }
 
-    private func windowInfos() -> [[String: Any]] {
-        guard let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
-                as? [[String: Any]] else {
-            return []
+    func candidate(at point: CGPoint, belowWindowNumber: Int? = nil) -> WindowCandidate? {
+        let preferredLookup = lookupCandidate(at: point, belowWindowNumber: belowWindowNumber)
+        if let candidate = preferredLookup.candidate {
+            return candidate
         }
 
-        return windowList
+        let fallbackLookup = belowWindowNumber == nil ? preferredLookup : lookupCandidate(at: point, belowWindowNumber: nil)
+        return fallbackLookup.candidate
+    }
+
+    private func lookupCandidate(
+        at point: CGPoint,
+        belowWindowNumber: Int?
+    ) -> (rawCount: Int, candidates: [WindowCandidate], candidate: WindowCandidate?) {
+        let infos = windowInfos(belowWindowNumber: belowWindowNumber)
+        let candidates = infos.compactMap(candidate(from:))
+        return (infos.count, candidates, candidates.first { $0.bounds.contains(point) })
+    }
+
+    private func windowInfos(belowWindowNumber: Int?) -> [[String: Any]] {
+        if let belowWindowNumber,
+           belowWindowNumber > 0 {
+            return windowInfoProvider(.optionOnScreenBelowWindow, CGWindowID(belowWindowNumber))
+        }
+
+        return windowInfoProvider(.optionOnScreenOnly, kCGNullWindowID)
     }
 
     private func candidate(from windowInfo: [String: Any]) -> WindowCandidate? {
@@ -56,19 +80,52 @@ struct WindowCandidateProvider {
     }
 
     static func cocoaRect(fromQuartzWindowRect quartzRect: CGRect) -> CGRect {
-        let screenUnion = NSScreen.screens.reduce(CGRect.null) { union, screen in
-            union.union(screen.frame)
+        let screenMappings = NSScreen.screens.compactMap { screen -> ScreenCoordinateMapping? in
+            guard let displayNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+                return nil
+            }
+
+            return ScreenCoordinateMapping(
+                cocoaFrame: screen.frame,
+                quartzFrame: CGDisplayBounds(CGDirectDisplayID(displayNumber.uint32Value))
+            )
         }
 
-        guard !screenUnion.isNull else {
+        return cocoaRect(fromQuartzWindowRect: quartzRect, screenMappings: screenMappings)
+    }
+
+    static func cocoaRect(
+        fromQuartzWindowRect quartzRect: CGRect,
+        screenMappings: [ScreenCoordinateMapping]
+    ) -> CGRect {
+        guard let mapping = screenMappings
+            .max(by: { first, second in
+                intersectionArea(first.quartzFrame, quartzRect) < intersectionArea(second.quartzFrame, quartzRect)
+            }) else {
             return quartzRect
         }
 
+        let localMinX = quartzRect.minX - mapping.quartzFrame.minX
+        let localMaxY = quartzRect.maxY - mapping.quartzFrame.minY
         return CGRect(
-            x: quartzRect.minX,
-            y: screenUnion.maxY - quartzRect.maxY + screenUnion.minY,
+            x: mapping.cocoaFrame.minX + localMinX,
+            y: mapping.cocoaFrame.maxY - localMaxY,
             width: quartzRect.width,
             height: quartzRect.height
         )
     }
+
+    private static func intersectionArea(_ firstRect: CGRect, _ secondRect: CGRect) -> CGFloat {
+        let intersection = firstRect.intersection(secondRect)
+        guard !intersection.isNull else {
+            return 0
+        }
+
+        return intersection.width * intersection.height
+    }
+}
+
+struct ScreenCoordinateMapping {
+    let cocoaFrame: CGRect
+    let quartzFrame: CGRect
 }

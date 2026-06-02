@@ -14,7 +14,7 @@ final class SelectionOverlayWindow {
         placeholderText: String,
         ocrActionText: String,
         onInteraction: @escaping () -> Void,
-        onWindowSelectionRequested: @escaping (CGPoint) -> WindowCandidate?,
+        onWindowSelectionRequested: @escaping (CGPoint, Int?) -> WindowCandidate?,
         onComplete: @escaping (SelectionOverlayCompletion?) -> Void
     ) {
         overlayView = SelectionOverlayView(
@@ -48,6 +48,9 @@ final class SelectionOverlayWindow {
         window.level = .screenSaver
         window.isReleasedWhenClosed = false
         window.acceptsMouseMovedEvents = true
+        overlayView.overlayWindowNumber = { [weak window] in
+            window?.windowNumber
+        }
     }
 
     func orderFrontRegardless() {
@@ -111,7 +114,7 @@ private final class SelectionOverlayView: NSView {
     private let hudSize = CGSize(width: 218, height: 42)
     private let screenFrame: CGRect
     private let onInteraction: () -> Void
-    private let onWindowSelectionRequested: (CGPoint) -> WindowCandidate?
+    private let onWindowSelectionRequested: (CGPoint, Int?) -> WindowCandidate?
     private let onComplete: (SelectionOverlayCompletion?) -> Void
     private let hudStackView = NSStackView()
     private let modeView = NSVisualEffectView()
@@ -131,6 +134,7 @@ private final class SelectionOverlayView: NSView {
     private var showsCenteredHUDWhenEmpty: Bool
     private var sizingMode: SelectionSizingMode = .unlocked
     private var isShiftTemporarilyLocking = false
+    var overlayWindowNumber: () -> Int? = { nil }
 
     init(
         screen: NSScreen,
@@ -139,7 +143,7 @@ private final class SelectionOverlayView: NSView {
         placeholderText: String,
         ocrActionText: String,
         onInteraction: @escaping () -> Void,
-        onWindowSelectionRequested: @escaping (CGPoint) -> WindowCandidate?,
+        onWindowSelectionRequested: @escaping (CGPoint, Int?) -> WindowCandidate?,
         onComplete: @escaping (SelectionOverlayCompletion?) -> Void
     ) {
         self.screenFrame = screen.frame
@@ -620,7 +624,10 @@ private final class SelectionOverlayView: NSView {
         onInteraction()
         dragOperation = nil
 
-        guard let candidate = onWindowSelectionRequested(globalPoint(fromLocalPoint: localPoint)) else {
+        guard let candidate = onWindowSelectionRequested(
+            globalPoint(fromLocalPoint: localPoint),
+            overlayWindowNumber()
+        ) else {
             clearSelection()
             return
         }
@@ -854,7 +861,7 @@ private final class SelectionOverlayView: NSView {
     private func updateHUDTheme() {
         let visibleControlFrame = hudStackView.isHidden ? placeholderView.frame : hudStackView.frame
         let sampleRect = globalRect(fromLocalRect: visibleControlFrame.insetBy(dx: -10, dy: -10))
-        guard let luminance = ScreenLuminanceSampler.averageLuminance(in: sampleRect) else {
+        guard let luminance = ScreenLuminanceSampler.estimatedBackgroundLuminance(in: sampleRect) else {
             return
         }
 
@@ -1632,7 +1639,7 @@ private enum HUDTheme {
     }
 }
 
-private enum ScreenLuminanceSampler {
+enum ScreenLuminanceSampler {
     static func averageLuminance(in cocoaRect: CGRect) -> CGFloat? {
         guard SelectionGeometry.isValidSelection(cocoaRect) else {
             return nil
@@ -1650,6 +1657,41 @@ private enum ScreenLuminanceSampler {
         }
 
         return averageLuminance(in: image)
+    }
+
+    static func estimatedBackgroundLuminance(in cocoaRect: CGRect) -> CGFloat? {
+        guard SelectionGeometry.isValidSelection(cocoaRect) else {
+            return nil
+        }
+
+        let sampleRect = quartzCaptureRect(for: cocoaRect)
+        guard !sampleRect.isEmpty,
+              let image = CGWindowListCreateImage(
+                sampleRect,
+                .optionOnScreenOnly,
+                kCGNullWindowID,
+                [.bestResolution]
+              ) else {
+            return nil
+        }
+
+        return estimatedBackgroundLuminance(in: image)
+    }
+
+    static func estimatedBackgroundLuminance(from samples: [CGFloat]) -> CGFloat? {
+        guard !samples.isEmpty else {
+            return nil
+        }
+
+        let sortedSamples = samples.sorted()
+        let median = sortedSamples[sortedSamples.count / 2]
+        if median >= 0.48 {
+            let upperQuartileIndex = min(sortedSamples.count - 1, Int((CGFloat(sortedSamples.count - 1) * 0.75).rounded()))
+            return sortedSamples[upperQuartileIndex]
+        }
+
+        let lowerQuartileIndex = max(0, Int((CGFloat(sortedSamples.count - 1) * 0.25).rounded()))
+        return sortedSamples[lowerQuartileIndex]
     }
 
     private static func quartzCaptureRect(for cocoaRect: CGRect) -> CGRect {
@@ -1691,6 +1733,19 @@ private enum ScreenLuminanceSampler {
     }
 
     private static func averageLuminance(in image: CGImage) -> CGFloat? {
+        let luminanceSamples = luminanceSamples(in: image)
+        guard !luminanceSamples.isEmpty else {
+            return nil
+        }
+
+        return luminanceSamples.reduce(0, +) / CGFloat(luminanceSamples.count)
+    }
+
+    private static func estimatedBackgroundLuminance(in image: CGImage) -> CGFloat? {
+        estimatedBackgroundLuminance(from: luminanceSamples(in: image))
+    }
+
+    private static func luminanceSamples(in image: CGImage) -> [CGFloat] {
         let sampleWidth = 16
         let sampleHeight = 8
         let bytesPerPixel = 4
@@ -1707,21 +1762,22 @@ private enum ScreenLuminanceSampler {
                 space: colorSpace,
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
               ) else {
-            return nil
+            return []
         }
 
         context.interpolationQuality = .low
         context.draw(image, in: CGRect(x: 0, y: 0, width: sampleWidth, height: sampleHeight))
 
-        var luminance: CGFloat = 0
+        var luminanceSamples: [CGFloat] = []
+        luminanceSamples.reserveCapacity(sampleWidth * sampleHeight)
         for index in stride(from: 0, to: pixels.count, by: bytesPerPixel) {
             let red = CGFloat(pixels[index]) / 255
             let green = CGFloat(pixels[index + 1]) / 255
             let blue = CGFloat(pixels[index + 2]) / 255
-            luminance += 0.2126 * red + 0.7152 * green + 0.0722 * blue
+            luminanceSamples.append(0.2126 * red + 0.7152 * green + 0.0722 * blue)
         }
 
-        return luminance / CGFloat(sampleWidth * sampleHeight)
+        return luminanceSamples
     }
 }
 

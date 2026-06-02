@@ -68,6 +68,13 @@ struct AppStrings {
         }
     }
 
+    var menuCaptureHistory: String {
+        switch language {
+        case .zhHans: "截图历史"
+        case .en: "Capture History"
+        }
+    }
+
     var menuQuit: String {
         switch language {
         case .zhHans: "退出"
@@ -173,6 +180,41 @@ struct AppStrings {
         }
     }
 
+    var settingsCaptureHistory: String {
+        switch language {
+        case .zhHans: "本地历史"
+        case .en: "Local history"
+        }
+    }
+
+    var settingsCaptureHistoryEnabled: String {
+        switch language {
+        case .zhHans: "保存最近截图"
+        case .en: "Keep recent captures"
+        }
+    }
+
+    var settingsCaptureHistoryRetention: String {
+        switch language {
+        case .zhHans: "保留时间"
+        case .en: "Retention"
+        }
+    }
+
+    var settingsCaptureHistorySizeLimit: String {
+        switch language {
+        case .zhHans: "容量上限"
+        case .en: "Size limit"
+        }
+    }
+
+    var settingsCaptureHistoryClear: String {
+        switch language {
+        case .zhHans: "清空历史"
+        case .en: "Clear History"
+        }
+    }
+
     var settingsAppName: String {
         switch language {
         case .zhHans: "应用"
@@ -247,6 +289,76 @@ struct AppStrings {
         switch language {
         case .zhHans: "固定到预览窗口"
         case .en: "Pin to Preview Window"
+        }
+    }
+
+    var captureHistoryTitle: String {
+        switch language {
+        case .zhHans: "截图历史"
+        case .en: "Capture History"
+        }
+    }
+
+    var captureHistoryOpen: String {
+        switch language {
+        case .zhHans: "打开预览"
+        case .en: "Open Preview"
+        }
+    }
+
+    var captureHistoryRestore: String {
+        switch language {
+        case .zhHans: "恢复"
+        case .en: "Restore"
+        }
+    }
+
+    var captureHistoryDelete: String {
+        switch language {
+        case .zhHans: "删除"
+        case .en: "Delete"
+        }
+    }
+
+    var captureHistoryEmpty: String {
+        switch language {
+        case .zhHans: "暂无本地历史"
+        case .en: "No local history yet"
+        }
+    }
+
+    var captureHistoryFilterAll: String {
+        switch language {
+        case .zhHans: "全部"
+        case .en: "All"
+        }
+    }
+
+    var captureHistoryFilterScreenshots: String {
+        switch language {
+        case .zhHans: "截图"
+        case .en: "Screenshots"
+        }
+    }
+
+    var captureHistoryFilterRecordings: String {
+        switch language {
+        case .zhHans: "录屏"
+        case .en: "Recordings"
+        }
+    }
+
+    var captureHistoryKindScreenshot: String {
+        switch language {
+        case .zhHans: "截图"
+        case .en: "Screenshot"
+        }
+    }
+
+    var captureHistoryKindRecording: String {
+        switch language {
+        case .zhHans: "录屏"
+        case .en: "Recording"
         }
     }
 

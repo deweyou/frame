@@ -4,6 +4,7 @@ import AppKit
 final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
     private let onCaptureAction: () -> Void
+    private let onHistoryAction: () -> Void
     private let onSettingsAction: () -> Void
     private var strings: AppStrings
 
@@ -11,11 +12,13 @@ final class StatusItemController: NSObject {
         statusItem: NSStatusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength),
         strings: AppStrings = AppStrings.current(),
         onCapture: @escaping () -> Void,
+        onHistory: @escaping () -> Void,
         onSettings: @escaping () -> Void
     ) {
         self.statusItem = statusItem
         self.strings = strings
         self.onCaptureAction = onCapture
+        self.onHistoryAction = onHistory
         self.onSettingsAction = onSettings
 
         super.init()
@@ -43,6 +46,7 @@ final class StatusItemController: NSObject {
 
         let menu = NSMenu()
         menu.addItem(menuItem(title: strings.menuCapture, action: #selector(onCapture(_:))))
+        menu.addItem(menuItem(title: strings.menuCaptureHistory, action: #selector(onHistory(_:))))
         menu.addItem(menuItem(title: strings.menuSettings, action: #selector(onSettings(_:))))
         menu.addItem(.separator())
         menu.addItem(menuItem(title: strings.menuQuit, action: #selector(onQuit(_:))))
@@ -74,6 +78,10 @@ final class StatusItemController: NSObject {
 
     @objc private func onCapture(_ sender: NSMenuItem) {
         onCaptureAction()
+    }
+
+    @objc private func onHistory(_ sender: NSMenuItem) {
+        onHistoryAction()
     }
 
     @objc private func onSettings(_ sender: NSMenuItem) {

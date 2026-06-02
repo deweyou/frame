@@ -100,4 +100,28 @@ final class SettingsStoreTests: XCTestCase {
 
         XCTAssertEqual(directory, desktop)
     }
+
+    func testCaptureHistoryDefaultsToEnabledSevenDaysAndTwoGB() {
+        XCTAssertTrue(SettingsStore.isCaptureHistoryEnabled(defaults: defaults))
+        XCTAssertEqual(SettingsStore.captureHistoryRetention(defaults: defaults), .sevenDays)
+        XCTAssertEqual(SettingsStore.captureHistorySizeLimit(defaults: defaults), .twoGB)
+    }
+
+    func testCaptureHistoryPersistsSettings() {
+        SettingsStore.setCaptureHistoryEnabled(false, defaults: defaults)
+        SettingsStore.setCaptureHistoryRetention(.thirtyDays, defaults: defaults)
+        SettingsStore.setCaptureHistorySizeLimit(.fiveGB, defaults: defaults)
+
+        XCTAssertFalse(SettingsStore.isCaptureHistoryEnabled(defaults: defaults))
+        XCTAssertEqual(SettingsStore.captureHistoryRetention(defaults: defaults), .thirtyDays)
+        XCTAssertEqual(SettingsStore.captureHistorySizeLimit(defaults: defaults), .fiveGB)
+    }
+
+    func testCaptureHistoryInvalidPersistedValuesFallBackToDefaults() {
+        defaults.set("bad-retention", forKey: SettingsStore.captureHistoryRetentionKey)
+        defaults.set("bad-size", forKey: SettingsStore.captureHistorySizeLimitKey)
+
+        XCTAssertEqual(SettingsStore.captureHistoryRetention(defaults: defaults), .sevenDays)
+        XCTAssertEqual(SettingsStore.captureHistorySizeLimit(defaults: defaults), .twoGB)
+    }
 }
