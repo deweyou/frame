@@ -40,6 +40,15 @@ final class CaptureServiceTests: XCTestCase {
         XCTAssertTrue(configuration.ignoreShadowsSingleWindow)
     }
 
+    func testFullScreenRectsPreserveOneRectPerScreen() {
+        let screenFrames = [
+            CGRect(x: 0, y: 0, width: 1440, height: 900),
+            CGRect(x: 1440, y: -180, width: 1280, height: 720),
+        ]
+
+        XCTAssertEqual(CaptureService.fullScreenRects(from: screenFrames), screenFrames)
+    }
+
     private func makeImageWithTransparentMargins() throws -> CGImage {
         let width = 10
         let height = 8

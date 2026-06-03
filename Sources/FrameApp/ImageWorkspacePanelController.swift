@@ -66,6 +66,7 @@ final class ImageWorkspacePanelController: NSObject {
         )
 
         panel.isReleasedWhenClosed = false
+        panel.animationBehavior = .none
         panel.hidesOnDeactivate = false
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]

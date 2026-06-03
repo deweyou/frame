@@ -170,7 +170,7 @@ final class QuickAccessPanelController: NSObject {
         imageView.layer?.masksToBounds = true
         imageView.layer?.borderWidth = 0.5
         imageView.layer?.borderColor = NSColor.white.withAlphaComponent(0.32).cgColor
-        imageView.layer?.backgroundColor = NSColor.clear.cgColor
+        imageView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
         let overlayView = NSVisualEffectView()
         overlayView.material = .hudWindow
@@ -226,7 +226,7 @@ final class QuickAccessPanelController: NSObject {
         )
         let ocrButton = makeIconButton(
             title: strings.quickAccessOCR,
-            symbolName: "text.viewfinder",
+            symbolName: "character.textbox",
             action: #selector(ocrButtonClicked),
             style: .toolbar
         )
@@ -323,45 +323,62 @@ final class QuickAccessPanelController: NSObject {
         button.isBordered = false
         button.bezelStyle = .regularSquare
         button.imagePosition = .imageOnly
+        button.imageScaling = .scaleNone
         button.toolTip = title
-        let symbolPointSize: CGFloat = style == .floatingCorner ? 9.5 : 10.5
+        let symbolPointSize = quickAccessSymbolPointSize(symbolName: symbolName, style: style)
         button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: symbolPointSize, weight: .semibold)
         button.contentTintColor = .labelColor
         button.setButtonType(.momentaryPushIn)
         button.translatesAutoresizingMaskIntoConstraints = false
         button.setAccessibilityLabel(title)
         button.setAccessibilityHelp(title)
+        button.identifier = NSUserInterfaceItemIdentifier(symbolName)
         if style == .floatingCorner {
             button.usesManualIconRendering = true
+            button.drawsCenteredXMark = true
             button.ignoresHighlight = true
             button.controlSize = .mini
-            button.contentTintColor = NSColor.black.withAlphaComponent(0.82)
+            button.contentTintColor = NSColor.labelColor.withAlphaComponent(0.68)
             button.wantsLayer = true
             button.layer?.cornerRadius = floatingButtonRadius
             button.layer?.cornerCurve = .continuous
             button.layer?.masksToBounds = false
-            button.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.92).cgColor
+            button.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.42).cgColor
             button.layer?.borderWidth = 0.5
-            button.layer?.borderColor = NSColor.black.withAlphaComponent(0.14).cgColor
+            button.layer?.borderColor = NSColor.labelColor.withAlphaComponent(0.18).cgColor
             button.layer?.shadowColor = NSColor.black.cgColor
-            button.layer?.shadowOpacity = 0.22
-            button.layer?.shadowRadius = 4
+            button.layer?.shadowOpacity = 0.14
+            button.layer?.shadowRadius = 3
             button.layer?.shadowOffset = CGSize(width: 0, height: -1)
         }
         return button
     }
 
-    private let previewImageSize = CGSize(width: 200, height: 132)
+    private func quickAccessSymbolPointSize(symbolName: String, style: IconButtonStyle) -> CGFloat {
+        switch style {
+        case .floatingCorner:
+            9.5
+        case .toolbar:
+            switch symbolName {
+            case "square.and.arrow.down", "character.textbox":
+                12.5
+            default:
+                11.5
+            }
+        }
+    }
+
     private let floatingButtonDiameter: CGFloat = 20
     private let cornerButtonInset: CGFloat = 6
     private var floatingButtonRadius: CGFloat {
         floatingButtonDiameter / 2
     }
-    private var previewSize: CGSize {
-        previewImageSize
-    }
     private let previewPadding: CGFloat = 18
     private let previewSpacing: CGFloat = 12
+
+    private var previewSize: CGSize {
+        CapturePreviewMetrics.previewSize(forDesktopSize: (NSScreen.main ?? NSScreen.screens.first)?.frame.size)
+    }
 
     private func startFollowingActiveScreen() {
         guard followActiveScreenTimer == nil else {
@@ -755,9 +772,14 @@ private final class ScreenshotPreviewView: NSView {
 }
 
 private final class PointingHandButton: NSButton {
-    private let manualIconLayer = CALayer()
+    private let manualIconLayer = CAShapeLayer()
     private var trackingArea: NSTrackingArea?
     private var manualIconImage: NSImage?
+    var drawsCenteredXMark = false {
+        didSet {
+            updateManualIcon()
+        }
+    }
     var ignoresHighlight = false {
         didSet {
             configureHighlightBehavior()
@@ -829,6 +851,7 @@ private final class PointingHandButton: NSButton {
         let iconSize = min(bounds.width, bounds.height, 9.5)
         manualIconLayer.bounds = CGRect(x: 0, y: 0, width: iconSize, height: iconSize)
         manualIconLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
+        updateManualIcon()
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
@@ -901,6 +924,8 @@ private final class PointingHandButton: NSButton {
         wantsLayer = true
         layer?.addSublayer(manualIconLayer)
         manualIconLayer.contentsGravity = .resizeAspect
+        manualIconLayer.lineCap = .round
+        manualIconLayer.lineJoin = .round
         updateManualIcon()
         needsLayout = true
     }
@@ -910,11 +935,27 @@ private final class PointingHandButton: NSButton {
             return
         }
 
-        manualIconLayer.contents = manualIconImage?.cgImage(
-            forProposedRect: nil,
-            context: nil,
-            hints: [.ctm: NSAffineTransform()]
-        )
+        if drawsCenteredXMark {
+            manualIconLayer.contents = nil
+            let inset = manualIconLayer.bounds.width * 0.18
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: inset, y: inset))
+            path.addLine(to: CGPoint(x: manualIconLayer.bounds.maxX - inset, y: manualIconLayer.bounds.maxY - inset))
+            path.move(to: CGPoint(x: manualIconLayer.bounds.maxX - inset, y: inset))
+            path.addLine(to: CGPoint(x: inset, y: manualIconLayer.bounds.maxY - inset))
+            manualIconLayer.path = path
+            manualIconLayer.fillColor = nil
+            manualIconLayer.strokeColor = (contentTintColor ?? .labelColor).cgColor
+            manualIconLayer.lineWidth = 1.7
+        } else {
+            manualIconLayer.path = nil
+            manualIconLayer.strokeColor = nil
+            manualIconLayer.contents = manualIconImage?.cgImage(
+                forProposedRect: nil,
+                context: nil,
+                hints: [.ctm: NSAffineTransform()]
+            )
+        }
         manualIconLayer.contentsScale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
         manualIconLayer.compositingFilter = nil
     }
@@ -947,13 +988,9 @@ private final class AspectFillImageView: NSView {
             return
         }
 
-        let scale = max(bounds.width / image.size.width, bounds.height / image.size.height)
-        let drawSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        let drawRect = CGRect(
-            x: bounds.midX - drawSize.width / 2,
-            y: bounds.midY - drawSize.height / 2,
-            width: drawSize.width,
-            height: drawSize.height
+        let drawRect = CapturePreviewMetrics.aspectFillDrawRect(
+            imageSize: image.size,
+            in: bounds
         )
 
         image.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)

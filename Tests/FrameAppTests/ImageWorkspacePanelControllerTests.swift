@@ -23,7 +23,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
 
         let firstPanel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
         defer {
-            firstPanel.close()
+            closePanel(firstPanel)
         }
 
         XCTAssertTrue(controller.show(
@@ -41,12 +41,18 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
 
     func testWorkspaceOutputButtonsCloseWindowAfterSuccess() throws {
         let copyPanel = try showWorkspace(copy: { true }, save: { false })
+        defer {
+            closePanel(copyPanel)
+        }
         let copyButton = try XCTUnwrap(findButton(in: try XCTUnwrap(copyPanel.contentView), accessibilityLabel: "Copy"))
 
         XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(copyButton.action), to: copyButton.target, from: copyButton))
         XCTAssertFalse(copyPanel.isVisible)
 
         let downloadPanel = try showWorkspace(copy: { false }, save: { true })
+        defer {
+            closePanel(downloadPanel)
+        }
         let downloadButton = try XCTUnwrap(findButton(in: try XCTUnwrap(downloadPanel.contentView), accessibilityLabel: "Download"))
 
         XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(downloadButton.action), to: downloadButton.target, from: downloadButton))
@@ -68,7 +74,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
 
         let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
         defer {
-            panel.close()
+            closePanel(panel)
         }
 
         let contentView = try XCTUnwrap(panel.contentView)
@@ -117,7 +123,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         let pinPanel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
         defer {
             for panel in workspacePanels(excluding: windowsBeforeShow) {
-                panel.close()
+                closePanel(panel)
             }
         }
 
@@ -164,7 +170,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
 
         let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
         defer {
-            panel.close()
+            closePanel(panel)
         }
 
         panel.resignKey()
@@ -197,7 +203,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
 
         let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
         defer {
-            panel.close()
+            closePanel(panel)
         }
 
         XCTAssertTrue(panel.styleMask.contains(.titled))
@@ -297,7 +303,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         XCTAssertEqual(saveCount, 0)
     }
 
-    func testTemporaryWorkspaceAutomaticallyLoadsOCRTextOverlay() throws {
+    func testTemporaryWorkspaceAutomaticallyLoadsOCRTextOverlay() async throws {
         _ = NSApplication.shared
         let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
         let controller = ImageWorkspacePanelController()
@@ -336,14 +342,16 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
 
         let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
         defer {
-            panel.close()
+            closePanel(panel)
         }
         let contentView = try XCTUnwrap(panel.contentView)
         contentView.layoutSubtreeIfNeeded()
         let overlay = try XCTUnwrap(findTextSelectionOverlay(in: contentView))
 
-        let didLoadTextOverlay = waitUntil { overlay.hasRecognizedText }
-        XCTAssertTrue(didLoadTextOverlay)
+        for _ in 0..<10 where !overlay.hasRecognizedText {
+            await Task.yield()
+        }
+        XCTAssertTrue(overlay.hasRecognizedText)
         XCTAssertEqual(recognizeCount, 1)
 
         let selectionPoint = NSPoint(x: overlay.bounds.width * 0.2, y: overlay.bounds.height * 0.25)
@@ -387,8 +395,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         panel.contentView = overlay
         panel.orderFrontRegardless()
         defer {
-            panel.contentView = nil
-            panel.close()
+            closePanel(panel)
         }
         XCTAssertFalse(overlay.mouseDownCanMoveWindow)
 
@@ -468,7 +475,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
 
         let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
         defer {
-            panel.close()
+            closePanel(panel)
         }
 
         let contentView = try XCTUnwrap(panel.contentView)
@@ -593,6 +600,13 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         }
     }
 
+    private func closePanel(_ panel: NSPanel) {
+        panel.makeFirstResponder(nil)
+        panel.contentView = nil
+        panel.orderOut(nil)
+        panel.close()
+    }
+
     private func assertCircularHoverLayer(in button: NSButton) {
         button.layoutSubtreeIfNeeded()
         let hoverLayer = button.layer?.sublayers?.first
@@ -649,19 +663,4 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         ))
     }
 
-    private func waitUntil(
-        timeout: TimeInterval = 1,
-        condition: () -> Bool
-    ) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if condition() {
-                return true
-            }
-
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-        }
-
-        return condition()
-    }
 }
