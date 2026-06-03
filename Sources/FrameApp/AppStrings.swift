@@ -75,6 +75,13 @@ struct AppStrings {
         }
     }
 
+    var menuStopRecording: String {
+        switch language {
+        case .zhHans: "停止录制"
+        case .en: "Stop Recording"
+        }
+    }
+
     var menuQuit: String {
         switch language {
         case .zhHans: "退出"
