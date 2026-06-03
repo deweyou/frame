@@ -96,6 +96,14 @@ final class SelectionOverlayWindow {
         overlayView.recordingHUDModeForTesting()
     }
 
+    func enterActiveRecordingModeForTesting(elapsed: TimeInterval, isPaused: Bool) {
+        overlayView.enterActiveRecordingMode(elapsed: elapsed, isPaused: isPaused)
+    }
+
+    func recordingElapsedTextForTesting() -> String {
+        overlayView.recordingElapsedTextForTesting()
+    }
+
     func activeSelectionForTesting() -> SelectionCapture? {
         overlayView.activeSelectionForTesting()
     }
@@ -166,6 +174,7 @@ private final class SelectionOverlayView: NSView {
     private var modeButtonConstraints: [NSLayoutConstraint] = []
     private let sizeView = NSVisualEffectView()
     private let sizeControl = HUDSizeControl()
+    private let recordingElapsedLabel = NSTextField(labelWithString: "00:00")
     private let placeholderView = NSVisualEffectView()
     private let placeholderLabel: NSTextField
     private let ocrActionText: String
@@ -177,6 +186,10 @@ private final class SelectionOverlayView: NSView {
     private var hudTheme: HUDTheme = .lightContent
     private var recordingHUDMode: RecordingHUDMode = .screenshot
     private var currentRecordingOptions = SettingsStore.recordingOptions()
+    private var recordingElapsed: TimeInterval = 0
+    private var onRecordingPause: () -> Void = {}
+    private var onRecordingResume: () -> Void = {}
+    private var onRecordingStop: () -> Void = {}
 
     private var selectionRect: CGRect?
     private var windowCandidate: WindowCandidate?
@@ -411,7 +424,9 @@ private final class SelectionOverlayView: NSView {
         configureGlass(sizeView, cornerRadius: 21)
         sizeView.isHidden = true
         sizeView.addSubview(sizeControl)
+        sizeView.addSubview(recordingElapsedLabel)
         configureSizeControl()
+        configureRecordingElapsedLabel()
 
         hudStackView.addArrangedSubview(modeView)
         hudStackView.addArrangedSubview(sizeView)
@@ -432,9 +447,19 @@ private final class SelectionOverlayView: NSView {
             sizeControl.trailingAnchor.constraint(equalTo: sizeView.trailingAnchor),
             sizeControl.topAnchor.constraint(equalTo: sizeView.topAnchor),
             sizeControl.bottomAnchor.constraint(equalTo: sizeView.bottomAnchor),
+            recordingElapsedLabel.centerXAnchor.constraint(equalTo: sizeView.centerXAnchor),
+            recordingElapsedLabel.centerYAnchor.constraint(equalTo: sizeView.centerYAnchor),
         ])
 
         positionHUD()
+    }
+
+    private func configureRecordingElapsedLabel() {
+        recordingElapsedLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
+        recordingElapsedLabel.alignment = .center
+        recordingElapsedLabel.lineBreakMode = .byTruncatingTail
+        recordingElapsedLabel.translatesAutoresizingMaskIntoConstraints = false
+        recordingElapsedLabel.isHidden = true
     }
 
     private var modeViewWidth: CGFloat {
@@ -535,6 +560,13 @@ private final class SelectionOverlayView: NSView {
             makeRecordingFormatButton(),
             makeShowCursorButton(),
             makeShowKeyboardHintsButton(),
+        ]
+    }
+
+    private func makeActiveRecordingButtons(isPaused: Bool) -> [HUDIconButton] {
+        [
+            isPaused ? makeResumeRecordingButton() : makePauseRecordingButton(),
+            makeStopRecordingButton(),
         ]
     }
 
@@ -664,6 +696,48 @@ private final class SelectionOverlayView: NSView {
         button.action = #selector(showKeyboardHintsButtonClicked)
         button.onHoverChange = { [weak self, weak button] isHovering in
             self?.setHUDTooltip(isHovering ? "显示键盘提示" : nil, anchorView: button)
+        }
+        button.contentTintColor = hudTheme.foregroundColor
+        return button
+    }
+
+    private func makePauseRecordingButton() -> HUDIconButton {
+        let button = HUDIconButton(
+            symbolName: "pause.fill",
+            accessibilityDescription: "暂停"
+        )
+        button.target = self
+        button.action = #selector(pauseRecordingButtonClicked)
+        button.onHoverChange = { [weak self, weak button] isHovering in
+            self?.setHUDTooltip(isHovering ? "暂停" : nil, anchorView: button)
+        }
+        button.contentTintColor = hudTheme.foregroundColor
+        return button
+    }
+
+    private func makeResumeRecordingButton() -> HUDIconButton {
+        let button = HUDIconButton(
+            symbolName: "play.fill",
+            accessibilityDescription: "继续"
+        )
+        button.target = self
+        button.action = #selector(resumeRecordingButtonClicked)
+        button.onHoverChange = { [weak self, weak button] isHovering in
+            self?.setHUDTooltip(isHovering ? "继续" : nil, anchorView: button)
+        }
+        button.contentTintColor = hudTheme.foregroundColor
+        return button
+    }
+
+    private func makeStopRecordingButton() -> HUDIconButton {
+        let button = HUDIconButton(
+            symbolName: "stop.fill",
+            accessibilityDescription: "停止录制"
+        )
+        button.target = self
+        button.action = #selector(stopRecordingButtonClicked)
+        button.onHoverChange = { [weak self, weak button] isHovering in
+            self?.setHUDTooltip(isHovering ? "停止录制" : nil, anchorView: button)
         }
         button.contentTintColor = hudTheme.foregroundColor
         return button
@@ -867,6 +941,8 @@ private final class SelectionOverlayView: NSView {
         }
 
         recordingHUDMode = .setup
+        sizeControl.isHidden = false
+        recordingElapsedLabel.isHidden = true
         installModeButtons(makeRecordingSetupButtons())
         applyHUDTheme(hudTheme)
         positionHUD()
@@ -899,6 +975,20 @@ private final class SelectionOverlayView: NSView {
         updateRecordingOptions(showsKeyboardHints: !currentRecordingOptions.showsKeyboardHints)
     }
 
+    @objc private func pauseRecordingButtonClicked() {
+        enterActiveRecordingMode(elapsed: recordingElapsed, isPaused: true)
+        onRecordingPause()
+    }
+
+    @objc private func resumeRecordingButtonClicked() {
+        enterActiveRecordingMode(elapsed: recordingElapsed, isPaused: false)
+        onRecordingResume()
+    }
+
+    @objc private func stopRecordingButtonClicked() {
+        onRecordingStop()
+    }
+
     private func updateRecordingOptions(
         format: RecordingFormat? = nil,
         showsCursor: Bool? = nil,
@@ -911,9 +1001,27 @@ private final class SelectionOverlayView: NSView {
             audioSource: currentRecordingOptions.audioSource
         )
         SettingsStore.setRecordingOptions(currentRecordingOptions)
+        sizeControl.isHidden = false
+        recordingElapsedLabel.isHidden = true
         installModeButtons(makeRecordingSetupButtons())
         applyHUDTheme(hudTheme)
         positionHUD()
+    }
+
+    func enterActiveRecordingMode(elapsed: TimeInterval = 0, isPaused: Bool = false) {
+        recordingHUDMode = .active(isPaused: isPaused)
+        recordingElapsed = elapsed
+        recordingElapsedLabel.stringValue = formattedRecordingElapsed(elapsed)
+        sizeControl.isHidden = true
+        recordingElapsedLabel.isHidden = false
+        installModeButtons(makeActiveRecordingButtons(isPaused: isPaused))
+        applyHUDTheme(hudTheme)
+        positionHUD()
+    }
+
+    private func formattedRecordingElapsed(_ elapsed: TimeInterval) -> String {
+        let wholeSeconds = max(0, Int(elapsed.rounded(.down)))
+        return String(format: "%02d:%02d", wholeSeconds / 60, wholeSeconds % 60)
     }
 
     private func confirmSelection() {
@@ -1176,6 +1284,10 @@ private final class SelectionOverlayView: NSView {
         case .active:
             "active"
         }
+    }
+
+    func recordingElapsedTextForTesting() -> String {
+        recordingElapsedLabel.stringValue
     }
 
     func activeSelectionForTesting() -> SelectionCapture? {

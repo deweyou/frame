@@ -92,6 +92,35 @@ final class SelectionOverlayCompletionTests: XCTestCase {
     }
 
     @MainActor
+    func testRecordingHUDShowsElapsedTimePauseAndStopWhileActive() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        let window = try makeOverlayWindowForTesting(
+            initialGlobalRect: CGRect(
+                x: screen.frame.minX + 20,
+                y: screen.frame.minY + 20,
+                width: 240,
+                height: 160
+            )
+        )
+
+        window.enterActiveRecordingModeForTesting(elapsed: 24, isPaused: false)
+
+        XCTAssertEqual(window.recordingHUDModeForTesting(), "active")
+        XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("暂停"))
+        XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("停止录制"))
+        XCTAssertEqual(window.recordingElapsedTextForTesting(), "00:24")
+    }
+
+    @MainActor
+    func testPausedRecordingHUDShowsResume() throws {
+        let window = try makeOverlayWindowForTesting()
+
+        window.enterActiveRecordingModeForTesting(elapsed: 24, isPaused: true)
+
+        XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("继续"))
+    }
+
+    @MainActor
     func testHUDTooltipTextHasSymmetricHorizontalPadding() throws {
         let window = try makeOverlayWindowForTesting()
         let tooltipLayout = window.tooltipLayoutForTesting(text: "全屏截图")
