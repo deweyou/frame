@@ -3,6 +3,26 @@ import XCTest
 @testable import FrameCore
 
 final class RecordingServiceTests: XCTestCase {
+    @MainActor
+    func testDisplayResolverRejectsSelectionThatIntersectsMultipleDisplays() {
+        let first = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let second = CGRect(x: 100, y: 0, width: 100, height: 100)
+        let selection = CGRect(x: 90, y: 10, width: 20, height: 20)
+
+        XCTAssertThrowsError(try RecordingDisplayResolver.resolve(selection: selection, screenFrames: [first, second]))
+    }
+
+    @MainActor
+    func testDisplayResolverAcceptsSelectionInsideOneDisplay() throws {
+        let screen = CGRect(x: 0, y: 0, width: 200, height: 100)
+        let selection = CGRect(x: 20, y: 10, width: 80, height: 50)
+
+        let resolved = try RecordingDisplayResolver.resolve(selection: selection, screenFrames: [screen])
+
+        XCTAssertEqual(resolved.screenFrame, screen)
+        XCTAssertEqual(resolved.selectionRect, selection)
+    }
+
     func testSessionStateTransitionsFromRecordingToPausedToRecordingToFinished() async throws {
         let service = FakeRecordingService()
         let request = RecordingRequest(
@@ -34,7 +54,7 @@ private final class FakeRecordingService: RecordingServicing {
     }
 }
 
-private final class FakeRecordingSession: RecordingSessionControlling {
+private final class FakeRecordingSession: RecordingSessionControlling, @unchecked Sendable {
     private let request: RecordingRequest
     private(set) var state: RecordingSessionState = .recording
 
