@@ -59,6 +59,24 @@ system tool, not a branded dashboard.
 - Adapt HUD content contrast to the background below it. Use light content on
   dark backgrounds and dark content on light backgrounds.
 
+## Recording HUD
+
+- Recording HUD states inherit the screenshot HUD chrome: native glass,
+  icon-only buttons, stable sizing, delayed tooltips, and background-aware
+  contrast.
+- The screenshot HUD may switch into recording setup without closing the
+  selection overlay. Setup controls stay compact and cover start recording,
+  MP4/GIF format, cursor visibility, and keyboard hint visibility.
+- Active recording freezes the selected rectangle and replaces size editing
+  with elapsed recording time. The action group contains pause or resume plus
+  stop.
+- The recording HUD should sit outside the selected region when space allows.
+  For full-screen selections it may sit inside the screen so controls remain
+  reachable, but Frame-owned HUDs and keyboard hint overlays must not be
+  recorded into the output.
+- Do not add a stop-recording keyboard shortcut in this version. The HUD and
+  red menu bar recording state are the stop surfaces.
+
 ## HUD And Workspace Chrome
 
 - HUD-like controls share one visual language across capture, Quick Access, and
@@ -121,6 +139,9 @@ system tool, not a branded dashboard.
   separate disabled action reserved for future edited-image persistence.
 - It should stay lightweight and dismissible, without blocking normal system
   usage.
+- Recording Quick Access uses the same bottom-left placement and HUD-like visual
+  language. It exposes Download, Copy, Preview, disabled Edit, and Close. Preview
+  opens a playable video window; Edit remains pending.
 
 ## Capture History
 

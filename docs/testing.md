@@ -27,6 +27,7 @@ New HUD or interactive AppKit features should add component E2E coverage for the
 - model refreshes while a field editor is active
 - button or menu-trigger callbacks that must commit active input first
 - locked-ratio or preset behavior at the component boundary when it does not require a modal menu
+- recording HUD mode changes and callback routing that do not require Screen Recording permission
 
 Do not call modal menu presentation such as `NSMenu.popUp` from CI tests. Prefer testing the callback seam or the control state before presentation; keep a manual smoke note for the actual popover/menu if needed.
 
@@ -52,11 +53,11 @@ swift build
 scripts/package-app.sh
 ```
 
-Component E2E tests must remain deterministic without Screen Recording permission. Full screenshot capture, TCC prompts, and multi-display manual checks stay in the local smoke test flow documented in `docs/development.md`.
+Component E2E tests must remain deterministic without Screen Recording permission. Full screenshot capture, live ScreenCaptureKit recording, TCC prompts, HUD exclusion from captured output, full-screen selection recording, and multi-display manual checks stay in the local smoke test flow documented in `docs/development.md`.
 
 ## Feature Iteration Rule
 
 When a new requirement changes an interactive AppKit behavior, update the matching component E2E tests in the same change. If the behavior cannot be automated safely, document the reason and add the smallest stable lower-level coverage instead.
 
 ---
-*Last updated: 2026-05-28 | Reason: document hosted CI boundary for real-window AppKit E2E*
+*Last updated: 2026-06-03 | Reason: document live recording manual smoke boundary*
