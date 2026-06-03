@@ -21,9 +21,12 @@ In scope:
 - One display per recording.
 - Recording setup controls for format, cursor visibility, and keyboard hints.
 - Active recording HUD with elapsed recording time, pause or resume, and stop.
+- Non-interactive recording boundary that keeps the selected region visible
+  while the desktop remains usable.
 - Status item recording state with a red recording icon and stop action.
 - MP4 and GIF output.
-- Video Quick Access at the active screen bottom-left corner.
+- Video Quick Access at the active screen bottom-left corner, using the first
+  frame as the preview thumbnail when available.
 - Copying the recorded file to the pasteboard.
 - A playable video preview window.
 - A visible but disabled/pending editing entry.
@@ -80,6 +83,12 @@ resize the selection while recording is active or paused. Pause pauses the
 recording for real: paused time is not written to the output and does not
 increase the displayed elapsed recording time. Resume continues into the same
 final recording file.
+
+While recording is active, the full selection overlay should stop intercepting
+desktop interaction. Frame should keep a visible non-interactive boundary around
+the recorded rectangle so users can see what is being captured without blocking
+other apps. The boundary is Frame-owned chrome and must be excluded from
+captured pixels.
 
 The recording HUD should sit outside the selection when there is enough room. If
 the selected region covers the full screen, the HUD may be visually inside the
@@ -144,6 +153,7 @@ with screenshot Quick Access:
 - anchor to the active screen bottom-left with the same padding model
 - stack upward with other Quick Access cards
 - stay lightweight and dismissible
+- use the recording's first frame as the thumbnail when it can be decoded
 - show hover actions as icon-only controls
 
 The video card actions are:
@@ -178,6 +188,11 @@ Proposed components:
   and future audio source.
 - `RecordingFileWriter`: writes or copies finalized recording files using the
   configured save directory and recording filename generation.
+- `RecordingBoundaryOverlayController`: shows the recorded rectangle during an
+  active recording without taking focus, blocking mouse events, or being shared
+  into captured output.
+- `RecordingThumbnailProvider`: extracts a first-frame thumbnail for completed
+  MP4 and GIF files when the output can be decoded.
 - `VideoQuickAccessPanelController` or a generalized Quick Access model: shows
   completed recordings without forcing screenshot-only types into video flows.
 - `VideoPreviewWindowController`: opens playable video previews and keeps edit
@@ -204,11 +219,11 @@ same broad permission area, but platform prompts may mention screen and audio
 access on newer macOS versions. Since audio is out of scope, no microphone
 permission should be requested in this version.
 
-Recording HUD windows, keyboard hint overlays, and Frame-owned transient
-surfaces must be excluded from captured content. The implementation should use
-the appropriate AppKit/ScreenCaptureKit window-sharing and content-filtering
-mechanisms so visual controls remain visible to the user without entering the
-recording.
+Recording HUD windows, keyboard hint overlays, recording boundary overlays, and
+Frame-owned transient surfaces must be excluded from captured content. The
+implementation should use the appropriate AppKit/ScreenCaptureKit window-sharing
+and content-filtering mechanisms so visual controls remain visible to the user
+without entering the recording.
 
 If exclusion cannot be guaranteed for a platform path, that path should fail
 with a clear error instead of producing recordings that include Frame controls.

@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let recordingFileWriter = RecordingFileWriter()
     private let keyboardHintOverlayController = KeyboardHintOverlayController()
     private let activeRecordingHUDPanelController = ActiveRecordingHUDPanelController()
+    private let recordingBoundaryOverlayController = RecordingBoundaryOverlayController()
     private let settingsWindowController = SettingsWindowController()
     private var captureHistoryWindowController: CaptureHistoryWindowController?
     private var strings = AppStrings.current()
@@ -303,6 +304,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.activeRecordingQuickAccessAnchor = anchor
                 self.isStoppingActiveRecording = false
 
+                self.recordingBoundaryOverlayController.show(rect: selection.rect)
                 self.activeRecordingHUDPanelController.show(
                     near: selection.rect,
                     elapsed: 0,
@@ -334,6 +336,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 } else {
                     self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
                 }
+                self.recordingBoundaryOverlayController.close()
                 self.showCaptureFailedAlert(error)
             }
         }
@@ -452,6 +455,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         activeRecordingElapsedTimer?.invalidate()
         activeRecordingElapsedTimer = nil
         activeRecordingHUDPanelController.close()
+        recordingBoundaryOverlayController.close()
         keyboardHintOverlayController.hide()
         statusItemController?.setRecordingState(.idle)
         activeRecordingSession = nil

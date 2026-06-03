@@ -2,7 +2,12 @@ import AppKit
 
 @MainActor
 final class VideoQuickAccessPanelController {
+    private let thumbnailProvider: RecordingThumbnailProvider
     private var items: [UUID: VideoQuickAccessItem] = [:]
+
+    init(thumbnailProvider: RecordingThumbnailProvider = RecordingThumbnailProvider()) {
+        self.thumbnailProvider = thumbnailProvider
+    }
 
     func show(
         for recording: CapturedRecording,
@@ -74,6 +79,10 @@ final class VideoQuickAccessPanelController {
         items[recordingID]?.preferredSize
     }
 
+    func hasThumbnailForTesting(recordingID: UUID) -> Bool {
+        items[recordingID]?.contentView.hasThumbnailForTesting ?? false
+    }
+
     private func makePanel(size: CGSize) -> NSPanel {
         let panel = NSPanel(
             contentRect: CGRect(origin: .zero, size: size),
@@ -110,18 +119,29 @@ final class VideoQuickAccessPanelController {
             root?.setActionsVisible(isHovered)
         }
 
-        let previewView = NSVisualEffectView()
-        previewView.material = .hudWindow
-        previewView.blendingMode = .behindWindow
-        previewView.state = .active
-        previewView.translatesAutoresizingMaskIntoConstraints = false
-        previewView.wantsLayer = true
-        previewView.layer?.cornerRadius = 12
-        previewView.layer?.cornerCurve = .continuous
-        previewView.layer?.masksToBounds = true
-        previewView.layer?.borderWidth = 0.5
-        previewView.layer?.borderColor = NSColor.white.withAlphaComponent(0.32).cgColor
-        previewView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        let thumbnail = thumbnailProvider.thumbnail(for: recording.fileURL)
+        let previewSurface: NSView
+        if let thumbnail {
+            let imageView = VideoThumbnailImageView(image: thumbnail)
+            imageView.translatesAutoresizingMaskIntoConstraints = false
+            imageView.setAccessibilityLabel(strings.videoQuickAccessPreview)
+            previewSurface = imageView
+            root.hasThumbnailForTesting = true
+        } else {
+            let visualEffectView = NSVisualEffectView()
+            visualEffectView.material = .hudWindow
+            visualEffectView.blendingMode = .behindWindow
+            visualEffectView.state = .active
+            visualEffectView.translatesAutoresizingMaskIntoConstraints = false
+            visualEffectView.wantsLayer = true
+            visualEffectView.layer?.cornerRadius = 12
+            visualEffectView.layer?.cornerCurve = .continuous
+            visualEffectView.layer?.masksToBounds = true
+            visualEffectView.layer?.borderWidth = 0.5
+            visualEffectView.layer?.borderColor = NSColor.white.withAlphaComponent(0.32).cgColor
+            visualEffectView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            previewSurface = visualEffectView
+        }
 
         let playImageView = NSImageView(
             image: NSImage(systemSymbolName: "play.circle.fill", accessibilityDescription: strings.videoQuickAccessPreview) ?? NSImage()
@@ -170,32 +190,32 @@ final class VideoQuickAccessPanelController {
         closeButton.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.42).cgColor
 
         root.actionsViews = [overlayView, closeButton]
-        root.addSubview(previewView)
+        root.addSubview(previewSurface)
         root.addSubview(overlayView)
         root.addSubview(closeButton)
-        previewView.addSubview(playImageView)
-        previewView.addSubview(duration)
+        previewSurface.addSubview(playImageView)
+        previewSurface.addSubview(duration)
         overlayView.addSubview(actions)
 
         NSLayoutConstraint.activate([
             root.widthAnchor.constraint(equalToConstant: previewSize.width),
             root.heightAnchor.constraint(equalToConstant: previewSize.height),
 
-            previewView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            previewView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            previewView.topAnchor.constraint(equalTo: root.topAnchor),
-            previewView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            previewSurface.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            previewSurface.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            previewSurface.topAnchor.constraint(equalTo: root.topAnchor),
+            previewSurface.bottomAnchor.constraint(equalTo: root.bottomAnchor),
 
-            playImageView.centerXAnchor.constraint(equalTo: previewView.centerXAnchor),
-            playImageView.centerYAnchor.constraint(equalTo: previewView.centerYAnchor),
+            playImageView.centerXAnchor.constraint(equalTo: previewSurface.centerXAnchor),
+            playImageView.centerYAnchor.constraint(equalTo: previewSurface.centerYAnchor),
 
-            duration.trailingAnchor.constraint(equalTo: previewView.trailingAnchor, constant: -9),
-            duration.bottomAnchor.constraint(equalTo: previewView.bottomAnchor, constant: -9),
+            duration.trailingAnchor.constraint(equalTo: previewSurface.trailingAnchor, constant: -9),
+            duration.bottomAnchor.constraint(equalTo: previewSurface.bottomAnchor, constant: -9),
             duration.widthAnchor.constraint(greaterThanOrEqualToConstant: 48),
             duration.heightAnchor.constraint(equalToConstant: 22),
 
-            overlayView.centerXAnchor.constraint(equalTo: previewView.centerXAnchor),
-            overlayView.bottomAnchor.constraint(equalTo: previewView.bottomAnchor, constant: -7),
+            overlayView.centerXAnchor.constraint(equalTo: previewSurface.centerXAnchor),
+            overlayView.bottomAnchor.constraint(equalTo: previewSurface.bottomAnchor, constant: -7),
             overlayView.widthAnchor.constraint(equalToConstant: 126),
             overlayView.heightAnchor.constraint(equalToConstant: 28),
 
@@ -204,8 +224,8 @@ final class VideoQuickAccessPanelController {
             actions.topAnchor.constraint(equalTo: overlayView.topAnchor, constant: 4),
             actions.bottomAnchor.constraint(equalTo: overlayView.bottomAnchor, constant: -4),
 
-            closeButton.trailingAnchor.constraint(equalTo: previewView.trailingAnchor, constant: -6),
-            closeButton.topAnchor.constraint(equalTo: previewView.topAnchor, constant: 6),
+            closeButton.trailingAnchor.constraint(equalTo: previewSurface.trailingAnchor, constant: -6),
+            closeButton.topAnchor.constraint(equalTo: previewSurface.topAnchor, constant: 6),
             closeButton.widthAnchor.constraint(equalToConstant: floatingButtonDiameter),
             closeButton.heightAnchor.constraint(equalToConstant: floatingButtonDiameter),
         ])
@@ -302,6 +322,7 @@ private final class VideoQuickAccessItem {
 private final class VideoQuickAccessContentView: NSView {
     var actionsViews: [NSView] = []
     var onHoverChanged: ((Bool) -> Void)?
+    var hasThumbnailForTesting = false
 
     private var trackingArea: NSTrackingArea?
 
@@ -347,6 +368,46 @@ private final class VideoQuickAccessContentView: NSView {
                 view.animator().alphaValue = isVisible ? 1 : 0
             }
         }
+    }
+}
+
+private final class VideoThumbnailImageView: NSView {
+    private let image: NSImage
+
+    init(image: NSImage) {
+        self.image = image
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var isOpaque: Bool {
+        true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let clipPath = NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12)
+        clipPath.addClip()
+
+        NSColor.windowBackgroundColor.setFill()
+        bounds.fill()
+
+        let sourceSize = image.size == .zero ? bounds.size : image.size
+        let drawRect = CapturePreviewMetrics.aspectFillDrawRect(
+            imageSize: sourceSize,
+            in: bounds
+        )
+        image.draw(in: drawRect, from: .zero, operation: .copy, fraction: 1)
+
+        NSColor.white.withAlphaComponent(0.32).setStroke()
+        let border = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.25, dy: 0.25), xRadius: 12, yRadius: 12)
+        border.lineWidth = 0.5
+        border.stroke()
     }
 }
 

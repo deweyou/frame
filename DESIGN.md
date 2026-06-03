@@ -70,10 +70,13 @@ system tool, not a branded dashboard.
 - Active recording freezes the selected rectangle and replaces size editing
   with elapsed recording time. The action group contains pause or resume plus
   stop.
+- During active recording, keep a visible non-interactive boundary around the
+  selected rectangle while allowing desktop apps below it to receive mouse and
+  keyboard interaction.
 - The recording HUD should sit outside the selected region when space allows.
   For full-screen selections it may sit inside the screen so controls remain
-  reachable, but Frame-owned HUDs and keyboard hint overlays must not be
-  recorded into the output.
+  reachable, but Frame-owned HUDs, recording boundaries, and keyboard hint
+  overlays must not be recorded into the output.
 - Do not add a stop-recording keyboard shortcut in this version. The HUD and
   red menu bar recording state are the stop surfaces.
 
@@ -141,7 +144,9 @@ system tool, not a branded dashboard.
   usage.
 - Recording Quick Access uses the same bottom-left placement and HUD-like visual
   language. It exposes Download, Copy, Preview, disabled Edit, and Close. Preview
-  opens a playable video window; Edit remains pending.
+  opens a playable video window; Edit remains pending. Use the first decodable
+  recording frame as the thumbnail, with a lightweight video placeholder as the
+  fallback.
 
 ## Capture History
 
