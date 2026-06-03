@@ -13,6 +13,7 @@ final class SelectionOverlayWindow {
         showsCenteredHUDWhenEmpty: Bool,
         placeholderText: String,
         ocrActionText: String,
+        delayCountdownNanoseconds: UInt64 = 5_000_000_000,
         onInteraction: @escaping () -> Void,
         onWindowSelectionRequested: @escaping (CGPoint, Int?) -> WindowCandidate?,
         onComplete: @escaping (SelectionOverlayCompletion?) -> Void
@@ -23,6 +24,7 @@ final class SelectionOverlayWindow {
             showsCenteredHUDWhenEmpty: showsCenteredHUDWhenEmpty,
             placeholderText: placeholderText,
             ocrActionText: ocrActionText,
+            delayCountdownNanoseconds: delayCountdownNanoseconds,
             onInteraction: onInteraction,
             onWindowSelectionRequested: onWindowSelectionRequested,
             onComplete: onComplete
@@ -78,6 +80,42 @@ final class SelectionOverlayWindow {
         overlayView.activeSelection
     }
 
+    func hudButtonAccessibilityLabelsForTesting() -> [String] {
+        overlayView.hudButtonAccessibilityLabelsForTesting()
+    }
+
+    func hudButtonImageDescriptionsForTesting() -> [String] {
+        overlayView.hudButtonImageDescriptionsForTesting()
+    }
+
+    func performHUDActionForTesting(accessibilityLabel: String) -> Bool {
+        overlayView.performHUDActionForTesting(accessibilityLabel: accessibilityLabel)
+    }
+
+    func activeSelectionForTesting() -> SelectionCapture? {
+        overlayView.activeSelectionForTesting()
+    }
+
+    func isDelayCountdownActiveForTesting() -> Bool {
+        overlayView.isDelayCountdownActiveForTesting()
+    }
+
+    func countdownFrameForTesting() -> CGRect? {
+        overlayView.countdownFrameForTesting()
+    }
+
+    func countdownFontSizeForTesting() -> CGFloat? {
+        overlayView.countdownFontSizeForTesting()
+    }
+
+    func countdownTextFrameForTesting() -> CGRect? {
+        overlayView.countdownTextFrameForTesting()
+    }
+
+    func tooltipLayoutForTesting(text: String) -> (size: CGSize, textFrame: CGRect) {
+        overlayView.tooltipLayoutForTesting(text: text)
+    }
+
     func clearSelection() {
         overlayView.clearSelection()
     }
@@ -111,7 +149,7 @@ private final class SelectionOverlayNativeWindow: NSWindow {
 
 @MainActor
 private final class SelectionOverlayView: NSView {
-    private let hudSize = CGSize(width: 218, height: 42)
+    private let hudSize = CGSize(width: 302, height: 42)
     private let screenFrame: CGRect
     private let onInteraction: () -> Void
     private let onWindowSelectionRequested: (CGPoint, Int?) -> WindowCandidate?
@@ -123,14 +161,19 @@ private final class SelectionOverlayView: NSView {
     private let placeholderView = NSVisualEffectView()
     private let placeholderLabel: NSTextField
     private let ocrActionText: String
+    private let delayCountdownNanoseconds: UInt64
+    private let countdownView = CountdownView()
     private let tooltipView = HUDTooltipView()
     private var pendingTooltipTask: Task<Void, Never>?
+    private var pendingDelayWorkItems: [DispatchWorkItem] = []
     private var hudTheme: HUDTheme = .lightContent
 
     private var selectionRect: CGRect?
     private var windowCandidate: WindowCandidate?
+    private var delaySnapshotSelection: SelectionCapture?
     private var dragOperation: SelectionDragOperation?
     private var hasCompleted = false
+    private var isDelayCountdownActive = false
     private var showsCenteredHUDWhenEmpty: Bool
     private var sizingMode: SelectionSizingMode = .unlocked
     private var isShiftTemporarilyLocking = false
@@ -142,6 +185,7 @@ private final class SelectionOverlayView: NSView {
         showsCenteredHUDWhenEmpty: Bool,
         placeholderText: String,
         ocrActionText: String,
+        delayCountdownNanoseconds: UInt64,
         onInteraction: @escaping () -> Void,
         onWindowSelectionRequested: @escaping (CGPoint, Int?) -> WindowCandidate?,
         onComplete: @escaping (SelectionOverlayCompletion?) -> Void
@@ -152,6 +196,7 @@ private final class SelectionOverlayView: NSView {
         self.onWindowSelectionRequested = onWindowSelectionRequested
         self.onComplete = onComplete
         self.ocrActionText = ocrActionText
+        self.delayCountdownNanoseconds = delayCountdownNanoseconds
         self.placeholderLabel = NSTextField(labelWithString: placeholderText)
 
         super.init(frame: CGRect(origin: .zero, size: screen.frame.size))
@@ -241,6 +286,10 @@ private final class SelectionOverlayView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        guard !isDelayCountdownActive else {
+            return
+        }
+
         let point = clampedPoint(event.locationInWindow)
 
         if event.clickCount == 2 {
@@ -256,6 +305,10 @@ private final class SelectionOverlayView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        guard !isDelayCountdownActive else {
+            return
+        }
+
         guard let dragOperation else {
             return
         }
@@ -273,6 +326,11 @@ private final class SelectionOverlayView: NSView {
     }
 
     override func flagsChanged(with event: NSEvent) {
+        guard !isDelayCountdownActive else {
+            super.flagsChanged(with: event)
+            return
+        }
+
         guard dragOperation != nil else {
             isShiftTemporarilyLocking = false
             updateMetrics()
@@ -333,6 +391,8 @@ private final class SelectionOverlayView: NSView {
         configureGlass(modeView, cornerRadius: 21)
         modeView.isHidden = true
         modeView.addSubview(makeRegionModeButton())
+        modeView.addSubview(makeFullScreenButton())
+        modeView.addSubview(makeDelayButton())
         modeView.addSubview(makeOCRButton())
 
         configureGlass(sizeView, cornerRadius: 21)
@@ -343,24 +403,29 @@ private final class SelectionOverlayView: NSView {
         hudStackView.addArrangedSubview(modeView)
         hudStackView.addArrangedSubview(sizeView)
         addSubview(hudStackView)
+        configureCountdownLabel()
         tooltipView.isHidden = true
         addSubview(tooltipView)
 
         let actionButtons = modeView.subviews.compactMap { $0 as? HUDIconButton }
-        guard actionButtons.count == 2 else {
+        guard actionButtons.count == 4 else {
             return
         }
         let modeButton = actionButtons[0]
-        let ocrButton = actionButtons[1]
+        let fullScreenButton = actionButtons[1]
+        let delayButton = actionButtons[2]
+        let ocrButton = actionButtons[3]
 
         NSLayoutConstraint.activate([
-            modeView.widthAnchor.constraint(equalToConstant: 84),
+            modeView.widthAnchor.constraint(equalToConstant: 168),
             modeView.heightAnchor.constraint(equalToConstant: hudSize.height),
             sizeView.widthAnchor.constraint(equalToConstant: 127),
             sizeView.heightAnchor.constraint(equalToConstant: hudSize.height),
         ])
 
         modeButton.translatesAutoresizingMaskIntoConstraints = false
+        fullScreenButton.translatesAutoresizingMaskIntoConstraints = false
+        delayButton.translatesAutoresizingMaskIntoConstraints = false
         ocrButton.translatesAutoresizingMaskIntoConstraints = false
         sizeControl.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -368,7 +433,15 @@ private final class SelectionOverlayView: NSView {
             modeButton.centerYAnchor.constraint(equalTo: modeView.centerYAnchor),
             modeButton.widthAnchor.constraint(equalToConstant: 42),
             modeButton.heightAnchor.constraint(equalToConstant: 42),
-            ocrButton.leadingAnchor.constraint(equalTo: modeButton.trailingAnchor),
+            fullScreenButton.leadingAnchor.constraint(equalTo: modeButton.trailingAnchor),
+            fullScreenButton.centerYAnchor.constraint(equalTo: modeView.centerYAnchor),
+            fullScreenButton.widthAnchor.constraint(equalToConstant: 42),
+            fullScreenButton.heightAnchor.constraint(equalToConstant: 42),
+            delayButton.leadingAnchor.constraint(equalTo: fullScreenButton.trailingAnchor),
+            delayButton.centerYAnchor.constraint(equalTo: modeView.centerYAnchor),
+            delayButton.widthAnchor.constraint(equalToConstant: 42),
+            delayButton.heightAnchor.constraint(equalToConstant: 42),
+            ocrButton.leadingAnchor.constraint(equalTo: delayButton.trailingAnchor),
             ocrButton.centerYAnchor.constraint(equalTo: modeView.centerYAnchor),
             ocrButton.widthAnchor.constraint(equalToConstant: 42),
             ocrButton.heightAnchor.constraint(equalToConstant: 42),
@@ -379,6 +452,17 @@ private final class SelectionOverlayView: NSView {
         ])
 
         positionHUD()
+    }
+
+    private func configureCountdownLabel() {
+        countdownView.isHidden = true
+        countdownView.translatesAutoresizingMaskIntoConstraints = true
+        countdownView.wantsLayer = true
+        countdownView.layer?.shadowColor = NSColor.black.cgColor
+        countdownView.layer?.shadowOpacity = 0.32
+        countdownView.layer?.shadowRadius = 14
+        countdownView.layer?.shadowOffset = CGSize(width: 0, height: -4)
+        addSubview(countdownView)
     }
 
     private func configurePlaceholder() {
@@ -418,7 +502,7 @@ private final class SelectionOverlayView: NSView {
 
     private func makeRegionModeButton() -> NSButton {
         let button = HUDIconButton(
-            symbolName: "rectangle.dashed",
+            symbolName: "crop",
             accessibilityDescription: "区域截图"
         )
         button.target = self
@@ -430,9 +514,37 @@ private final class SelectionOverlayView: NSView {
         return button
     }
 
+    private func makeFullScreenButton() -> NSButton {
+        let button = HUDIconButton(
+            symbolName: "display",
+            accessibilityDescription: "全屏截图"
+        )
+        button.target = self
+        button.action = #selector(fullScreenButtonClicked)
+        button.onHoverChange = { [weak self, weak button] isHovering in
+            self?.setHUDTooltip(isHovering ? "全屏截图" : nil, anchorView: button)
+        }
+        button.contentTintColor = hudTheme.foregroundColor
+        return button
+    }
+
+    private func makeDelayButton() -> NSButton {
+        let button = HUDIconButton(
+            symbolName: "timer",
+            accessibilityDescription: "延迟截图"
+        )
+        button.target = self
+        button.action = #selector(delayButtonClicked)
+        button.onHoverChange = { [weak self, weak button] isHovering in
+            self?.setHUDTooltip(isHovering ? "延迟截图" : nil, anchorView: button)
+        }
+        button.contentTintColor = hudTheme.foregroundColor
+        return button
+    }
+
     private func makeOCRButton() -> NSButton {
         let button = HUDIconButton(
-            symbolName: "text.viewfinder",
+            symbolName: "character.textbox",
             accessibilityDescription: ocrActionText
         )
         button.target = self
@@ -477,6 +589,10 @@ private final class SelectionOverlayView: NSView {
         placeholderLabel.textColor = theme.foregroundColor
         modeButton?.contentTintColor = theme.foregroundColor
         modeButton?.hoverColor = theme.hoverColor
+        fullScreenButton?.contentTintColor = theme.foregroundColor
+        fullScreenButton?.hoverColor = theme.hoverColor
+        delayButton?.contentTintColor = theme.foregroundColor
+        delayButton?.hoverColor = theme.hoverColor
         ocrButton?.contentTintColor = theme.foregroundColor
         ocrButton?.hoverColor = theme.hoverColor
         tooltipView.applyTheme(theme)
@@ -589,14 +705,48 @@ private final class SelectionOverlayView: NSView {
         }
 
         hasCompleted = true
+        cancelDelayCountdown()
+        isDelayCountdownActive = false
+        delaySnapshotSelection = nil
+        countdownView.isHidden = true
         onComplete(completion)
     }
 
     @objc private func regionModeButtonClicked() {
+        guard !isDelayCountdownActive else {
+            return
+        }
+
         confirmSelection()
     }
 
+    @objc private func fullScreenButtonClicked() {
+        guard !isDelayCountdownActive else {
+            return
+        }
+
+        completeSelection(with: .fullScreen)
+    }
+
+    @objc private func delayButtonClicked() {
+        guard !isDelayCountdownActive else {
+            return
+        }
+
+        guard let activeSelection,
+              SelectionGeometry.isValidSelection(activeSelection.rect) else {
+            NSSound.beep()
+            return
+        }
+
+        beginDelayCountdown(for: activeSelection)
+    }
+
     @objc private func ocrButtonClicked() {
+        guard !isDelayCountdownActive else {
+            return
+        }
+
         guard let activeSelection,
               SelectionGeometry.isValidSelection(activeSelection.rect) else {
             NSSound.beep()
@@ -607,6 +757,10 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func confirmSelection() {
+        guard !isDelayCountdownActive else {
+            return
+        }
+
         guard let activeSelection,
               SelectionGeometry.isValidSelection(activeSelection.rect) else {
             NSSound.beep()
@@ -614,6 +768,71 @@ private final class SelectionOverlayView: NSView {
         }
 
         completeSelection(with: .capture(activeSelection))
+    }
+
+    private func beginDelayCountdown(for selection: SelectionCapture) {
+        delaySnapshotSelection = selection
+        isDelayCountdownActive = true
+        dragOperation = nil
+        pendingTooltipTask?.cancel()
+        tooltipView.isHidden = true
+        showCountdown(secondsRemaining: 5)
+
+        guard delayCountdownNanoseconds > 0 else {
+            completeSelection(with: .capture(selection))
+            return
+        }
+
+        let tickCount: UInt64 = 5
+        let tickDuration = max(1, delayCountdownNanoseconds / tickCount)
+        for tickIndex in 1..<tickCount {
+            let secondsRemaining = Int(tickCount - tickIndex)
+            scheduleDelayWorkItem(afterNanoseconds: tickDuration * tickIndex) { [weak self] in
+                self?.showCountdown(secondsRemaining: secondsRemaining)
+            }
+        }
+
+        scheduleDelayWorkItem(afterNanoseconds: delayCountdownNanoseconds) { [weak self, selection] in
+            guard let self, self.delaySnapshotSelection != nil else {
+                return
+            }
+
+            self.completeSelection(with: .capture(selection))
+        }
+    }
+
+    private func scheduleDelayWorkItem(afterNanoseconds nanoseconds: UInt64, action: @escaping () -> Void) {
+        let workItem = DispatchWorkItem(block: action)
+        pendingDelayWorkItems.append(workItem)
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + .nanoseconds(Int(min(nanoseconds, UInt64(Int.max)))),
+            execute: workItem
+        )
+    }
+
+    private func cancelDelayCountdown() {
+        for workItem in pendingDelayWorkItems {
+            workItem.cancel()
+        }
+        pendingDelayWorkItems.removeAll()
+    }
+
+    private func showCountdown(secondsRemaining: Int) {
+        countdownView.secondsRemaining = secondsRemaining
+        let size = CountdownView.preferredSize(for: secondsRemaining)
+        let anchorRect = delaySnapshotSelection?.rect ?? displayedLocalRect ?? hudStackView.frame
+        let center = CGPoint(x: anchorRect.midX, y: anchorRect.midY)
+        let x = min(max(center.x - size.width / 2, bounds.minX + 8), bounds.maxX - size.width - 8)
+        let y = min(max(center.y - size.height / 2, bounds.minY + 8), bounds.maxY - size.height - 8)
+        countdownView.frame = CGRect(origin: CGPoint(x: x, y: y), size: size)
+        countdownView.layer?.shadowPath = CGPath(
+            roundedRect: countdownView.bounds,
+            cornerWidth: CountdownView.cornerRadius,
+            cornerHeight: CountdownView.cornerRadius,
+            transform: nil
+        )
+        countdownView.isHidden = false
+        needsDisplay = true
     }
 
     private func selectWindowCandidate(at localPoint: CGPoint) {
@@ -732,8 +951,78 @@ private final class SelectionOverlayView: NSView {
         modeView.subviews.first as? HUDIconButton
     }
 
+    private var fullScreenButton: HUDIconButton? {
+        Array(modeView.subviews.compactMap { $0 as? HUDIconButton }).dropFirst().first
+    }
+
+    private var delayButton: HUDIconButton? {
+        Array(modeView.subviews.compactMap { $0 as? HUDIconButton }).dropFirst(2).first
+    }
+
     private var ocrButton: HUDIconButton? {
-        modeView.subviews.compactMap { $0 as? HUDIconButton }.dropFirst().first
+        Array(modeView.subviews.compactMap { $0 as? HUDIconButton }).dropFirst(3).first
+    }
+
+    func hudButtonAccessibilityLabelsForTesting() -> [String] {
+        modeView.subviews
+            .compactMap { $0 as? NSButton }
+            .compactMap { $0.accessibilityLabel() }
+    }
+
+    func hudButtonImageDescriptionsForTesting() -> [String] {
+        modeView.subviews
+            .compactMap { $0 as? HUDIconButton }
+            .map(\.symbolName)
+    }
+
+    func performHUDActionForTesting(accessibilityLabel: String) -> Bool {
+        guard modeView.subviews.compactMap({ $0 as? NSButton }).contains(where: {
+            $0.accessibilityLabel() == accessibilityLabel
+        }) else {
+            return false
+        }
+
+        switch accessibilityLabel {
+        case "区域截图":
+            regionModeButtonClicked()
+        case "全屏截图":
+            fullScreenButtonClicked()
+        case "延迟截图":
+            delayButtonClicked()
+        case ocrActionText:
+            ocrButtonClicked()
+        default:
+            return false
+        }
+        return true
+    }
+
+    func activeSelectionForTesting() -> SelectionCapture? {
+        activeSelection
+    }
+
+    func isDelayCountdownActiveForTesting() -> Bool {
+        isDelayCountdownActive
+    }
+
+    func countdownFrameForTesting() -> CGRect? {
+        countdownView.isHidden ? nil : countdownView.frame
+    }
+
+    func countdownFontSizeForTesting() -> CGFloat? {
+        countdownView.font.pointSize
+    }
+
+    func countdownTextFrameForTesting() -> CGRect? {
+        guard !countdownView.isHidden else {
+            return nil
+        }
+
+        return countdownView.textFrame
+    }
+
+    func tooltipLayoutForTesting(text: String) -> (size: CGSize, textFrame: CGRect) {
+        tooltipView.layoutMetrics(for: text)
     }
 
     private var displayedLocalRect: CGRect? {
@@ -1433,6 +1722,7 @@ private extension NSCursor {
 }
 
 private final class HUDIconButton: NSButton {
+    let symbolName: String
     private let hoverLayer = CALayer()
     private var trackingArea: NSTrackingArea?
     var onHoverChange: ((Bool) -> Void)?
@@ -1448,11 +1738,13 @@ private final class HUDIconButton: NSButton {
     }
 
     init(symbolName: String, accessibilityDescription: String) {
+        self.symbolName = symbolName
         super.init(frame: .zero)
 
         title = ""
         image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription)
         imagePosition = .imageOnly
+        imageScaling = .scaleNone
         symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
         bezelStyle = .regularSquare
         isBordered = false
@@ -1540,10 +1832,83 @@ private final class HUDIconButton: NSButton {
     }
 }
 
+private final class CountdownView: NSView {
+    static let cornerRadius: CGFloat = 18
+    private static let minimumSize = CGSize(width: 72, height: 58)
+    private static let horizontalPadding: CGFloat = 28
+    private static let verticalPadding: CGFloat = 12
+
+    let font = NSFont.monospacedDigitSystemFont(ofSize: 36, weight: .bold)
+
+    var secondsRemaining = 5 {
+        didSet {
+            needsDisplay = true
+        }
+    }
+
+    var textFrame: CGRect {
+        centeredTextFrame(in: bounds)
+    }
+
+    static func preferredSize(for secondsRemaining: Int) -> CGSize {
+        let attributes = textAttributes()
+        let textSize = "\(secondsRemaining)".size(withAttributes: attributes)
+        return CGSize(
+            width: max(minimumSize.width, ceil(textSize.width + horizontalPadding)),
+            height: max(minimumSize.height, ceil(textSize.height + verticalPadding))
+        )
+    }
+
+    override var isFlipped: Bool {
+        false
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        let path = NSBezierPath(
+            roundedRect: bounds,
+            xRadius: Self.cornerRadius,
+            yRadius: Self.cornerRadius
+        )
+        NSColor.black.withAlphaComponent(0.58).setFill()
+        path.fill()
+        NSColor.white.withAlphaComponent(0.28).setStroke()
+        path.lineWidth = 1
+        path.stroke()
+
+        "\(secondsRemaining)".draw(
+            with: textFrame,
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: Self.textAttributes(font: font)
+        )
+    }
+
+    private func centeredTextFrame(in bounds: CGRect) -> CGRect {
+        let attributes = Self.textAttributes(font: font)
+        let textSize = "\(secondsRemaining)".size(withAttributes: attributes)
+        return CGRect(
+            x: bounds.midX - textSize.width / 2,
+            y: bounds.midY - textSize.height / 2,
+            width: textSize.width,
+            height: textSize.height
+        ).integral
+    }
+
+    private static func textAttributes(font: NSFont? = nil) -> [NSAttributedString.Key: Any] {
+        [
+            .font: font ?? NSFont.monospacedDigitSystemFont(ofSize: 36, weight: .bold),
+            .foregroundColor: NSColor.white,
+        ]
+    }
+}
+
 private final class HUDTooltipView: NSView {
-    private let label = NSTextField(labelWithString: "")
+    private var foregroundColor = NSColor.white
+    private let font = NSFont.systemFont(ofSize: 11, weight: .medium)
     private let horizontalPadding: CGFloat = 9
     private let verticalPadding: CGFloat = 5
+    private var text = ""
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1553,10 +1918,6 @@ private final class HUDTooltipView: NSView {
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
 
-        label.font = .systemFont(ofSize: 11, weight: .medium)
-        label.alignment = .center
-        label.lineBreakMode = .byClipping
-        addSubview(label)
         applyTheme(.lightContent)
     }
 
@@ -1567,34 +1928,72 @@ private final class HUDTooltipView: NSView {
 
     var stringValue: String {
         get {
-            label.stringValue
+            text
         }
         set {
-            label.stringValue = newValue
+            text = newValue
+            needsDisplay = true
         }
     }
 
     override var fittingSize: NSSize {
-        let labelSize = label.intrinsicContentSize
-        return CGSize(
-            width: ceil(labelSize.width + horizontalPadding * 2),
-            height: ceil(labelSize.height + verticalPadding * 2)
-        )
+        layoutMetrics(for: text).size
     }
 
-    override func layout() {
-        super.layout()
-        label.frame = bounds.insetBy(dx: horizontalPadding, dy: verticalPadding)
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        guard !text.isEmpty else {
+            return
+        }
+
+        let metrics = layoutMetrics(for: text, size: bounds.size)
+        text.draw(with: metrics.textFrame, options: [.usesLineFragmentOrigin], attributes: textAttributes)
+    }
+
+    func layoutMetrics(for text: String) -> (size: CGSize, textFrame: CGRect) {
+        let textSize = measuredTextSize(for: text)
+        let size = CGSize(
+            width: ceil(textSize.width + horizontalPadding * 2),
+            height: ceil(textSize.height + verticalPadding * 2)
+        )
+
+        return layoutMetrics(for: text, size: size)
+    }
+
+    private func layoutMetrics(for text: String, size: CGSize) -> (size: CGSize, textFrame: CGRect) {
+        let textSize = measuredTextSize(for: text)
+        let textFrame = CGRect(
+            x: (size.width - textSize.width) / 2,
+            y: (size.height - textSize.height) / 2,
+            width: textSize.width,
+            height: textSize.height
+        )
+
+        return (size: size, textFrame: textFrame)
     }
 
     func applyTheme(_ theme: HUDTheme) {
-        label.textColor = theme.foregroundColor
+        foregroundColor = theme.foregroundColor
         layer?.backgroundColor = switch theme {
         case .lightContent:
             NSColor.black.withAlphaComponent(0.42).cgColor
         case .darkContent:
             NSColor.white.withAlphaComponent(0.64).cgColor
         }
+        needsDisplay = true
+    }
+
+    private var textAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: font,
+            .foregroundColor: foregroundColor,
+        ]
+    }
+
+    private func measuredTextSize(for text: String) -> CGSize {
+        let size = (text as NSString).size(withAttributes: textAttributes)
+        return CGSize(width: ceil(size.width), height: ceil(size.height))
     }
 }
 

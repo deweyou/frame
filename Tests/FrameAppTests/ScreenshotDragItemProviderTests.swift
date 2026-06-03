@@ -37,8 +37,8 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
         let screenshot = CapturedScreenshot(
             pngData: try makePNGData(),
-            image: NSImage(size: NSSize(width: 2, height: 2)),
-            rect: CGRect(x: 0, y: 0, width: 2, height: 2)
+            image: NSImage(size: NSSize(width: 1600, height: 900)),
+            rect: CGRect(x: 0, y: 0, width: 1600, height: 900)
         )
         let controller = QuickAccessPanelController()
         retainedPreviewControllers.append(controller)
@@ -78,8 +78,17 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         XCTAssertIdentical(previewView.hitTest(closePoint), closeButton)
 
         let imageView = try XCTUnwrap(findPreviewImageView(in: previewView))
+        let expectedPreviewSize = CapturePreviewMetrics.previewSize(
+            forDesktopSize: (NSScreen.main ?? NSScreen.screens.first)?.frame.size
+        )
         XCTAssertEqual(imageView.frame.width, 200, accuracy: 0.5)
-        XCTAssertEqual(imageView.frame.height, 132, accuracy: 0.5)
+        XCTAssertEqual(imageView.frame.height, expectedPreviewSize.height, accuracy: 0.5)
+        XCTAssertEqual(
+            imageView.frame.height / imageView.frame.width,
+            CapturePreviewMetrics.desktopAspectRatio(),
+            accuracy: 0.01
+        )
+        XCTAssertNotEqual(imageView.layer?.backgroundColor, NSColor.clear.cgColor)
 
         XCTAssertEqual(closeButton.frame.width, 20, accuracy: 0.5)
         XCTAssertEqual(closeButton.frame.maxX, imageView.frame.maxX - 6, accuracy: 0.5)
@@ -89,8 +98,18 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         XCTAssertEqual(closeButton.layer?.cornerRadius ?? 0, closeButton.frame.width / 2, accuracy: 0.5)
         XCTAssertEqual(closeButton.layer?.borderWidth ?? 0, 0.5, accuracy: 0.1)
         XCTAssertGreaterThan(closeButton.layer?.shadowOpacity ?? 0, 0)
-        XCTAssertNotNil(closeButton.layer?.backgroundColor)
+        let closeBackground = try XCTUnwrap(closeButton.layer?.backgroundColor)
+        let closeBackgroundAlpha = try XCTUnwrap(NSColor(cgColor: closeBackground)?.alphaComponent)
+        XCTAssertGreaterThan(closeBackgroundAlpha, 0.2)
+        XCTAssertLessThan(closeBackgroundAlpha, 0.7)
         let closeButtonBackground = closeButton.layer?.backgroundColor
+        let iconLayer = try XCTUnwrap(closeButton.layer?.sublayers?.first)
+        XCTAssertEqual(iconLayer.position.x, closeButton.bounds.midX, accuracy: 0.5)
+        XCTAssertEqual(iconLayer.position.y, closeButton.bounds.midY, accuracy: 0.5)
+        XCTAssertEqual(iconLayer.bounds.width, iconLayer.bounds.height, accuracy: 0.5)
+        let iconStrokeColor = try XCTUnwrap((iconLayer as? CAShapeLayer)?.strokeColor)
+        let iconStrokeAlpha = try XCTUnwrap(NSColor(cgColor: iconStrokeColor)?.alphaComponent)
+        XCTAssertLessThan(iconStrokeAlpha, 0.75)
         let closeButtonCell = try XCTUnwrap(closeButton.cell as? NSButtonCell)
         XCTAssertTrue(closeButtonCell.highlightsBy.isEmpty)
         XCTAssertTrue(closeButtonCell.showsStateBy.isEmpty)
@@ -121,6 +140,97 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
 
             XCTAssertIdentical(previewView.hitTest(previewPoint), button)
         }
+    }
+
+    func testQuickAccessToolbarUsesReadableSymbolsWithConsistentScaling() throws {
+        _ = NSApplication.shared
+        let panel = try showPreview(
+            screenshot: CapturedScreenshot(
+                pngData: try makePNGData(),
+                image: NSImage(size: NSSize(width: 1600, height: 900)),
+                rect: CGRect(x: 0, y: 0, width: 1600, height: 900)
+            ),
+            copy: { true },
+            save: { true }
+        )
+        defer {
+            panel.close()
+        }
+
+        let previewView = try XCTUnwrap(panel.contentView)
+        let expectedSymbolsByLabel = [
+            "保存": "square.and.arrow.down",
+            "复制": "doc.on.doc",
+            "识别文字": "character.textbox",
+            "固定到预览窗口": "pin",
+            "打开预览": "arrow.up.left.and.arrow.down.right"
+        ]
+        let expectedConfigurationsByLabel = [
+            "保存": NSImage.SymbolConfiguration(pointSize: 12.5, weight: .semibold),
+            "复制": NSImage.SymbolConfiguration(pointSize: 11.5, weight: .semibold),
+            "识别文字": NSImage.SymbolConfiguration(pointSize: 12.5, weight: .semibold),
+            "固定到预览窗口": NSImage.SymbolConfiguration(pointSize: 11.5, weight: .semibold),
+            "打开预览": NSImage.SymbolConfiguration(pointSize: 11.5, weight: .semibold)
+        ]
+
+        for (label, symbolName) in expectedSymbolsByLabel {
+            let button = try XCTUnwrap(findButton(in: previewView, accessibilityLabel: label))
+
+            XCTAssertEqual(button.identifier?.rawValue, symbolName)
+            XCTAssertEqual(button.imageScaling, .scaleNone)
+            XCTAssertEqual(button.symbolConfiguration, expectedConfigurationsByLabel[label])
+        }
+    }
+
+    func testQuickAccessPreviewUsesDesktopAspectRatio() throws {
+        _ = NSApplication.shared
+        let panel = try showPreview(
+            screenshot: CapturedScreenshot(
+                pngData: try makePNGData(),
+                image: NSImage(size: NSSize(width: 1600, height: 900)),
+                rect: CGRect(x: 0, y: 0, width: 1600, height: 900)
+            ),
+            copy: { true },
+            save: { true }
+        )
+        defer {
+            panel.close()
+        }
+
+        let previewView = try XCTUnwrap(panel.contentView)
+        previewView.layoutSubtreeIfNeeded()
+
+        let imageView = try XCTUnwrap(findPreviewImageView(in: previewView))
+        let expectedPreviewSize = CapturePreviewMetrics.previewSize(
+            forDesktopSize: (NSScreen.main ?? NSScreen.screens.first)?.frame.size
+        )
+        XCTAssertEqual(imageView.frame.width, 200, accuracy: 0.5)
+        XCTAssertEqual(imageView.frame.height, expectedPreviewSize.height, accuracy: 0.5)
+        XCTAssertEqual(
+            imageView.frame.height / imageView.frame.width,
+            CapturePreviewMetrics.desktopAspectRatio(),
+            accuracy: 0.01
+        )
+    }
+
+    func testCapturePreviewMetricsUsesDesktopAspectRatioForFixedSize() {
+        XCTAssertEqual(
+            CapturePreviewMetrics.previewSize(forDesktopSize: CGSize(width: 1600, height: 900)),
+            CGSize(width: 200, height: 112)
+        )
+    }
+
+    func testCapturePreviewMetricsAspectFillDrawRectCoversPreviewBounds() {
+        let bounds = CGRect(x: 0, y: 0, width: 200, height: 112)
+        let drawRect = CapturePreviewMetrics.aspectFillDrawRect(
+            imageSize: CGSize(width: 200, height: 400),
+            in: bounds
+        )
+
+        XCTAssertGreaterThanOrEqual(drawRect.width, bounds.width)
+        XCTAssertGreaterThanOrEqual(drawRect.height, bounds.height)
+        XCTAssertEqual(drawRect.midX, bounds.midX, accuracy: 0.5)
+        XCTAssertEqual(drawRect.midY, bounds.midY, accuracy: 0.5)
     }
 
     func testQuickAccessActionButtonsUseSenderWindow() throws {

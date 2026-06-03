@@ -159,6 +159,45 @@ final class CaptureHistoryWindowControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testTileShadowDeepensOnHover() throws {
+        let record = try addRecord(kind: .screenshot, date: Date(timeIntervalSince1970: 100))
+        let controller = CaptureHistoryWindowController(store: store)
+
+        controller.show(strings: AppStrings(language: .en))
+        defer {
+            controller.close()
+        }
+
+        let idleShadowOpacity = try XCTUnwrap(controller.tileShadowOpacity(for: record))
+        let idleBackgroundAlpha = try XCTUnwrap(controller.tileBackgroundAlpha(for: record))
+        XCTAssertGreaterThan(idleShadowOpacity, 0)
+
+        controller.setActionsVisible(true, for: record)
+
+        let hoverShadowOpacity = try XCTUnwrap(controller.tileShadowOpacity(for: record))
+        let hoverBackgroundAlpha = try XCTUnwrap(controller.tileBackgroundAlpha(for: record))
+        XCTAssertGreaterThan(hoverShadowOpacity, idleShadowOpacity)
+        XCTAssertGreaterThan(hoverBackgroundAlpha, idleBackgroundAlpha)
+    }
+
+    @MainActor
+    func testTileShadowOnlyWrapsPreview() throws {
+        let record = try addRecord(kind: .screenshot, date: Date(timeIntervalSince1970: 100))
+        let controller = CaptureHistoryWindowController(store: store)
+
+        controller.show(strings: AppStrings(language: .en))
+        defer {
+            controller.close()
+        }
+
+        let previewFrame = try XCTUnwrap(controller.previewFrame(for: record))
+        let shadowBounds = try XCTUnwrap(controller.tileShadowBounds(for: record))
+
+        XCTAssertEqual(shadowBounds.width, previewFrame.width, accuracy: 0.5)
+        XCTAssertEqual(shadowBounds.height, previewFrame.height, accuracy: 0.5)
+    }
+
+    @MainActor
     func testOnlyOneTileShowsActionsAtATime() throws {
         let first = try addRecord(kind: .screenshot, date: Date(timeIntervalSince1970: 100))
         let second = try addRecord(kind: .screenshot, date: Date(timeIntervalSince1970: 101))
@@ -234,12 +273,41 @@ final class CaptureHistoryWindowControllerTests: XCTestCase {
         XCTAssertGreaterThan(deleteFrame.minX, max(saveFrame.maxX, copyFrame.maxX, restoreFrame.maxX))
     }
 
-    private func addRecord(kind: CaptureHistoryKind, date: Date) throws -> CaptureHistoryRecord {
+    @MainActor
+    func testTilePreviewUsesDesktopAspectRatio() throws {
+        let record = try addRecord(
+            kind: .screenshot,
+            date: Date(timeIntervalSince1970: 100),
+            imageSize: CGSize(width: 1600, height: 900),
+            rect: CGRect(x: 0, y: 0, width: 1600, height: 900)
+        )
+        let controller = CaptureHistoryWindowController(store: store)
+
+        controller.show(strings: AppStrings(language: .en))
+        defer {
+            controller.close()
+        }
+
+        let previewFrame = try XCTUnwrap(controller.previewFrame(for: record))
+        XCTAssertEqual(
+            previewFrame.height / previewFrame.width,
+            CapturePreviewMetrics.desktopAspectRatio(),
+            accuracy: 0.01,
+            "previewFrame=\(previewFrame.debugDescription)"
+        )
+    }
+
+    private func addRecord(
+        kind: CaptureHistoryKind,
+        date: Date,
+        imageSize: CGSize = CGSize(width: 10, height: 8),
+        rect: CGRect = CGRect(x: 0, y: 0, width: 10, height: 8)
+    ) throws -> CaptureHistoryRecord {
         try XCTUnwrap(try store.addCapture(
             kind: kind,
             data: Data([UInt8(date.timeIntervalSince1970.truncatingRemainder(dividingBy: 255))]),
-            imageSize: CGSize(width: 10, height: 8),
-            rect: CGRect(x: 0, y: 0, width: 10, height: 8),
+            imageSize: imageSize,
+            rect: rect,
             date: date,
             configuration: .init(isEnabled: true, retention: .forever, sizeLimit: .twoGB)
         ))

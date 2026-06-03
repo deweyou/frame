@@ -79,6 +79,7 @@ final class CaptureHistoryWindowController: NSObject {
         window.title = strings.captureHistoryTitle
         window.minSize = NSSize(width: 520, height: 360)
         window.isReleasedWhenClosed = false
+        window.animationBehavior = .none
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true
@@ -94,6 +95,9 @@ final class CaptureHistoryWindowController: NSObject {
     }
 
     func close() {
+        window?.makeFirstResponder(nil)
+        window?.contentView = nil
+        window?.orderOut(nil)
         window?.close()
         window = nil
         gridView = nil
@@ -136,6 +140,28 @@ final class CaptureHistoryWindowController: NSObject {
 
     func actionButtonFrame(title: String, for record: CaptureHistoryRecord) -> NSRect? {
         tileViewsByRecordID[record.id]?.actionButtonFrame(title: title)
+    }
+
+    func previewFrame(for record: CaptureHistoryRecord) -> NSRect? {
+        window?.contentView?.layoutSubtreeIfNeeded()
+        guard let tileView = tileViewsByRecordID[record.id] else {
+            return nil
+        }
+
+        tileView.layoutSubtreeIfNeeded()
+        return tileView.previewFrame()
+    }
+
+    func tileShadowOpacity(for record: CaptureHistoryRecord) -> Float? {
+        tileViewsByRecordID[record.id]?.shadowOpacity
+    }
+
+    func tileBackgroundAlpha(for record: CaptureHistoryRecord) -> CGFloat? {
+        tileViewsByRecordID[record.id]?.backgroundAlpha
+    }
+
+    func tileShadowBounds(for record: CaptureHistoryRecord) -> CGRect? {
+        tileViewsByRecordID[record.id]?.shadowBounds
     }
 
     func restoreRecord(_ record: CaptureHistoryRecord) {
@@ -533,7 +559,9 @@ private final class CaptureHistoryGridView: NSView {
     private let minTileWidth: CGFloat = 200
     private let maxTileWidth: CGFloat = 260
     private let metadataHeight: CGFloat = 18
-    private let previewAspectRatio: CGFloat = 132 / 200
+    private var previewAspectRatio: CGFloat {
+        CapturePreviewMetrics.desktopAspectRatio()
+    }
 
     override var isFlipped: Bool {
         true
@@ -618,11 +646,17 @@ private final class CaptureHistoryGridView: NSView {
 
 private final class CaptureHistoryTileView: NSView {
     let record: CaptureHistoryRecord
-    private let imageView: NSImageView
+    private let previewShadowView = NSView()
+    private let imageView: CaptureHistoryPreviewImageView
     private let actionsView: NSVisualEffectView
     private let deleteActionView: NSVisualEffectView
+    private let imageHeightConstraint: NSLayoutConstraint
     private var trackingArea: NSTrackingArea?
     private var buttons: [NSButton] = []
+    private var currentBackgroundAlpha: CGFloat = 0.18
+    private var currentShadowOpacity: Float = 0.12
+    private var currentShadowRadius: CGFloat = 8
+    private var currentShadowOffset = CGSize(width: 0, height: -3)
 
     var onRestore: ((CaptureHistoryRecord) -> Void)?
     var onCopy: ((CaptureHistoryRecord) -> Void)?
@@ -638,6 +672,19 @@ private final class CaptureHistoryTileView: NSView {
         buttons
     }
 
+    var shadowOpacity: Float {
+        currentShadowOpacity
+    }
+
+    var backgroundAlpha: CGFloat {
+        currentBackgroundAlpha
+    }
+
+    var shadowBounds: CGRect {
+        previewShadowView.layoutSubtreeIfNeeded()
+        return previewShadowView.layer?.shadowPath?.boundingBoxOfPath ?? previewShadowView.bounds
+    }
+
     func actionButtonFrame(title: String) -> NSRect? {
         guard let button = buttons.first(where: { $0.toolTip == title }) else {
             return nil
@@ -647,25 +694,39 @@ private final class CaptureHistoryTileView: NSView {
         return button.convert(button.bounds, to: self)
     }
 
+    func previewFrame() -> NSRect {
+        layoutSubtreeIfNeeded()
+        return previewShadowView.frame
+    }
+
     init(record: CaptureHistoryRecord, image: NSImage, metadata: String, strings: AppStrings) {
         self.record = record
-        imageView = NSImageView(image: image)
+        imageView = CaptureHistoryPreviewImageView(image: image)
         actionsView = NSVisualEffectView()
         deleteActionView = NSVisualEffectView()
+        imageHeightConstraint = imageView.heightAnchor.constraint(equalToConstant: 0)
         super.init(frame: .zero)
 
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
 
+        previewShadowView.translatesAutoresizingMaskIntoConstraints = false
+        previewShadowView.wantsLayer = true
+        previewShadowView.layer?.cornerRadius = 12
+        previewShadowView.layer?.cornerCurve = .continuous
+        previewShadowView.layer?.masksToBounds = false
+        previewShadowView.layer?.shadowColor = NSColor.black.cgColor
+        previewShadowView.layer?.shadowRadius = 8
+        previewShadowView.layer?.shadowOffset = CGSize(width: 0, height: -3)
+
         imageView.translatesAutoresizingMaskIntoConstraints = false
-        imageView.imageScaling = .scaleProportionallyUpOrDown
         imageView.wantsLayer = true
         imageView.layer?.cornerRadius = 12
         imageView.layer?.cornerCurve = .continuous
         imageView.layer?.masksToBounds = true
         imageView.layer?.borderWidth = 0.5
         imageView.layer?.borderColor = NSColor.white.withAlphaComponent(0.32).cgColor
-        imageView.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.7).cgColor
+        applyHoverAppearance(false)
 
         actionsView.material = .hudWindow
         actionsView.blendingMode = .withinWindow
@@ -722,22 +783,28 @@ private final class CaptureHistoryTileView: NSView {
         metadataLabel.lineBreakMode = .byTruncatingTail
         metadataLabel.maximumNumberOfLines = 1
 
-        addSubview(imageView)
+        addSubview(previewShadowView)
         addSubview(metadataLabel)
+        previewShadowView.addSubview(imageView)
         imageView.addSubview(actionsView)
         imageView.addSubview(deleteActionView)
         actionsView.addSubview(actionsStack)
         deleteActionView.addSubview(deleteButton)
 
         NSLayoutConstraint.activate([
-            imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            imageView.topAnchor.constraint(equalTo: topAnchor),
-            imageView.heightAnchor.constraint(equalTo: imageView.widthAnchor, multiplier: 132 / 200),
+            previewShadowView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            previewShadowView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            previewShadowView.topAnchor.constraint(equalTo: topAnchor),
+            imageHeightConstraint,
+
+            imageView.leadingAnchor.constraint(equalTo: previewShadowView.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: previewShadowView.trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: previewShadowView.topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: previewShadowView.bottomAnchor),
 
             metadataLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
             metadataLabel.trailingAnchor.constraint(equalTo: trailingAnchor),
-            metadataLabel.topAnchor.constraint(equalTo: imageView.bottomAnchor, constant: 6),
+            metadataLabel.topAnchor.constraint(equalTo: previewShadowView.bottomAnchor, constant: 6),
 
             actionsView.centerXAnchor.constraint(equalTo: imageView.centerXAnchor),
             actionsView.bottomAnchor.constraint(equalTo: imageView.bottomAnchor, constant: -7),
@@ -759,6 +826,18 @@ private final class CaptureHistoryTileView: NSView {
             deleteButton.topAnchor.constraint(equalTo: deleteActionView.topAnchor, constant: 4),
             deleteButton.bottomAnchor.constraint(equalTo: deleteActionView.bottomAnchor, constant: -4),
         ])
+    }
+
+    override func layout() {
+        imageHeightConstraint.constant = floor(bounds.width * CapturePreviewMetrics.desktopAspectRatio())
+        super.layout()
+        applyLayerAppearance()
+        previewShadowView.layer?.shadowPath = CGPath(
+            roundedRect: previewShadowView.bounds,
+            cornerWidth: 12,
+            cornerHeight: 12,
+            transform: nil
+        )
     }
 
     required init?(coder: NSCoder) {
@@ -792,6 +871,24 @@ private final class CaptureHistoryTileView: NSView {
     func setActionsVisible(_ isVisible: Bool) {
         actionsView.animator().alphaValue = isVisible ? 1 : 0
         deleteActionView.animator().alphaValue = isVisible ? 1 : 0
+        applyHoverAppearance(isVisible)
+    }
+
+    private func applyHoverAppearance(_ isHovered: Bool) {
+        currentBackgroundAlpha = isHovered ? 0.36 : 0.18
+        currentShadowOpacity = isHovered ? 0.24 : 0.12
+        currentShadowRadius = isHovered ? 12 : 8
+        currentShadowOffset = CGSize(width: 0, height: isHovered ? -4 : -3)
+        applyLayerAppearance()
+    }
+
+    private func applyLayerAppearance() {
+        imageView.layer?.backgroundColor = NSColor.controlBackgroundColor
+            .withAlphaComponent(currentBackgroundAlpha)
+            .cgColor
+        previewShadowView.layer?.shadowOpacity = currentShadowOpacity
+        previewShadowView.layer?.shadowRadius = currentShadowRadius
+        previewShadowView.layer?.shadowOffset = currentShadowOffset
     }
 
     private func makeIconButton(title: String, symbolName: String, action: @escaping () -> Void) -> NSButton {
@@ -809,6 +906,39 @@ private final class CaptureHistoryTileView: NSView {
         button.setAccessibilityHelp(title)
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
+    }
+}
+
+private final class CaptureHistoryPreviewImageView: NSView {
+    private let image: NSImage
+
+    init(image: NSImage) {
+        self.image = image
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        guard image.size.width > 0, image.size.height > 0, bounds.width > 0, bounds.height > 0 else {
+            return
+        }
+
+        let drawRect = CapturePreviewMetrics.aspectFillDrawRect(
+            imageSize: image.size,
+            in: bounds
+        )
+
+        image.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
     }
 }
 

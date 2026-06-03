@@ -21,6 +21,16 @@ final class CaptureService {
         }
     }
 
+    func captureFullScreens() throws -> [CapturedScreenshot] {
+        try Self.fullScreenRects(from: NSScreen.screens.map(\.frame)).map { rect in
+            try capture(rect: rect)
+        }
+    }
+
+    nonisolated static func fullScreenRects(from screenFrames: [CGRect]) -> [CGRect] {
+        screenFrames
+    }
+
     func capture(rect: CGRect) throws -> CapturedScreenshot {
         guard !rect.isNull,
               !rect.isEmpty,

@@ -124,6 +124,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
 
                     switch completion {
+                    case .fullScreen:
+                        do {
+                            let screenshots = try self.captureService.captureFullScreens()
+                            self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+                            for screenshot in screenshots {
+                                self.storeInCaptureHistory(screenshot)
+                                self.showQuickAccess(for: screenshot, anchor: quickAccessAnchor)
+                            }
+                            NSLog("Frame 已捕获全屏截图：screens=\(screenshots.count)")
+                        } catch {
+                            self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+                            self.showCaptureFailedAlert(error)
+                        }
                     case let .capture(selection):
                         do {
                             let screenshot = try await self.captureService.capture(selection: selection)
