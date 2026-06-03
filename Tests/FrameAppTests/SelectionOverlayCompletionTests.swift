@@ -142,6 +142,17 @@ final class SelectionOverlayCompletionTests: XCTestCase {
     }
 
     @MainActor
+    func testActiveRecordingHUDAllowsDesktopInteractionOutsideHUD() throws {
+        let window = try makeOverlayWindowForTesting()
+
+        window.enterActiveRecordingModeForTesting(elapsed: 3, isPaused: false)
+
+        let hudFrame = window.recordingHUDFrameForTesting()
+        XCTAssertTrue(window.hitTestIsPassthroughForTesting(localPoint: CGPoint(x: 4, y: 4)))
+        XCTAssertFalse(window.hitTestIsPassthroughForTesting(localPoint: hudFrame.center))
+    }
+
+    @MainActor
     func testRecordingHUDShowsElapsedTimePauseAndStopWhileActive() throws {
         let screen = try XCTUnwrap(NSScreen.screens.first)
         let window = try makeOverlayWindowForTesting(

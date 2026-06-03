@@ -93,6 +93,15 @@ enum RecordingDisplayResolver {
     }
 }
 
+enum RecordingPixelDimensions {
+    static func normalizedForVideo(_ size: CGSize) -> CGSize {
+        CGSize(
+            width: max(2, Int(size.width.rounded()).roundedDownToEven),
+            height: max(2, Int(size.height.rounded()).roundedDownToEven)
+        )
+    }
+}
+
 final class ScreenCaptureRecordingService: RecordingServicing {
     func startRecording(_ request: RecordingRequest) async throws -> RecordingSessionControlling {
         let resolvedSelection = try RecordingDisplayResolver.resolve(
@@ -134,7 +143,7 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
             throw RecordingServiceError.displayNotFound
         }
 
-        let pixelSize = recordingPixelSize(for: resolvedSelection.selectionRect)
+        let pixelSize = normalizedRecordingPixelSize(for: resolvedSelection.selectionRect)
         let outputURL = makeTemporaryOutputURL(format: request.options.format)
         let encoder: RecordingFrameEncoding = switch request.options.format {
         case .mp4:
@@ -144,8 +153,8 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
         }
 
         let configuration = SCStreamConfiguration()
-        configuration.width = max(1, Int(pixelSize.width.rounded()))
-        configuration.height = max(1, Int(pixelSize.height.rounded()))
+        configuration.width = Int(pixelSize.width)
+        configuration.height = Int(pixelSize.height)
         configuration.sourceRect = sourceRect(for: resolvedSelection)
         configuration.queueDepth = 6
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
@@ -196,7 +205,7 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
             fileURL: finalizedURL,
             format: request.options.format,
             rect: request.selection.rect,
-            pixelSize: recordingPixelSize(for: resolvedSelection.selectionRect),
+            pixelSize: normalizedRecordingPixelSize(for: resolvedSelection.selectionRect),
             byteSize: byteSize,
             duration: max(0, Date().timeIntervalSince(startedAt))
         )
@@ -233,6 +242,16 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
             ?? NSScreen.main?.backingScaleFactor
             ?? 1
         return CGSize(width: rect.width * scale, height: rect.height * scale)
+    }
+
+    private func normalizedRecordingPixelSize(for rect: CGRect) -> CGSize {
+        RecordingPixelDimensions.normalizedForVideo(recordingPixelSize(for: rect))
+    }
+}
+
+private extension Int {
+    var roundedDownToEven: Int {
+        self - (self % 2)
     }
 }
 

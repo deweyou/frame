@@ -126,6 +126,14 @@ final class SelectionOverlayWindow {
         overlayView.activeSelectionForTesting()
     }
 
+    func hitTestIsPassthroughForTesting(localPoint: CGPoint) -> Bool {
+        overlayView.hitTest(localPoint) == nil
+    }
+
+    func recordingHUDFrameForTesting() -> CGRect {
+        overlayView.recordingHUDFrameForTesting()
+    }
+
     func isDelayCountdownActiveForTesting() -> Bool {
         overlayView.isDelayCountdownActiveForTesting()
     }
@@ -323,6 +331,11 @@ private final class SelectionOverlayView: NSView {
 
     override func resetCursorRects() {
         super.resetCursorRects()
+        guard !isActiveRecordingHUD else {
+            addCursorRect(hudStackView.frame, cursor: .pointingHand)
+            return
+        }
+
         addCursorRect(bounds, cursor: .crosshair)
         if let selectionRect {
             if !selectionRect.isNearlyEqual(to: bounds) {
@@ -333,6 +346,18 @@ private final class SelectionOverlayView: NSView {
             }
         }
         addCursorRect(hudStackView.frame, cursor: .pointingHand)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard isActiveRecordingHUD else {
+            return super.hitTest(point)
+        }
+
+        guard hudStackView.frame.contains(point) else {
+            return nil
+        }
+
+        return super.hitTest(point)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -1355,6 +1380,10 @@ private final class SelectionOverlayView: NSView {
 
     func activeSelectionForTesting() -> SelectionCapture? {
         activeSelection
+    }
+
+    func recordingHUDFrameForTesting() -> CGRect {
+        hudStackView.frame
     }
 
     func isDelayCountdownActiveForTesting() -> Bool {

@@ -46,6 +46,22 @@ final class RecordingServiceTests: XCTestCase {
         XCTAssertEqual(session.state, .finished)
         XCTAssertEqual(recording.format, .mp4)
     }
+
+    func testRecordingPixelDimensionsNormalizeOddVideoSizesToEvenValues() {
+        let normalized = RecordingPixelDimensions.normalizedForVideo(
+            CGSize(width: 301, height: 199)
+        )
+
+        XCTAssertEqual(normalized, CGSize(width: 300, height: 198))
+    }
+
+    func testRecordingPixelDimensionsKeepMinimumEvenVideoSize() {
+        let normalized = RecordingPixelDimensions.normalizedForVideo(
+            CGSize(width: 1, height: 1)
+        )
+
+        XCTAssertEqual(normalized, CGSize(width: 2, height: 2))
+    }
 }
 
 private final class FakeRecordingService: RecordingServicing {

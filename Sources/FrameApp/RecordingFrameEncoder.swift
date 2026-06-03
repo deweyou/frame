@@ -15,7 +15,9 @@ final class MP4RecordingFrameEncoder: RecordingFrameEncoding {
     private let outputURL: URL
     private let writer: AVAssetWriter
     private let input: AVAssetWriterInput
+    private let adaptor: AVAssetWriterInputPixelBufferAdaptor
     private var didStartSession = false
+    private var firstPresentationTime: CMTime?
 
     init(outputURL: URL, pixelSize: CGSize) throws {
         self.outputURL = outputURL
@@ -37,12 +39,33 @@ final class MP4RecordingFrameEncoder: RecordingFrameEncoding {
             throw RecordingServiceError.outputFailed("无法创建 MP4 写入器。")
         }
         writer.add(input)
+        adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: input,
+            sourcePixelBufferAttributes: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferWidthKey as String: max(1, Int(pixelSize.width.rounded())),
+                kCVPixelBufferHeightKey as String: max(1, Int(pixelSize.height.rounded())),
+            ]
+        )
     }
 
     func append(_ sampleBuffer: CMSampleBuffer) throws {
         guard CMSampleBufferDataIsReady(sampleBuffer) else {
             return
         }
+
+        guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            return
+        }
+
+        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        if firstPresentationTime == nil {
+            firstPresentationTime = presentationTime
+        }
+        let normalizedPresentationTime = CMTimeSubtract(
+            presentationTime,
+            firstPresentationTime ?? presentationTime
+        )
 
         if writer.status == .unknown {
             guard writer.startWriting() else {
@@ -51,7 +74,7 @@ final class MP4RecordingFrameEncoder: RecordingFrameEncoding {
         }
 
         if !didStartSession {
-            writer.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
+            writer.startSession(atSourceTime: .zero)
             didStartSession = true
         }
 
@@ -60,11 +83,17 @@ final class MP4RecordingFrameEncoder: RecordingFrameEncoding {
         }
 
         if input.isReadyForMoreMediaData {
-            input.append(sampleBuffer)
+            guard adaptor.append(imageBuffer, withPresentationTime: normalizedPresentationTime) else {
+                throw RecordingServiceError.outputFailed(writer.error?.localizedDescription ?? "MP4 帧写入失败。")
+            }
         }
     }
 
     func finish() async throws -> URL {
+        guard didStartSession else {
+            throw RecordingServiceError.outputFailed("MP4 没有可写入的录屏帧。")
+        }
+
         input.markAsFinished()
         await writer.finishWriting()
         guard writer.status == .completed else {
