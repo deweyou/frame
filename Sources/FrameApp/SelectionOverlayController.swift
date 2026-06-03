@@ -168,6 +168,22 @@ final class SelectionOverlayController {
         finishSelection(with: nil)
     }
 
+    func dismissSelectionForRecording() {
+        guard completion != nil else {
+            return
+        }
+
+        completion = nil
+        removeKeyMonitor()
+
+        for window in overlayWindows {
+            window.orderOut(nil)
+            window.close()
+        }
+        overlayWindows.removeAll()
+        resetCursor()
+    }
+
     private func confirmCurrentSelection() {
         guard let selection = overlayWindows.first(where: { $0.activeSelection != nil })?.activeSelection else {
             NSSound.beep()

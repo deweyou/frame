@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let recordingService: RecordingServicing = ScreenCaptureRecordingService()
     private let recordingFileWriter = RecordingFileWriter()
     private let keyboardHintOverlayController = KeyboardHintOverlayController()
+    private let activeRecordingHUDPanelController = ActiveRecordingHUDPanelController()
     private let settingsWindowController = SettingsWindowController()
     private var captureHistoryWindowController: CaptureHistoryWindowController?
     private var strings = AppStrings.current()
@@ -27,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recognizingScreenshotIDs: Set<UUID> = []
     private var recognizedTextLayouts: [UUID: RecognizedTextLayout] = [:]
     private var activeRecordingSession: RecordingSessionControlling?
-    private var activeRecordingWindow: SelectionOverlayWindow?
+    private var activeRecordingSelection: SelectionCapture?
     private var activeRecordingOptions = RecordingOptions.defaults
     private var activeRecordingClock: RecordingElapsedClock?
     private var activeRecordingElapsedTimer: Timer?
@@ -296,13 +297,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 let startedAt = Date()
                 self.activeRecordingSession = session
-                self.activeRecordingWindow = overlayWindow
+                self.activeRecordingSelection = selection
                 self.activeRecordingOptions = options
                 self.activeRecordingClock = RecordingElapsedClock(startedAt: startedAt)
                 self.activeRecordingQuickAccessAnchor = anchor
                 self.isStoppingActiveRecording = false
 
-                overlayWindow?.setActiveRecordingHandlers(
+                self.activeRecordingHUDPanelController.show(
+                    near: selection.rect,
+                    elapsed: 0,
+                    isPaused: false,
                     pause: { [weak self] in
                         self?.pauseActiveRecording()
                     },
@@ -313,7 +317,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         self?.stopActiveRecording()
                     }
                 )
-                overlayWindow?.enterActiveRecordingMode(elapsed: 0, isPaused: false)
+                if overlayWindow != nil {
+                    self.selectionOverlayController.dismissSelectionForRecording()
+                }
                 self.statusItemController?.setRecordingState(.recording)
                 self.startRecordingElapsedTimer()
 
@@ -349,7 +355,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 clock?.pause(at: Date())
                 self.activeRecordingClock = clock
                 let elapsed = self.currentRecordingElapsed()
-                self.activeRecordingWindow?.enterActiveRecordingMode(elapsed: elapsed, isPaused: true)
+                self.activeRecordingHUDPanelController.update(elapsed: elapsed, isPaused: true)
                 self.statusItemController?.setRecordingState(.paused)
                 NSLog("Frame 录屏已暂停")
             } catch {
@@ -374,7 +380,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 clock?.resume(at: Date())
                 self.activeRecordingClock = clock
                 let elapsed = self.currentRecordingElapsed()
-                self.activeRecordingWindow?.enterActiveRecordingMode(elapsed: elapsed, isPaused: false)
+                self.activeRecordingHUDPanelController.update(elapsed: elapsed, isPaused: false)
                 self.statusItemController?.setRecordingState(.recording)
                 NSLog("Frame 录屏已继续")
             } catch {
@@ -434,7 +440,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshRecordingElapsedHUD() {
-        activeRecordingWindow?.updateRecordingElapsed(currentRecordingElapsed())
+        let isPaused = activeRecordingSession?.state == .paused
+        activeRecordingHUDPanelController.update(elapsed: currentRecordingElapsed(), isPaused: isPaused)
     }
 
     private func currentRecordingElapsed() -> TimeInterval {
@@ -444,14 +451,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func finishActiveRecording() {
         activeRecordingElapsedTimer?.invalidate()
         activeRecordingElapsedTimer = nil
+        activeRecordingHUDPanelController.close()
         keyboardHintOverlayController.hide()
         statusItemController?.setRecordingState(.idle)
         activeRecordingSession = nil
-        activeRecordingWindow = nil
+        activeRecordingSelection = nil
         activeRecordingClock = nil
         activeRecordingQuickAccessAnchor = nil
         isStoppingActiveRecording = false
-        selectionOverlayController.cancelSelection()
     }
 
     private func showVideoQuickAccess(for recording: CapturedRecording, anchor: CGRect?) {

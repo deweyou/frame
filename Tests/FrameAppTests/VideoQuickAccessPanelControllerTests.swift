@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import FrameApp
 @testable import FrameCore
@@ -31,5 +32,9 @@ final class VideoQuickAccessPanelControllerTests: XCTestCase {
             ["Download", "Copy", "Preview", "Edit", "Close"]
         )
         XCTAssertFalse(controller.isEditEnabledForTesting(recordingID: recording.id))
+        XCTAssertEqual(
+            controller.panelSizeForTesting(recordingID: recording.id),
+            CapturePreviewMetrics.previewSize(forDesktopSize: NSScreen.main?.frame.size)
+        )
     }
 }
