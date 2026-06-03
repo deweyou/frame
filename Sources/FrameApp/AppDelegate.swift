@@ -124,6 +124,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
 
                     switch completion {
+                    case .startRecording:
+                        self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+                        NSLog("Frame 录屏入口已触发，录制服务尚未接入")
                     case .fullScreen:
                         do {
                             let screenshots = try self.captureService.captureFullScreens()

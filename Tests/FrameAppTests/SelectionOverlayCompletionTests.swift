@@ -34,6 +34,24 @@ final class SelectionOverlayCompletionTests: XCTestCase {
         XCTAssertNil(completion.selection)
     }
 
+    func testStartRecordingCompletionExposesSelectionAndOptions() {
+        let selection = SelectionCapture(
+            rect: CGRect(x: 1, y: 2, width: 300, height: 200),
+            kind: .region
+        )
+        let options = RecordingOptions(
+            format: .gif,
+            showsCursor: false,
+            showsKeyboardHints: true,
+            audioSource: .none
+        )
+
+        let completion = SelectionOverlayCompletion.startRecording(selection, options)
+
+        XCTAssertEqual(completion.selection?.rect, selection.rect)
+        XCTAssertEqual(completion.recordingOptions, options)
+    }
+
     @MainActor
     func testSelectionHUDExposesFullScreenAndDelayButtons() throws {
         let window = try makeOverlayWindowForTesting()
@@ -48,8 +66,29 @@ final class SelectionOverlayCompletionTests: XCTestCase {
 
         XCTAssertEqual(
             window.hudButtonImageDescriptionsForTesting(),
-            ["crop", "display", "timer", "character.textbox"]
+            ["crop", "display", "timer", "character.textbox", "record.circle"]
         )
+    }
+
+    @MainActor
+    func testRecordingButtonSwitchesHUDIntoRecordingSetupMode() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        let window = try makeOverlayWindowForTesting(
+            initialGlobalRect: CGRect(
+                x: screen.frame.minX + 20,
+                y: screen.frame.minY + 20,
+                width: 240,
+                height: 160
+            )
+        )
+
+        XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "录屏"))
+
+        XCTAssertEqual(window.recordingHUDModeForTesting(), "setup")
+        XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("开始录制"))
+        XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("MP4"))
+        XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("显示鼠标指针"))
+        XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("显示键盘提示"))
     }
 
     @MainActor
