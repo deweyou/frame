@@ -9,6 +9,10 @@ enum SettingsStore {
     static let captureHistoryEnabledKey = "captureHistoryEnabled"
     static let captureHistoryRetentionKey = "captureHistoryRetention"
     static let captureHistorySizeLimitKey = "captureHistorySizeLimit"
+    static let recordingFormatKey = "recordingFormat"
+    static let recordingShowsCursorKey = "recordingShowsCursor"
+    static let recordingShowsKeyboardHintsKey = "recordingShowsKeyboardHints"
+    static let recordingAudioSourceKey = "recordingAudioSource"
 
     static func screenshotShortcut(defaults: UserDefaults = .standard) -> ScreenshotShortcut {
         ScreenshotShortcut.persistedValue(for: defaults.string(forKey: screenshotShortcutKey))
@@ -107,5 +111,36 @@ enum SettingsStore {
         defaults: UserDefaults = .standard
     ) {
         defaults.set(sizeLimit.rawValue, forKey: captureHistorySizeLimitKey)
+    }
+
+    static func recordingOptions(defaults: UserDefaults = .standard) -> RecordingOptions {
+        let defaultOptions = RecordingOptions.defaults
+        let format = RecordingFormat(rawValue: defaults.string(forKey: recordingFormatKey) ?? "")
+            ?? defaultOptions.format
+        let audioSource = RecordingAudioSource(rawValue: defaults.string(forKey: recordingAudioSourceKey) ?? "")
+            ?? defaultOptions.audioSource
+        let showsCursor = defaults.object(forKey: recordingShowsCursorKey) == nil
+            ? defaultOptions.showsCursor
+            : defaults.bool(forKey: recordingShowsCursorKey)
+        let showsKeyboardHints = defaults.object(forKey: recordingShowsKeyboardHintsKey) == nil
+            ? defaultOptions.showsKeyboardHints
+            : defaults.bool(forKey: recordingShowsKeyboardHintsKey)
+
+        return RecordingOptions(
+            format: format,
+            showsCursor: showsCursor,
+            showsKeyboardHints: showsKeyboardHints,
+            audioSource: audioSource
+        )
+    }
+
+    static func setRecordingOptions(
+        _ options: RecordingOptions,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(options.format.rawValue, forKey: recordingFormatKey)
+        defaults.set(options.showsCursor, forKey: recordingShowsCursorKey)
+        defaults.set(options.showsKeyboardHints, forKey: recordingShowsKeyboardHintsKey)
+        defaults.set(options.audioSource.rawValue, forKey: recordingAudioSourceKey)
     }
 }

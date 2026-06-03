@@ -1,3 +1,4 @@
+import FrameCore
 import XCTest
 @testable import FrameApp
 
@@ -123,5 +124,29 @@ final class SettingsStoreTests: XCTestCase {
 
         XCTAssertEqual(SettingsStore.captureHistoryRetention(defaults: defaults), .sevenDays)
         XCTAssertEqual(SettingsStore.captureHistorySizeLimit(defaults: defaults), .twoGB)
+    }
+
+    func testRecordingOptionsDefaultToCoreDefaults() {
+        XCTAssertEqual(SettingsStore.recordingOptions(defaults: defaults), RecordingOptions.defaults)
+    }
+
+    func testRecordingOptionsPersistSelectedValues() {
+        let options = RecordingOptions(
+            format: .gif,
+            showsCursor: false,
+            showsKeyboardHints: false,
+            audioSource: .none
+        )
+
+        SettingsStore.setRecordingOptions(options, defaults: defaults)
+
+        XCTAssertEqual(SettingsStore.recordingOptions(defaults: defaults), options)
+    }
+
+    func testRecordingOptionsFallbackWhenPersistedFormatIsInvalid() {
+        defaults.set("bad-format", forKey: SettingsStore.recordingFormatKey)
+        defaults.set("bad-audio", forKey: SettingsStore.recordingAudioSourceKey)
+
+        XCTAssertEqual(SettingsStore.recordingOptions(defaults: defaults), RecordingOptions.defaults)
     }
 }
