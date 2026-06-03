@@ -16,6 +16,7 @@ final class SelectionOverlayWindow {
         delayCountdownNanoseconds: UInt64 = 5_000_000_000,
         onInteraction: @escaping () -> Void,
         onWindowSelectionRequested: @escaping (CGPoint, Int?) -> WindowCandidate?,
+        onStartRecording: @escaping (SelectionCapture, RecordingOptions) -> Void = { _, _ in },
         onComplete: @escaping (SelectionOverlayCompletion?) -> Void
     ) {
         overlayView = SelectionOverlayView(
@@ -27,6 +28,7 @@ final class SelectionOverlayWindow {
             delayCountdownNanoseconds: delayCountdownNanoseconds,
             onInteraction: onInteraction,
             onWindowSelectionRequested: onWindowSelectionRequested,
+            onStartRecording: onStartRecording,
             onComplete: onComplete
         )
 
@@ -100,6 +102,22 @@ final class SelectionOverlayWindow {
         overlayView.enterActiveRecordingMode(elapsed: elapsed, isPaused: isPaused)
     }
 
+    func enterActiveRecordingMode(elapsed: TimeInterval = 0, isPaused: Bool = false) {
+        overlayView.enterActiveRecordingMode(elapsed: elapsed, isPaused: isPaused)
+    }
+
+    func updateRecordingElapsed(_ elapsed: TimeInterval) {
+        overlayView.updateRecordingElapsed(elapsed)
+    }
+
+    func setActiveRecordingHandlers(
+        pause: @escaping () -> Void,
+        resume: @escaping () -> Void,
+        stop: @escaping () -> Void
+    ) {
+        overlayView.setActiveRecordingHandlers(pause: pause, resume: resume, stop: stop)
+    }
+
     func recordingElapsedTextForTesting() -> String {
         overlayView.recordingElapsedTextForTesting()
     }
@@ -167,6 +185,7 @@ private final class SelectionOverlayView: NSView {
     private let screenFrame: CGRect
     private let onInteraction: () -> Void
     private let onWindowSelectionRequested: (CGPoint, Int?) -> WindowCandidate?
+    private let onStartRecording: (SelectionCapture, RecordingOptions) -> Void
     private let onComplete: (SelectionOverlayCompletion?) -> Void
     private let hudStackView = NSStackView()
     private let modeView = NSVisualEffectView()
@@ -217,12 +236,14 @@ private final class SelectionOverlayView: NSView {
         delayCountdownNanoseconds: UInt64,
         onInteraction: @escaping () -> Void,
         onWindowSelectionRequested: @escaping (CGPoint, Int?) -> WindowCandidate?,
+        onStartRecording: @escaping (SelectionCapture, RecordingOptions) -> Void,
         onComplete: @escaping (SelectionOverlayCompletion?) -> Void
     ) {
         self.screenFrame = screen.frame
         self.showsCenteredHUDWhenEmpty = showsCenteredHUDWhenEmpty
         self.onInteraction = onInteraction
         self.onWindowSelectionRequested = onWindowSelectionRequested
+        self.onStartRecording = onStartRecording
         self.onComplete = onComplete
         self.ocrActionText = ocrActionText
         self.delayCountdownNanoseconds = delayCountdownNanoseconds
@@ -319,6 +340,10 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
+        guard !isActiveRecordingHUD else {
+            return
+        }
+
         let point = clampedPoint(event.locationInWindow)
 
         if event.clickCount == 2 {
@@ -335,6 +360,10 @@ private final class SelectionOverlayView: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         guard !isDelayCountdownActive else {
+            return
+        }
+
+        guard !isActiveRecordingHUD else {
             return
         }
 
@@ -360,6 +389,11 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
+        guard !isActiveRecordingHUD else {
+            super.flagsChanged(with: event)
+            return
+        }
+
         guard dragOperation != nil else {
             isShiftTemporarilyLocking = false
             updateMetrics()
@@ -380,6 +414,11 @@ private final class SelectionOverlayView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
+        guard !isActiveRecordingHUD else {
+            super.keyDown(with: event)
+            return
+        }
+
         if event.keyCode == escapeKeyCode {
             completeSelection(with: nil)
             return
@@ -959,7 +998,10 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
-        completeSelection(with: .startRecording(activeSelection, currentRecordingOptions))
+        cancelDelayCountdown()
+        pendingTooltipTask?.cancel()
+        tooltipView.isHidden = true
+        onStartRecording(activeSelection, currentRecordingOptions)
     }
 
     @objc private func recordingFormatButtonClicked() {
@@ -1017,6 +1059,21 @@ private final class SelectionOverlayView: NSView {
         installModeButtons(makeActiveRecordingButtons(isPaused: isPaused))
         applyHUDTheme(hudTheme)
         positionHUD()
+    }
+
+    func updateRecordingElapsed(_ elapsed: TimeInterval) {
+        recordingElapsed = elapsed
+        recordingElapsedLabel.stringValue = formattedRecordingElapsed(elapsed)
+    }
+
+    func setActiveRecordingHandlers(
+        pause: @escaping () -> Void,
+        resume: @escaping () -> Void,
+        stop: @escaping () -> Void
+    ) {
+        onRecordingPause = pause
+        onRecordingResume = resume
+        onRecordingStop = stop
     }
 
     private func formattedRecordingElapsed(_ elapsed: TimeInterval) -> String {
@@ -1267,6 +1324,12 @@ private final class SelectionOverlayView: NSView {
             showCursorButtonClicked()
         case "显示键盘提示":
             showKeyboardHintsButtonClicked()
+        case "暂停":
+            pauseRecordingButtonClicked()
+        case "继续":
+            resumeRecordingButtonClicked()
+        case "停止录制":
+            stopRecordingButtonClicked()
         case ocrActionText:
             ocrButtonClicked()
         default:
@@ -1337,7 +1400,19 @@ private final class SelectionOverlayView: NSView {
         return sizingMode
     }
 
+    private var isActiveRecordingHUD: Bool {
+        if case .active = recordingHUDMode {
+            return true
+        }
+
+        return false
+    }
+
     private func applySizeEdit(_ dimension: SelectionSizeDimension, value: Int) {
+        guard !isActiveRecordingHUD else {
+            return
+        }
+
         let clampedValue = CGFloat(clampedSizeEditValue(value, for: dimension))
 
         let currentRect = displayedLocalRect ?? SelectionSizing.defaultSelection(
@@ -1395,6 +1470,10 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func toggleRatioLock() {
+        guard !isActiveRecordingHUD else {
+            return
+        }
+
         switch sizingMode {
         case .unlocked:
             if let displayedLocalRect,
@@ -1412,6 +1491,10 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func applyRatioPreset(_ ratio: SelectionAspectRatio) {
+        guard !isActiveRecordingHUD else {
+            return
+        }
+
         let nextRect: CGRect
         if let displayedLocalRect {
             nextRect = SelectionSizing.fit(aspectRatio: ratio, inside: displayedLocalRect)

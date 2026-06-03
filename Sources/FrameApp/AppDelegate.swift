@@ -10,17 +10,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let selectionOverlayController = SelectionOverlayController()
     private let captureService = CaptureService()
     private let quickAccessPanelController = QuickAccessPanelController()
+    private let videoQuickAccessPanelController = VideoQuickAccessPanelController()
+    private let videoPreviewWindowController = VideoPreviewWindowController()
     private let imageWorkspacePanelController = ImageWorkspacePanelController()
     private let captureHistoryStore = CaptureHistoryStore()
     private let ocrService = OCRService()
     private let ocrTextPanelController = OCRTextPanelController()
     private let clipboardWriter = ClipboardWriter()
+    private let recordingService: RecordingServicing = ScreenCaptureRecordingService()
+    private let recordingFileWriter = RecordingFileWriter()
+    private let keyboardHintOverlayController = KeyboardHintOverlayController()
     private let settingsWindowController = SettingsWindowController()
     private var captureHistoryWindowController: CaptureHistoryWindowController?
     private var strings = AppStrings.current()
     private var activeQuickAccessScreenshotIDs: Set<UUID> = []
     private var recognizingScreenshotIDs: Set<UUID> = []
     private var recognizedTextLayouts: [UUID: RecognizedTextLayout] = [:]
+    private var activeRecordingSession: RecordingSessionControlling?
+    private var activeRecordingWindow: SelectionOverlayWindow?
+    private var activeRecordingOptions = RecordingOptions.defaults
+    private var activeRecordingClock: RecordingElapsedClock?
+    private var activeRecordingElapsedTimer: Timer?
+    private var activeRecordingQuickAccessAnchor: CGRect?
+    private var isStoppingActiveRecording = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         strings = AppStrings.current()
@@ -34,6 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onSettings: { [weak self] in
                 self?.onSettings()
+            },
+            onStopRecording: { [weak self] in
+                self?.stopActiveRecording()
             }
         )
 
@@ -107,7 +122,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let quickAccessAnchor = ActiveScreenResolver.preferredQuickAccessAnchor()
 
-        selectionOverlayController.startSelection(strings: strings) { [weak self] completion in
+        selectionOverlayController.startSelection(
+            strings: strings,
+            onStartRecording: { [weak self] overlayWindow, selection, options in
+                self?.startRecording(
+                    selection: selection,
+                    options: options,
+                    overlayWindow: overlayWindow,
+                    anchor: quickAccessAnchor
+                )
+            }
+        ) { [weak self] completion in
             guard let self else {
                 return
             }
@@ -124,9 +149,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
 
                     switch completion {
-                    case .startRecording:
+                    case let .startRecording(selection, options):
                         self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
-                        NSLog("Frame 录屏入口已触发，录制服务尚未接入")
+                        self.startRecording(
+                            selection: selection,
+                            options: options,
+                            overlayWindow: nil,
+                            anchor: quickAccessAnchor
+                        )
                     case .fullScreen:
                         do {
                             let screenshots = try self.captureService.captureFullScreens()
@@ -244,6 +274,220 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func startRecording(
+        selection: SelectionCapture,
+        options: RecordingOptions,
+        overlayWindow: SelectionOverlayWindow?,
+        anchor: CGRect?
+    ) {
+        guard activeRecordingSession == nil else {
+            NSSound.beep()
+            return
+        }
+
+        Task { @MainActor [weak self, weak overlayWindow] in
+            guard let self else {
+                return
+            }
+
+            do {
+                let session = try await self.recordingService.startRecording(
+                    RecordingRequest(selection: selection, options: options)
+                )
+                let startedAt = Date()
+                self.activeRecordingSession = session
+                self.activeRecordingWindow = overlayWindow
+                self.activeRecordingOptions = options
+                self.activeRecordingClock = RecordingElapsedClock(startedAt: startedAt)
+                self.activeRecordingQuickAccessAnchor = anchor
+                self.isStoppingActiveRecording = false
+
+                overlayWindow?.setActiveRecordingHandlers(
+                    pause: { [weak self] in
+                        self?.pauseActiveRecording()
+                    },
+                    resume: { [weak self] in
+                        self?.resumeActiveRecording()
+                    },
+                    stop: { [weak self] in
+                        self?.stopActiveRecording()
+                    }
+                )
+                overlayWindow?.enterActiveRecordingMode(elapsed: 0, isPaused: false)
+                self.statusItemController?.setRecordingState(.recording)
+                self.startRecordingElapsedTimer()
+
+                if options.showsKeyboardHints {
+                    self.keyboardHintOverlayController.show(text: "⌘ ⇧ A", near: selection.rect)
+                }
+
+                NSLog("Frame 已开始录屏：rect=\(selection.rect.debugDescription), format=\(options.format.rawValue)")
+            } catch {
+                if overlayWindow != nil {
+                    self.selectionOverlayController.cancelSelection()
+                } else {
+                    self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+                }
+                self.showCaptureFailedAlert(error)
+            }
+        }
+    }
+
+    private func pauseActiveRecording() {
+        guard let session = activeRecordingSession else {
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            do {
+                try await session.pause()
+                var clock = self.activeRecordingClock
+                clock?.pause(at: Date())
+                self.activeRecordingClock = clock
+                let elapsed = self.currentRecordingElapsed()
+                self.activeRecordingWindow?.enterActiveRecordingMode(elapsed: elapsed, isPaused: true)
+                self.statusItemController?.setRecordingState(.paused)
+                NSLog("Frame 录屏已暂停")
+            } catch {
+                self.showCaptureFailedAlert(error)
+            }
+        }
+    }
+
+    private func resumeActiveRecording() {
+        guard let session = activeRecordingSession else {
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            do {
+                try await session.resume()
+                var clock = self.activeRecordingClock
+                clock?.resume(at: Date())
+                self.activeRecordingClock = clock
+                let elapsed = self.currentRecordingElapsed()
+                self.activeRecordingWindow?.enterActiveRecordingMode(elapsed: elapsed, isPaused: false)
+                self.statusItemController?.setRecordingState(.recording)
+                NSLog("Frame 录屏已继续")
+            } catch {
+                self.showCaptureFailedAlert(error)
+            }
+        }
+    }
+
+    private func stopActiveRecording() {
+        guard let session = activeRecordingSession,
+              !isStoppingActiveRecording else {
+            return
+        }
+
+        isStoppingActiveRecording = true
+        let duration = currentRecordingElapsed()
+
+        Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            do {
+                let capturedRecording = try await session.stop()
+                let recording = CapturedRecording(
+                    id: capturedRecording.id,
+                    fileURL: capturedRecording.fileURL,
+                    format: capturedRecording.format,
+                    rect: capturedRecording.rect,
+                    pixelSize: capturedRecording.pixelSize,
+                    byteSize: capturedRecording.byteSize,
+                    duration: duration
+                )
+                let stableRecording = self.storeInCaptureHistory(recording)
+                let anchor = self.activeRecordingQuickAccessAnchor
+                self.finishActiveRecording()
+                self.showVideoQuickAccess(for: stableRecording, anchor: anchor)
+                NSLog(
+                    "Frame 已停止录屏：url=\(stableRecording.fileURL.path), duration=\(stableRecording.duration)"
+                )
+            } catch {
+                self.finishActiveRecording()
+                self.showCaptureFailedAlert(error)
+            }
+        }
+    }
+
+    private func startRecordingElapsedTimer() {
+        activeRecordingElapsedTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshRecordingElapsedHUD()
+            }
+        }
+        activeRecordingElapsedTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func refreshRecordingElapsedHUD() {
+        activeRecordingWindow?.updateRecordingElapsed(currentRecordingElapsed())
+    }
+
+    private func currentRecordingElapsed() -> TimeInterval {
+        activeRecordingClock?.elapsed(at: Date()) ?? 0
+    }
+
+    private func finishActiveRecording() {
+        activeRecordingElapsedTimer?.invalidate()
+        activeRecordingElapsedTimer = nil
+        keyboardHintOverlayController.hide()
+        statusItemController?.setRecordingState(.idle)
+        activeRecordingSession = nil
+        activeRecordingWindow = nil
+        activeRecordingClock = nil
+        activeRecordingQuickAccessAnchor = nil
+        isStoppingActiveRecording = false
+        selectionOverlayController.cancelSelection()
+    }
+
+    private func showVideoQuickAccess(for recording: CapturedRecording, anchor: CGRect?) {
+        videoQuickAccessPanelController.show(
+            for: recording,
+            preferredAnchor: anchor,
+            strings: strings,
+            download: { [weak self] in
+                self?.downloadRecording(recording) ?? false
+            },
+            copy: { [weak self] in
+                self?.copyRecordingToClipboard(recording) ?? false
+            },
+            preview: { [weak self] in
+                self?.openVideoPreview(recording) ?? false
+            },
+            close: {
+                NSLog("Frame 录屏快速操作已关闭")
+            }
+        )
+    }
+
+    private func openVideoPreview(_ recording: CapturedRecording) -> Bool {
+        videoPreviewWindowController.show(
+            recording: recording,
+            strings: strings,
+            copy: { [weak self] in
+                self?.copyRecordingToClipboard(recording) ?? false
+            },
+            download: { [weak self] in
+                self?.downloadRecording(recording) ?? false
+            }
+        )
+        return true
+    }
+
     private func showCaptureHistory() {
         let controller = captureHistoryWindowController ?? CaptureHistoryWindowController(
             store: captureHistoryStore,
@@ -269,6 +513,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = try captureHistoryStore.addScreenshot(screenshot)
         } catch {
             NSLog("Frame 写入截图历史失败: \(error.localizedDescription)")
+        }
+    }
+
+    private func storeInCaptureHistory(_ recording: CapturedRecording) -> CapturedRecording {
+        do {
+            let recordingData = try Data(contentsOf: recording.fileURL)
+            guard let record = try captureHistoryStore.addRecording(
+                data: recordingData,
+                filenameExtension: recording.format.fileExtension,
+                pixelSize: recording.pixelSize,
+                rect: recording.rect
+            ) else {
+                return recording
+            }
+
+            return CapturedRecording(
+                id: record.id,
+                fileURL: captureHistoryStore.fileURL(for: record),
+                format: recording.format,
+                rect: record.rect,
+                pixelSize: CGSize(width: CGFloat(record.pixelWidth), height: CGFloat(record.pixelHeight)),
+                byteSize: record.byteSize,
+                duration: recording.duration
+            )
+        } catch {
+            NSLog("Frame 写入录屏历史失败: \(error.localizedDescription)")
+            return recording
         }
     }
 
@@ -299,6 +570,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func copyHistoryRecord(_ record: CaptureHistoryRecord) {
         guard record.kind == .screenshot else {
+            do {
+                try clipboardWriter.write(fileURL: captureHistoryStore.fileURL(for: record))
+            } catch {
+                showQuickAccessFailedAlert(title: strings.copyFailedTitle, error: error)
+            }
             return
         }
 
@@ -311,6 +587,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func saveHistoryRecord(_ record: CaptureHistoryRecord) {
         guard record.kind == .screenshot else {
+            guard let format = recordingFormat(for: record) else {
+                return
+            }
+
+            do {
+                _ = try recordingFileWriter.copyRecording(
+                    from: captureHistoryStore.fileURL(for: record),
+                    format: format,
+                    date: record.createdAt
+                )
+            } catch {
+                showQuickAccessFailedAlert(title: strings.saveFailedTitle, error: error)
+            }
             return
         }
 
@@ -483,6 +772,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func copyRecordingToClipboard(_ recording: CapturedRecording) -> Bool {
+        do {
+            try clipboardWriter.write(fileURL: recording.fileURL)
+            NSLog("Frame 已复制录屏文件到剪贴板")
+            return true
+        } catch {
+            showQuickAccessFailedAlert(title: strings.copyFailedTitle, error: error)
+            return false
+        }
+    }
+
     private func saveToDesktop(_ screenshot: CapturedScreenshot) -> Bool {
         do {
             let saveURL = try ScreenshotFileWriter(strings: strings).write(pngData: screenshot.pngData)
@@ -492,6 +792,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showQuickAccessFailedAlert(title: strings.saveFailedTitle, error: error)
             return false
         }
+    }
+
+    private func downloadRecording(_ recording: CapturedRecording) -> Bool {
+        do {
+            let saveURL = try recordingFileWriter.copyRecording(
+                from: recording.fileURL,
+                format: recording.format
+            )
+            NSLog("Frame 已保存录屏：\(saveURL.path)")
+            return true
+        } catch {
+            showQuickAccessFailedAlert(title: strings.saveFailedTitle, error: error)
+            return false
+        }
+    }
+
+    private func recordingFormat(for record: CaptureHistoryRecord) -> RecordingFormat? {
+        RecordingFormat(rawValue: (record.filename as NSString).pathExtension)
     }
 
     private func chooseScreenshotDirectory() -> URL? {

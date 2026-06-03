@@ -92,6 +92,56 @@ final class SelectionOverlayCompletionTests: XCTestCase {
     }
 
     @MainActor
+    func testStartRecordingButtonInvokesRecordingCallbackWithoutCompletingOverlay() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        var startedSelection: SelectionCapture?
+        var startedOptions: RecordingOptions?
+        var completion: SelectionOverlayCompletion?
+        let window = try makeOverlayWindowForTesting(
+            initialGlobalRect: CGRect(
+                x: screen.frame.minX + 20,
+                y: screen.frame.minY + 20,
+                width: 240,
+                height: 160
+            ),
+            onComplete: { completion = $0 },
+            onStartRecording: { selection, options in
+                startedSelection = selection
+                startedOptions = options
+            }
+        )
+
+        XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "录屏"))
+        XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "开始录制"))
+
+        XCTAssertEqual(startedSelection?.rect, window.activeSelectionForTesting()?.rect)
+        XCTAssertEqual(startedOptions, RecordingOptions.defaults)
+        XCTAssertNil(completion)
+    }
+
+    @MainActor
+    func testActiveRecordingHandlersAreInvokedFromHUD() throws {
+        let window = try makeOverlayWindowForTesting()
+        var didPause = false
+        var didResume = false
+        var didStop = false
+
+        window.setActiveRecordingHandlers(
+            pause: { didPause = true },
+            resume: { didResume = true },
+            stop: { didStop = true }
+        )
+        window.enterActiveRecordingModeForTesting(elapsed: 3, isPaused: false)
+
+        XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "暂停"))
+        XCTAssertTrue(didPause)
+        XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "继续"))
+        XCTAssertTrue(didResume)
+        XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "停止录制"))
+        XCTAssertTrue(didStop)
+    }
+
+    @MainActor
     func testRecordingHUDShowsElapsedTimePauseAndStopWhileActive() throws {
         let screen = try XCTUnwrap(NSScreen.screens.first)
         let window = try makeOverlayWindowForTesting(
@@ -221,7 +271,8 @@ final class SelectionOverlayCompletionTests: XCTestCase {
     private func makeOverlayWindowForTesting(
         initialGlobalRect: CGRect? = nil,
         delayCountdownNanoseconds: UInt64 = 5_000_000_000,
-        onComplete: @escaping (SelectionOverlayCompletion?) -> Void = { _ in }
+        onComplete: @escaping (SelectionOverlayCompletion?) -> Void = { _ in },
+        onStartRecording: @escaping (SelectionCapture, RecordingOptions) -> Void = { _, _ in }
     ) throws -> SelectionOverlayWindow {
         _ = NSApplication.shared
         let screen = try XCTUnwrap(NSScreen.screens.first)
@@ -234,6 +285,7 @@ final class SelectionOverlayCompletionTests: XCTestCase {
             delayCountdownNanoseconds: delayCountdownNanoseconds,
             onInteraction: {},
             onWindowSelectionRequested: { _, _ in nil },
+            onStartRecording: onStartRecording,
             onComplete: onComplete
         )
     }
