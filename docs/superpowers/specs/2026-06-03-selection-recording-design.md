@@ -166,8 +166,8 @@ with screenshot Quick Access:
 - stack upward with other Quick Access cards
 - stay lightweight and dismissible
 - use the recording's first frame as the thumbnail when it can be decoded
-- use the same floating panel window behavior as screenshot Quick Access so the
-  preview reliably appears above normal desktop apps
+- keep the borderless preview panel's rendered content size equal to the
+  expected preview size so the card cannot collapse into a thin strip
 - show hover actions as icon-only controls
 
 The video card actions are:

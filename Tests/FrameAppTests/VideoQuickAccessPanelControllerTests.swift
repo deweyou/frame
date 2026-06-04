@@ -38,10 +38,13 @@ final class VideoQuickAccessPanelControllerTests: XCTestCase {
             controller.panelSizeForTesting(recordingID: recording.id),
             CapturePreviewMetrics.previewSize(forDesktopSize: NSScreen.main?.frame.size)
         )
+        XCTAssertEqual(
+            controller.contentFrameForTesting(recordingID: recording.id)?.size,
+            CapturePreviewMetrics.previewSize(forDesktopSize: NSScreen.main?.frame.size)
+        )
         XCTAssertTrue(controller.isPanelVisibleForTesting(recordingID: recording.id))
         let styleMask = try XCTUnwrap(controller.panelStyleMaskForTesting(recordingID: recording.id))
-        XCTAssertTrue(styleMask.contains(.titled))
-        XCTAssertTrue(styleMask.contains(.fullSizeContentView))
+        XCTAssertTrue(styleMask.contains(.borderless))
     }
 
     func testVideoQuickAccessUsesFirstFrameThumbnailWhenAvailable() throws {

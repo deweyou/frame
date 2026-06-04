@@ -151,8 +151,8 @@ system tool, not a branded dashboard.
   language. It exposes Download, Copy, Preview, disabled Edit, and Close. Preview
   opens a playable video window; Edit remains pending. Use the first decodable
   recording frame as the thumbnail, with a lightweight video placeholder as the
-  fallback. Use the same floating panel strategy as screenshot Quick Access so
-  the preview reliably appears above desktop apps.
+  fallback. Keep the panel borderless and assert the rendered content size so
+  the preview cannot collapse into a thin strip.
 
 ## Capture History
 

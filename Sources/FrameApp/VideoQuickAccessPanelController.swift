@@ -61,10 +61,13 @@ final class VideoQuickAccessPanelController {
         )
         items[recording.id] = item
         content.frame = CGRect(origin: .zero, size: desiredPreviewSize)
+        content.autoresizingMask = [.width, .height]
         panel.contentView = content
-        panel.setContentSize(desiredPreviewSize)
         position(panel, size: desiredPreviewSize, preferredAnchor: preferredAnchor)
         panel.orderFrontRegardless()
+        position(panel, size: desiredPreviewSize, preferredAnchor: preferredAnchor)
+        content.frame = CGRect(origin: .zero, size: desiredPreviewSize)
+        content.layoutSubtreeIfNeeded()
     }
 
     func actionLabelsForTesting(recordingID: UUID) -> [String] {
@@ -77,6 +80,10 @@ final class VideoQuickAccessPanelController {
 
     func panelSizeForTesting(recordingID: UUID) -> CGSize? {
         items[recordingID]?.preferredSize
+    }
+
+    func contentFrameForTesting(recordingID: UUID) -> CGRect? {
+        items[recordingID]?.contentView.frame
     }
 
     func panelStyleMaskForTesting(recordingID: UUID) -> NSWindow.StyleMask? {
@@ -94,15 +101,13 @@ final class VideoQuickAccessPanelController {
     private func makePanel(size: CGSize) -> NSPanel {
         let panel = NSPanel(
             contentRect: CGRect(origin: .zero, size: size),
-            styleMask: [.titled, .fullSizeContentView],
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.level = .floating
-        panel.titleVisibility = .hidden
-        panel.titlebarAppearsTransparent = true
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -110,7 +115,6 @@ final class VideoQuickAccessPanelController {
         panel.isMovable = false
         panel.isMovableByWindowBackground = false
         panel.acceptsMouseMovedEvents = true
-        panel.setContentSize(size)
         return panel
     }
 
@@ -124,8 +128,10 @@ final class VideoQuickAccessPanelController {
         close: @escaping () -> Bool
     ) -> VideoQuickAccessContentView {
         let root = VideoQuickAccessContentView()
+        root.preferredContentSize = previewSize
         root.wantsLayer = true
         root.translatesAutoresizingMaskIntoConstraints = false
+        root.autoresizesSubviews = true
         root.onHoverChanged = { [weak root] isHovered in
             root?.setActionsVisible(isHovered)
         }
@@ -334,6 +340,15 @@ private final class VideoQuickAccessContentView: NSView {
     var actionsViews: [NSView] = []
     var onHoverChanged: ((Bool) -> Void)?
     var hasThumbnailForTesting = false
+    var preferredContentSize: CGSize = .zero {
+        didSet {
+            invalidateIntrinsicContentSize()
+        }
+    }
+
+    override var intrinsicContentSize: NSSize {
+        preferredContentSize == .zero ? super.intrinsicContentSize : preferredContentSize
+    }
 
     private var trackingArea: NSTrackingArea?
 
