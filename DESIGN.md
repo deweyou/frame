@@ -67,6 +67,8 @@ system tool, not a branded dashboard.
 - The screenshot HUD may switch into recording setup without closing the
   selection overlay. Setup controls stay compact and cover start recording,
   MP4/GIF format, cursor visibility, and keyboard hint visibility.
+- Starting a recording enters a five-second passive countdown before frames are
+  written, giving the user time to prepare the desktop without a sudden flash.
 - Active recording freezes the selected rectangle and replaces size editing
   with elapsed recording time. The action group contains pause or resume plus
   stop.
@@ -78,6 +80,8 @@ system tool, not a branded dashboard.
   For full-screen selections it may sit inside the screen so controls remain
   reachable, but Frame-owned HUDs, recording boundaries, and keyboard hint
   overlays must not be recorded into the output.
+- Stop actions acknowledge immediately: disable the stop affordance, show a
+  stopping state, and keep the app responsive while finalization runs.
 - Do not add a stop-recording keyboard shortcut in this version. The HUD and
   red menu bar recording state are the stop surfaces.
 
@@ -147,7 +151,8 @@ system tool, not a branded dashboard.
   language. It exposes Download, Copy, Preview, disabled Edit, and Close. Preview
   opens a playable video window; Edit remains pending. Use the first decodable
   recording frame as the thumbnail, with a lightweight video placeholder as the
-  fallback.
+  fallback. Use the same floating panel strategy as screenshot Quick Access so
+  the preview reliably appears above desktop apps.
 
 ## Capture History
 

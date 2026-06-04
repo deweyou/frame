@@ -34,4 +34,20 @@ final class ActiveRecordingHUDPanelControllerTests: XCTestCase {
 
         XCTAssertEqual(controller.buttonLabelsForTesting(), ["继续", "停止录制"])
     }
+
+    func testStoppingRecordingHUDShowsImmediateFeedback() {
+        let controller = ActiveRecordingHUDPanelController()
+
+        controller.show(
+            near: CGRect(x: 20, y: 20, width: 320, height: 200),
+            elapsed: 24,
+            isPaused: false,
+            pause: {},
+            resume: {},
+            stop: {}
+        )
+        controller.setStopping(true)
+
+        XCTAssertEqual(controller.buttonLabelsForTesting(), ["暂停", "正在停止"])
+    }
 }

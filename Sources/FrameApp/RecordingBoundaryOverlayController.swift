@@ -3,9 +3,10 @@ import AppKit
 @MainActor
 final class RecordingBoundaryOverlayController {
     private var panel: NSPanel?
+    private var boundaryView: RecordingBoundaryView?
     private var displayedSelectionRect: CGRect?
 
-    func show(rect: CGRect) {
+    func show(rect: CGRect, countdownText: String? = nil) {
         close()
 
         let normalizedRect = rect.integral
@@ -25,20 +26,28 @@ final class RecordingBoundaryOverlayController {
         panel.ignoresMouseEvents = true
         panel.isReleasedWhenClosed = false
         panel.sharingType = .none
-        panel.contentView = RecordingBoundaryView(
+        let boundaryView = RecordingBoundaryView(
             frame: CGRect(origin: .zero, size: screenFrame.size),
             selectionRect: localSelectionRect
         )
+        boundaryView.countdownText = countdownText
+        panel.contentView = boundaryView
         panel.orderFrontRegardless()
 
         self.panel = panel
+        self.boundaryView = boundaryView
         displayedSelectionRect = localSelectionRect
+    }
+
+    func updateCountdown(_ text: String?) {
+        boundaryView?.countdownText = text
     }
 
     func close() {
         panel?.orderOut(nil)
         panel?.close()
         panel = nil
+        boundaryView = nil
         displayedSelectionRect = nil
     }
 
@@ -48,6 +57,10 @@ final class RecordingBoundaryOverlayController {
 
     func selectionRectForTesting() -> CGRect? {
         displayedSelectionRect
+    }
+
+    func countdownTextForTesting() -> String? {
+        boundaryView?.countdownText
     }
 
     func ignoresMouseEventsForTesting() -> Bool? {
@@ -77,6 +90,13 @@ final class RecordingBoundaryOverlayController {
 
 private final class RecordingBoundaryView: NSView {
     private let selectionRect: CGRect
+    private let countdownLabel = NSTextField(labelWithString: "")
+    var countdownText: String? {
+        didSet {
+            countdownLabel.stringValue = countdownText ?? ""
+            countdownLabel.isHidden = countdownText == nil
+        }
+    }
 
     override var isOpaque: Bool {
         false
@@ -87,6 +107,7 @@ private final class RecordingBoundaryView: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
+        configureCountdownLabel()
     }
 
     @available(*, unavailable)
@@ -99,6 +120,34 @@ private final class RecordingBoundaryView: NSView {
 
         drawDimmedBackdrop(excluding: selectionRect)
         drawSelectionChrome(selectionRect)
+    }
+
+    override func layout() {
+        super.layout()
+        countdownLabel.frame = countdownLabelFrame()
+    }
+
+    private func configureCountdownLabel() {
+        countdownLabel.isHidden = true
+        countdownLabel.alignment = .center
+        countdownLabel.font = .monospacedDigitSystemFont(ofSize: 42, weight: .semibold)
+        countdownLabel.textColor = .labelColor
+        countdownLabel.translatesAutoresizingMaskIntoConstraints = true
+        countdownLabel.wantsLayer = true
+        countdownLabel.layer?.cornerRadius = 28
+        countdownLabel.layer?.cornerCurve = .continuous
+        countdownLabel.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
+        countdownLabel.layer?.borderWidth = 0.5
+        countdownLabel.layer?.borderColor = NSColor.white.withAlphaComponent(0.38).cgColor
+        addSubview(countdownLabel)
+    }
+
+    private func countdownLabelFrame() -> CGRect {
+        let side: CGFloat = 72
+        let center = CGPoint(x: selectionRect.midX, y: selectionRect.midY)
+        let x = min(max(center.x - side / 2, bounds.minX + 12), bounds.maxX - side - 12)
+        let y = min(max(center.y - side / 2, bounds.minY + 12), bounds.maxY - side - 12)
+        return CGRect(x: x, y: y, width: side, height: side)
     }
 
     private func drawDimmedBackdrop(excluding selectionRect: CGRect) {

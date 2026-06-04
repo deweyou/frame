@@ -7,7 +7,7 @@ import XCTest
 
 @MainActor
 final class VideoQuickAccessPanelControllerTests: XCTestCase {
-    func testVideoQuickAccessExposesDownloadCopyPreviewAndDisabledEdit() {
+    func testVideoQuickAccessExposesDownloadCopyPreviewAndDisabledEdit() throws {
         let recording = CapturedRecording(
             id: UUID(),
             fileURL: URL(fileURLWithPath: "/tmp/test.mp4"),
@@ -38,6 +38,10 @@ final class VideoQuickAccessPanelControllerTests: XCTestCase {
             controller.panelSizeForTesting(recordingID: recording.id),
             CapturePreviewMetrics.previewSize(forDesktopSize: NSScreen.main?.frame.size)
         )
+        XCTAssertTrue(controller.isPanelVisibleForTesting(recordingID: recording.id))
+        let styleMask = try XCTUnwrap(controller.panelStyleMaskForTesting(recordingID: recording.id))
+        XCTAssertTrue(styleMask.contains(.titled))
+        XCTAssertTrue(styleMask.contains(.fullSizeContentView))
     }
 
     func testVideoQuickAccessUsesFirstFrameThumbnailWhenAvailable() throws {

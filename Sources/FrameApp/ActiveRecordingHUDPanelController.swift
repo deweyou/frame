@@ -14,6 +14,8 @@ final class ActiveRecordingHUDPanelController {
     private var onPause: () -> Void = {}
     private var onResume: () -> Void = {}
     private var onStop: () -> Void = {}
+    private var isPaused = false
+    private var isStopping = false
 
     init() {
         configurePanel()
@@ -31,14 +33,21 @@ final class ActiveRecordingHUDPanelController {
         onPause = pause
         onResume = resume
         onStop = stop
+        isStopping = false
         update(elapsed: elapsed, isPaused: isPaused)
         position(near: selectionRect)
         panel.orderFrontRegardless()
     }
 
     func update(elapsed: TimeInterval, isPaused: Bool) {
+        self.isPaused = isPaused
         elapsedLabel.stringValue = formattedElapsed(elapsed)
-        installButtons(isPaused: isPaused)
+        installButtons()
+    }
+
+    func setStopping(_ isStopping: Bool) {
+        self.isStopping = isStopping
+        installButtons()
     }
 
     func close() {
@@ -109,6 +118,11 @@ final class ActiveRecordingHUDPanelController {
     }
 
     private func installButtons(isPaused: Bool) {
+        self.isPaused = isPaused
+        installButtons()
+    }
+
+    private func installButtons() {
         buttonStackView.arrangedSubviews.forEach { view in
             buttonStackView.removeArrangedSubview(view)
             view.removeFromSuperview()
@@ -119,13 +133,18 @@ final class ActiveRecordingHUDPanelController {
                 ? makeButton(title: "继续", symbolName: "play.fill", action: #selector(resumeClicked))
                 : makeButton(title: "暂停", symbolName: "pause.fill", action: #selector(pauseClicked))
         )
-        buttonStackView.addArrangedSubview(
-            makeButton(title: "停止录制", symbolName: "stop.fill", action: #selector(stopClicked))
+        let stopButton = makeButton(
+            title: isStopping ? "正在停止" : "停止录制",
+            symbolName: isStopping ? "hourglass" : "stop.fill",
+            action: #selector(stopClicked)
         )
+        stopButton.isEnabled = !isStopping
+        stopButton.contentTintColor = isStopping ? .disabledControlTextColor : .labelColor
+        buttonStackView.addArrangedSubview(stopButton)
     }
 
     private func makeButton(title: String, symbolName: String, action: Selector) -> NSButton {
-        let button = NSButton(
+        let button = RecordingHUDButton(
             image: NSImage(systemSymbolName: symbolName, accessibilityDescription: title) ?? NSImage(),
             target: self,
             action: action
@@ -179,6 +198,19 @@ final class ActiveRecordingHUDPanelController {
     }
 
     @objc private func stopClicked(_ sender: NSButton) {
+        guard !isStopping else {
+            return
+        }
+        setStopping(true)
         onStop()
+    }
+}
+
+private final class RecordingHUDButton: NSButton {
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        if isEnabled {
+            addCursorRect(bounds, cursor: .pointingHand)
+        }
     }
 }

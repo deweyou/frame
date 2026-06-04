@@ -20,7 +20,8 @@ In scope:
   screen.
 - One display per recording.
 - Recording setup controls for format, cursor visibility, and keyboard hints.
-- Active recording HUD with elapsed recording time, pause or resume, and stop.
+- Five-second start countdown, followed by active recording HUD with elapsed
+  recording time, pause or resume, and stop.
 - Non-interactive recording overlay that keeps the mask and selected region
   visible while the desktop remains usable.
 - Status item recording state with a red recording icon and stop action.
@@ -50,14 +51,17 @@ Out of scope for this version:
 5. Clicking the recording action switches the HUD into recording setup mode.
 6. Setup mode keeps the selected region active and shows icon-only controls for:
    start recording, MP4/GIF format, show cursor, and keyboard hints.
-7. Clicking start begins recording that selected region.
-8. The HUD switches to active recording mode and shows elapsed recording time,
+7. Clicking start enters a five-second countdown so the user can prepare the
+   desktop before captured frames are written.
+8. Countdown completion begins recording that selected region.
+9. The HUD switches to active recording mode and shows elapsed recording time,
    pause/resume, and stop.
-9. The status item switches to a red recording icon. Opening or clicking the
+10. The status item switches to a red recording icon. Opening or clicking the
    recording status item exposes a stop action.
-10. Stopping finalizes the recording and shows a video Quick Access card at the
+11. Stopping gives immediate disabled/loading feedback, finalizes the recording,
+    and shows a video Quick Access card at the
     active screen bottom-left corner.
-11. The video Quick Access card offers download, copy, preview, and edit. Edit
+12. The video Quick Access card offers download, copy, preview, and edit. Edit
     is present but disabled/pending in this version.
 
 ## HUD Behavior
@@ -91,10 +95,17 @@ captured without blocking other apps. The active recording overlay is Frame-owne
 chrome and must be excluded from captured pixels. It should follow the screenshot
 selection visual language and avoid a red recording border.
 
+Before recording starts, the same passive recording overlay displays a five
+second countdown. The countdown is visible to the user, and capture begins only
+after it completes.
+
 The recording HUD should sit outside the selection when there is enough room. If
 the selected region covers the full screen, the HUD may be visually inside the
 selected screen so the user can still stop recording. In every placement, the
 HUD and keyboard hint overlay must be excluded from captured pixels.
+
+Stop should acknowledge input immediately. After the user clicks stop, disable
+the stop affordance and show a busy/stopping state while finalization runs.
 
 The app should not provide a stop-recording keyboard shortcut in this version.
 Recorded demos can trigger the same shortcuts being demonstrated, so stop must
@@ -155,6 +166,8 @@ with screenshot Quick Access:
 - stack upward with other Quick Access cards
 - stay lightweight and dismissible
 - use the recording's first frame as the thumbnail when it can be decoded
+- use the same floating panel window behavior as screenshot Quick Access so the
+  preview reliably appears above normal desktop apps
 - show hover actions as icon-only controls
 
 The video card actions are:

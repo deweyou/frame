@@ -79,6 +79,14 @@ final class VideoQuickAccessPanelController {
         items[recordingID]?.preferredSize
     }
 
+    func panelStyleMaskForTesting(recordingID: UUID) -> NSWindow.StyleMask? {
+        items[recordingID]?.panel.styleMask
+    }
+
+    func isPanelVisibleForTesting(recordingID: UUID) -> Bool {
+        items[recordingID]?.panel.isVisible ?? false
+    }
+
     func hasThumbnailForTesting(recordingID: UUID) -> Bool {
         items[recordingID]?.contentView.hasThumbnailForTesting ?? false
     }
@@ -86,12 +94,15 @@ final class VideoQuickAccessPanelController {
     private func makePanel(size: CGSize) -> NSPanel {
         let panel = NSPanel(
             contentRect: CGRect(origin: .zero, size: size),
-            styleMask: [.borderless],
+            styleMask: [.titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
+        panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.level = .floating
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
