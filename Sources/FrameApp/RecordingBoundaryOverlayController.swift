@@ -3,13 +3,16 @@ import AppKit
 @MainActor
 final class RecordingBoundaryOverlayController {
     private var panel: NSPanel?
+    private var displayedSelectionRect: CGRect?
 
     func show(rect: CGRect) {
         close()
 
         let normalizedRect = rect.integral
+        let screenFrame = preferredScreenFrame(containing: normalizedRect).integral
+        let localSelectionRect = normalizedRect.offsetBy(dx: -screenFrame.minX, dy: -screenFrame.minY)
         let panel = NSPanel(
-            contentRect: normalizedRect,
+            contentRect: screenFrame,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -22,20 +25,29 @@ final class RecordingBoundaryOverlayController {
         panel.ignoresMouseEvents = true
         panel.isReleasedWhenClosed = false
         panel.sharingType = .none
-        panel.contentView = RecordingBoundaryView(frame: CGRect(origin: .zero, size: normalizedRect.size))
+        panel.contentView = RecordingBoundaryView(
+            frame: CGRect(origin: .zero, size: screenFrame.size),
+            selectionRect: localSelectionRect
+        )
         panel.orderFrontRegardless()
 
         self.panel = panel
+        displayedSelectionRect = localSelectionRect
     }
 
     func close() {
         panel?.orderOut(nil)
         panel?.close()
         panel = nil
+        displayedSelectionRect = nil
     }
 
     func frameForTesting() -> CGRect? {
         panel?.frame
+    }
+
+    func selectionRectForTesting() -> CGRect? {
+        displayedSelectionRect
     }
 
     func ignoresMouseEventsForTesting() -> Bool? {
@@ -45,14 +57,33 @@ final class RecordingBoundaryOverlayController {
     func sharingTypeForTesting() -> NSWindow.SharingType? {
         panel?.sharingType
     }
+
+    private func preferredScreenFrame(containing rect: CGRect) -> CGRect {
+        let fallbackFrame = NSScreen.main?.frame ?? rect
+        return NSScreen.screens.max { firstScreen, secondScreen in
+            intersectionArea(firstScreen.frame, rect) < intersectionArea(secondScreen.frame, rect)
+        }?.frame ?? fallbackFrame
+    }
+
+    private func intersectionArea(_ firstRect: CGRect, _ secondRect: CGRect) -> CGFloat {
+        let intersection = firstRect.intersection(secondRect)
+        guard !intersection.isNull else {
+            return 0
+        }
+
+        return intersection.width * intersection.height
+    }
 }
 
 private final class RecordingBoundaryView: NSView {
+    private let selectionRect: CGRect
+
     override var isOpaque: Bool {
         false
     }
 
-    override init(frame frameRect: NSRect) {
+    init(frame frameRect: NSRect, selectionRect: CGRect) {
+        self.selectionRect = selectionRect
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
@@ -66,43 +97,48 @@ private final class RecordingBoundaryView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        let borderRect = bounds.insetBy(dx: 1.5, dy: 1.5)
-        NSColor.white.withAlphaComponent(0.75).setStroke()
-        let outerPath = NSBezierPath(roundedRect: borderRect, xRadius: 2, yRadius: 2)
-        outerPath.lineWidth = 3
-        outerPath.stroke()
-
-        NSColor.systemRed.setStroke()
-        let innerPath = NSBezierPath(roundedRect: borderRect, xRadius: 2, yRadius: 2)
-        innerPath.lineWidth = 2
-        innerPath.stroke()
-
-        drawCornerTicks(in: borderRect)
+        drawDimmedBackdrop(excluding: selectionRect)
+        drawSelectionChrome(selectionRect)
     }
 
-    private func drawCornerTicks(in rect: CGRect) {
-        let tickLength: CGFloat = min(18, max(8, min(rect.width, rect.height) * 0.12))
-        let tickPath = NSBezierPath()
-        tickPath.lineWidth = 3
-        tickPath.lineCapStyle = .round
+    private func drawDimmedBackdrop(excluding selectionRect: CGRect) {
+        NSColor.black.withAlphaComponent(0.34).setFill()
 
-        tickPath.move(to: CGPoint(x: rect.minX, y: rect.minY + tickLength))
-        tickPath.line(to: CGPoint(x: rect.minX, y: rect.minY))
-        tickPath.line(to: CGPoint(x: rect.minX + tickLength, y: rect.minY))
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current?.shouldAntialias = false
+        let backdropPath = NSBezierPath(rect: bounds)
+        backdropPath.append(NSBezierPath(rect: selectionRect))
+        backdropPath.windingRule = .evenOdd
+        backdropPath.fill()
+        NSGraphicsContext.restoreGraphicsState()
+    }
 
-        tickPath.move(to: CGPoint(x: rect.maxX - tickLength, y: rect.minY))
-        tickPath.line(to: CGPoint(x: rect.maxX, y: rect.minY))
-        tickPath.line(to: CGPoint(x: rect.maxX, y: rect.minY + tickLength))
+    private func drawSelectionChrome(_ selectionRect: CGRect) {
+        let lineWidth: CGFloat = 2.5
+        for cornerPath in selectionChromeCornerPaths(in: selectionRect, lineWidth: lineWidth) {
+            let path = NSBezierPath()
+            path.lineWidth = lineWidth
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            guard let firstPoint = cornerPath.points.first else {
+                continue
+            }
 
-        tickPath.move(to: CGPoint(x: rect.maxX, y: rect.maxY - tickLength))
-        tickPath.line(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        tickPath.line(to: CGPoint(x: rect.maxX - tickLength, y: rect.maxY))
+            path.move(to: firstPoint)
+            for point in cornerPath.points.dropFirst() {
+                path.line(to: point)
+            }
 
-        tickPath.move(to: CGPoint(x: rect.minX + tickLength, y: rect.maxY))
-        tickPath.line(to: CGPoint(x: rect.minX, y: rect.maxY))
-        tickPath.line(to: CGPoint(x: rect.minX, y: rect.maxY - tickLength))
+            let shadow = NSShadow()
+            shadow.shadowColor = NSColor.black.withAlphaComponent(0.28)
+            shadow.shadowBlurRadius = 1.5
+            shadow.shadowOffset = CGSize(width: 0, height: -0.5)
 
-        NSColor.systemRed.setStroke()
-        tickPath.stroke()
+            NSGraphicsContext.saveGraphicsState()
+            shadow.set()
+            NSColor.white.withAlphaComponent(0.92).setStroke()
+            path.stroke()
+            NSGraphicsContext.restoreGraphicsState()
+        }
     }
 }

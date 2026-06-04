@@ -70,6 +70,7 @@ final class VideoQuickAccessPanelControllerTests: XCTestCase {
         )
 
         XCTAssertTrue(controller.hasThumbnailForTesting(recordingID: recording.id))
+        XCTAssertEqual(RecordingThumbnailProvider().thumbnail(for: gifURL)?.size, CGSize(width: 2, height: 2))
     }
 
     private func makeOneFrameGIF(at url: URL) throws {

@@ -4,16 +4,26 @@ import XCTest
 
 @MainActor
 final class RecordingBoundaryOverlayControllerTests: XCTestCase {
-    func testRecordingBoundaryIsVisibleButNonInteractiveAndExcludedFromCapture() {
+    func testRecordingBoundaryShowsPassiveScreenOverlayAndIsExcludedFromCapture() throws {
         let controller = RecordingBoundaryOverlayController()
         defer {
             controller.close()
         }
 
-        let rect = CGRect(x: 40, y: 60, width: 320, height: 180)
+        let screenFrame = try XCTUnwrap(NSScreen.main?.frame)
+        let rect = CGRect(
+            x: screenFrame.minX + 40,
+            y: screenFrame.minY + 60,
+            width: 320,
+            height: 180
+        )
         controller.show(rect: rect)
 
-        XCTAssertEqual(controller.frameForTesting(), rect.integral)
+        XCTAssertEqual(controller.frameForTesting(), screenFrame.integral)
+        XCTAssertEqual(
+            controller.selectionRectForTesting(),
+            rect.integral.offsetBy(dx: -screenFrame.minX, dy: -screenFrame.minY)
+        )
         XCTAssertEqual(controller.ignoresMouseEventsForTesting(), true)
         XCTAssertEqual(controller.sharingTypeForTesting(), NSWindow.SharingType.none)
     }

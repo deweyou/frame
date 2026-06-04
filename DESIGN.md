@@ -70,9 +70,10 @@ system tool, not a branded dashboard.
 - Active recording freezes the selected rectangle and replaces size editing
   with elapsed recording time. The action group contains pause or resume plus
   stop.
-- During active recording, keep a visible non-interactive boundary around the
-  selected rectangle while allowing desktop apps below it to receive mouse and
-  keyboard interaction.
+- During active recording, keep a visible non-interactive mask and selected
+  region around the recorded rectangle while allowing desktop apps below it to
+  receive mouse and keyboard interaction. Follow the screenshot selection visual
+  language instead of switching the selection chrome to red.
 - The recording HUD should sit outside the selected region when space allows.
   For full-screen selections it may sit inside the screen so controls remain
   reachable, but Frame-owned HUDs, recording boundaries, and keyboard hint

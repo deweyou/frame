@@ -20,7 +20,7 @@ struct RecordingThumbnailProvider {
 
         do {
             let image = try generator.copyCGImage(at: CMTime(value: 0, timescale: 600), actualTime: nil)
-            return NSImage(cgImage: image, size: .zero)
+            return NSImage(cgImage: image, size: CGSize(width: image.width, height: image.height))
         } catch {
             return nil
         }
@@ -32,6 +32,6 @@ struct RecordingThumbnailProvider {
             return nil
         }
 
-        return NSImage(cgImage: image, size: .zero)
+        return NSImage(cgImage: image, size: CGSize(width: image.width, height: image.height))
     }
 }

@@ -21,8 +21,8 @@ In scope:
 - One display per recording.
 - Recording setup controls for format, cursor visibility, and keyboard hints.
 - Active recording HUD with elapsed recording time, pause or resume, and stop.
-- Non-interactive recording boundary that keeps the selected region visible
-  while the desktop remains usable.
+- Non-interactive recording overlay that keeps the mask and selected region
+  visible while the desktop remains usable.
 - Status item recording state with a red recording icon and stop action.
 - MP4 and GIF output.
 - Video Quick Access at the active screen bottom-left corner, using the first
@@ -85,10 +85,11 @@ increase the displayed elapsed recording time. Resume continues into the same
 final recording file.
 
 While recording is active, the full selection overlay should stop intercepting
-desktop interaction. Frame should keep a visible non-interactive boundary around
-the recorded rectangle so users can see what is being captured without blocking
-other apps. The boundary is Frame-owned chrome and must be excluded from
-captured pixels.
+desktop interaction. Frame should keep a visible non-interactive mask and
+selected region around the recorded rectangle so users can see what is being
+captured without blocking other apps. The active recording overlay is Frame-owned
+chrome and must be excluded from captured pixels. It should follow the screenshot
+selection visual language and avoid a red recording border.
 
 The recording HUD should sit outside the selection when there is enough room. If
 the selected region covers the full screen, the HUD may be visually inside the
