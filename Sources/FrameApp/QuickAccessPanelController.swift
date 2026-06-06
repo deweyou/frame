@@ -63,6 +63,7 @@ final class QuickAccessPanelController: NSObject {
         preview: @escaping () -> Bool,
         close: @escaping () -> Void
     ) {
+        restoreTemporarilyHiddenPreviews()
         if let item = previewItems.first(where: { $0.recordingID == recording.id }) {
             item.panel.orderFrontRegardless()
             return
@@ -573,7 +574,7 @@ final class QuickAccessPanelController: NSObject {
 
     nonisolated static func recordingPreviewSize(
         forSourceSize sourceSize: CGSize,
-        maximumSize maxSize: CGSize = CGSize(width: 240, height: 160)
+        maximumSize maxSize: CGSize = CGSize(width: CapturePreviewMetrics.previewWidth, height: 160)
     ) -> CGSize {
         guard sourceSize.width > 0, sourceSize.height > 0 else {
             return CapturePreviewMetrics.previewSize(forDesktopSize: nil)

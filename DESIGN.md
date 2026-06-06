@@ -151,9 +151,9 @@ system tool, not a branded dashboard.
   language. Recording cards expose Download, Copy, Preview, disabled Edit, and
   Close. Preview opens a playable video window; Edit remains pending. Use the
   first decodable recording frame as the thumbnail, with a lightweight video
-  placeholder as the fallback. Preserve the recording's pixel aspect ratio
-  inside a compact preview bound. Keep the rendered content size asserted so the
-  preview cannot collapse into a thin strip.
+  placeholder as the fallback. Preserve the recording's pixel aspect ratio while
+  sharing the screenshot Quick Access width baseline. Keep the rendered content
+  size asserted so the preview cannot collapse into a thin strip.
 
 ## Capture History
 

@@ -61,11 +61,11 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
     func testRecordingQuickAccessScalesPreviewToRecordingAspectRatio() {
         XCTAssertEqual(
             QuickAccessPanelController.recordingPreviewSize(forSourceSize: CGSize(width: 1282, height: 504)),
-            CGSize(width: 240, height: 94)
+            CGSize(width: 200, height: 78)
         )
         XCTAssertEqual(
             QuickAccessPanelController.recordingPreviewSize(forSourceSize: CGSize(width: 998, height: 734)),
-            CGSize(width: 217, height: 160)
+            CGSize(width: 200, height: 147)
         )
     }
 
@@ -165,6 +165,57 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         XCTAssertGreaterThan(sortedPanels[1].frame.minY, sortedPanels[0].frame.maxY)
     }
 
+    func testShowingRecordingRestoresTemporarilyHiddenScreenshotPreviews() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        let screenshot = CapturedScreenshot(
+            pngData: try makePNGData(),
+            image: NSImage(size: NSSize(width: 1600, height: 900)),
+            rect: CGRect(x: 0, y: 0, width: 1600, height: 900)
+        )
+        let recording = CapturedRecording(
+            id: UUID(),
+            fileURL: URL(fileURLWithPath: "/tmp/test.mp4"),
+            format: .mp4,
+            rect: CGRect(x: 0, y: 0, width: 1282, height: 504),
+            pixelSize: CGSize(width: 1282, height: 504),
+            byteSize: 10,
+            duration: 7
+        )
+
+        controller.show(
+            for: screenshot,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .en),
+            copy: { true },
+            save: { true },
+            recognizeText: { true },
+            openWorkspace: { true },
+            pin: { true },
+            close: {}
+        )
+        controller.temporarilyHidePreviews()
+        XCTAssertEqual(newPreviewPanels(excluding: windowsBeforeShow).filter(\.isVisible).count, 0)
+
+        controller.show(
+            for: recording,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .en),
+            download: { true },
+            copy: { true },
+            preview: { true },
+            close: {}
+        )
+
+        let panels = newPreviewPanels(excluding: windowsBeforeShow)
+        defer {
+            panels.forEach { $0.close() }
+        }
+        XCTAssertEqual(panels.filter(\.isVisible).count, 2)
+    }
+
     private func makeOneFrameGIF(at url: URL) throws {
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let pixels: [UInt8] = [
@@ -236,5 +287,11 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
 
     private func findPreviewSurface(in view: NSView) -> NSView? {
         view.subviews.first
+    }
+
+    private func newPreviewPanels(excluding windowsBeforeShow: Set<ObjectIdentifier>) -> [NSPanel] {
+        NSApp.windows.compactMap { window -> NSPanel? in
+            windowsBeforeShow.contains(ObjectIdentifier(window)) ? nil : window as? NSPanel
+        }
     }
 }
