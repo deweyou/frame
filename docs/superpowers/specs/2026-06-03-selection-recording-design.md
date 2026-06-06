@@ -166,6 +166,8 @@ with screenshot Quick Access:
 - stack upward with other Quick Access cards
 - stay lightweight and dismissible
 - use the recording's first frame as the thumbnail when it can be decoded
+- preserve the recording pixel aspect ratio inside a compact preview bound, so
+  wide recordings show as wide video cards instead of screenshot-shaped cards
 - keep the borderless preview panel's rendered content size equal to the
   expected preview size so the card cannot collapse into a thin strip
 - show hover actions as icon-only controls

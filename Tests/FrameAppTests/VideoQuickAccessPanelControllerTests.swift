@@ -12,12 +12,13 @@ final class VideoQuickAccessPanelControllerTests: XCTestCase {
             id: UUID(),
             fileURL: URL(fileURLWithPath: "/tmp/test.mp4"),
             format: .mp4,
-            rect: CGRect(x: 0, y: 0, width: 320, height: 240),
-            pixelSize: CGSize(width: 320, height: 240),
+            rect: CGRect(x: 0, y: 0, width: 1282, height: 504),
+            pixelSize: CGSize(width: 1282, height: 504),
             byteSize: 10,
             duration: 24
         )
         let controller = VideoQuickAccessPanelController()
+        let expectedPreviewSize = VideoQuickAccessPanelController.previewSize(forSourceSize: recording.pixelSize)
 
         controller.show(
             for: recording,
@@ -36,11 +37,11 @@ final class VideoQuickAccessPanelControllerTests: XCTestCase {
         XCTAssertFalse(controller.isEditEnabledForTesting(recordingID: recording.id))
         XCTAssertEqual(
             controller.panelSizeForTesting(recordingID: recording.id),
-            CapturePreviewMetrics.previewSize(forDesktopSize: NSScreen.main?.frame.size)
+            expectedPreviewSize
         )
         XCTAssertEqual(
             controller.contentFrameForTesting(recordingID: recording.id)?.size,
-            CapturePreviewMetrics.previewSize(forDesktopSize: NSScreen.main?.frame.size)
+            expectedPreviewSize
         )
         XCTAssertTrue(controller.isPanelVisibleForTesting(recordingID: recording.id))
         let styleMask = try XCTUnwrap(controller.panelStyleMaskForTesting(recordingID: recording.id))
@@ -49,11 +50,26 @@ final class VideoQuickAccessPanelControllerTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
         XCTAssertEqual(
             controller.panelSizeForTesting(recordingID: recording.id),
-            CapturePreviewMetrics.previewSize(forDesktopSize: NSScreen.main?.frame.size)
+            expectedPreviewSize
         )
         XCTAssertEqual(
             controller.contentFrameForTesting(recordingID: recording.id)?.size,
-            CapturePreviewMetrics.previewSize(forDesktopSize: NSScreen.main?.frame.size)
+            expectedPreviewSize
+        )
+        XCTAssertEqual(
+            controller.previewSurfaceFrameForTesting(recordingID: recording.id)?.size,
+            expectedPreviewSize
+        )
+    }
+
+    func testVideoQuickAccessScalesPreviewToRecordingAspectRatio() {
+        XCTAssertEqual(
+            VideoQuickAccessPanelController.previewSize(forSourceSize: CGSize(width: 1282, height: 504)),
+            CGSize(width: 240, height: 94)
+        )
+        XCTAssertEqual(
+            VideoQuickAccessPanelController.previewSize(forSourceSize: CGSize(width: 998, height: 734)),
+            CGSize(width: 217, height: 160)
         )
     }
 

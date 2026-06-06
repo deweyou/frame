@@ -23,7 +23,7 @@ final class VideoQuickAccessPanelController {
             return
         }
 
-        let desiredPreviewSize = previewSize
+        let desiredPreviewSize = previewSize(for: recording)
         let panel = makePanel(size: desiredPreviewSize)
         let content = makeContentView(
             recording: recording,
@@ -86,6 +86,10 @@ final class VideoQuickAccessPanelController {
         items[recordingID]?.contentView.frame
     }
 
+    func previewSurfaceFrameForTesting(recordingID: UUID) -> CGRect? {
+        items[recordingID]?.contentView.previewSurfaceFrameForTesting
+    }
+
     func panelStyleMaskForTesting(recordingID: UUID) -> NSWindow.StyleMask? {
         items[recordingID]?.panel.styleMask
     }
@@ -130,7 +134,7 @@ final class VideoQuickAccessPanelController {
         let root = VideoQuickAccessContentView()
         root.preferredContentSize = previewSize
         root.wantsLayer = true
-        root.translatesAutoresizingMaskIntoConstraints = false
+        root.translatesAutoresizingMaskIntoConstraints = true
         root.autoresizesSubviews = true
         root.onHoverChanged = { [weak root] isHovered in
             root?.setActionsVisible(isHovered)
@@ -140,7 +144,6 @@ final class VideoQuickAccessPanelController {
         let previewSurface: NSView
         if let thumbnail {
             let imageView = VideoThumbnailImageView(image: thumbnail)
-            imageView.translatesAutoresizingMaskIntoConstraints = false
             imageView.setAccessibilityLabel(strings.videoQuickAccessPreview)
             previewSurface = imageView
             root.hasThumbnailForTesting = true
@@ -149,7 +152,6 @@ final class VideoQuickAccessPanelController {
             visualEffectView.material = .hudWindow
             visualEffectView.blendingMode = .behindWindow
             visualEffectView.state = .active
-            visualEffectView.translatesAutoresizingMaskIntoConstraints = false
             visualEffectView.wantsLayer = true
             visualEffectView.layer?.cornerRadius = 12
             visualEffectView.layer?.cornerCurve = .continuous
@@ -165,13 +167,11 @@ final class VideoQuickAccessPanelController {
         )
         playImageView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 34, weight: .medium)
         playImageView.contentTintColor = .labelColor.withAlphaComponent(0.72)
-        playImageView.translatesAutoresizingMaskIntoConstraints = false
 
         let duration = NSTextField(labelWithString: formattedDuration(recording.duration))
         duration.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
         duration.textColor = .labelColor
         duration.alignment = .center
-        duration.translatesAutoresizingMaskIntoConstraints = false
         duration.wantsLayer = true
         duration.layer?.cornerRadius = 10
         duration.layer?.cornerCurve = .continuous
@@ -182,7 +182,6 @@ final class VideoQuickAccessPanelController {
         actions.alignment = .centerY
         actions.distribution = .fillEqually
         actions.spacing = 5
-        actions.translatesAutoresizingMaskIntoConstraints = false
         actions.addArrangedSubview(makeButton(title: strings.videoQuickAccessDownload, symbolName: "square.and.arrow.down", action: download))
         actions.addArrangedSubview(makeButton(title: strings.videoQuickAccessCopy, symbolName: "doc.on.doc", action: copy))
         actions.addArrangedSubview(makeButton(title: strings.videoQuickAccessPreview, symbolName: "play.rectangle", action: preview))
@@ -192,7 +191,6 @@ final class VideoQuickAccessPanelController {
         overlayView.material = .hudWindow
         overlayView.blendingMode = .withinWindow
         overlayView.state = .active
-        overlayView.translatesAutoresizingMaskIntoConstraints = false
         overlayView.wantsLayer = true
         overlayView.layer?.cornerRadius = 14
         overlayView.layer?.cornerCurve = .continuous
@@ -213,39 +211,15 @@ final class VideoQuickAccessPanelController {
         previewSurface.addSubview(playImageView)
         previewSurface.addSubview(duration)
         overlayView.addSubview(actions)
-
-        NSLayoutConstraint.activate([
-            root.widthAnchor.constraint(equalToConstant: previewSize.width),
-            root.heightAnchor.constraint(equalToConstant: previewSize.height),
-
-            previewSurface.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            previewSurface.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            previewSurface.topAnchor.constraint(equalTo: root.topAnchor),
-            previewSurface.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-
-            playImageView.centerXAnchor.constraint(equalTo: previewSurface.centerXAnchor),
-            playImageView.centerYAnchor.constraint(equalTo: previewSurface.centerYAnchor),
-
-            duration.trailingAnchor.constraint(equalTo: previewSurface.trailingAnchor, constant: -9),
-            duration.bottomAnchor.constraint(equalTo: previewSurface.bottomAnchor, constant: -9),
-            duration.widthAnchor.constraint(greaterThanOrEqualToConstant: 48),
-            duration.heightAnchor.constraint(equalToConstant: 22),
-
-            overlayView.centerXAnchor.constraint(equalTo: previewSurface.centerXAnchor),
-            overlayView.bottomAnchor.constraint(equalTo: previewSurface.bottomAnchor, constant: -7),
-            overlayView.widthAnchor.constraint(equalToConstant: 126),
-            overlayView.heightAnchor.constraint(equalToConstant: 28),
-
-            actions.leadingAnchor.constraint(equalTo: overlayView.leadingAnchor, constant: 7),
-            actions.trailingAnchor.constraint(equalTo: overlayView.trailingAnchor, constant: -7),
-            actions.topAnchor.constraint(equalTo: overlayView.topAnchor, constant: 4),
-            actions.bottomAnchor.constraint(equalTo: overlayView.bottomAnchor, constant: -4),
-
-            closeButton.trailingAnchor.constraint(equalTo: previewSurface.trailingAnchor, constant: -6),
-            closeButton.topAnchor.constraint(equalTo: previewSurface.topAnchor, constant: 6),
-            closeButton.widthAnchor.constraint(equalToConstant: floatingButtonDiameter),
-            closeButton.heightAnchor.constraint(equalToConstant: floatingButtonDiameter),
-        ])
+        root.installLayoutViews(
+            previewSurface: previewSurface,
+            playImageView: playImageView,
+            durationLabel: duration,
+            overlayView: overlayView,
+            actionsView: actions,
+            closeButton: closeButton,
+            floatingButtonDiameter: floatingButtonDiameter
+        )
 
         return root
     }
@@ -303,8 +277,24 @@ final class VideoQuickAccessPanelController {
 
     private let floatingButtonDiameter: CGFloat = 20
     private let previewPadding: CGFloat = 18
-    private var previewSize: CGSize {
-        CapturePreviewMetrics.previewSize(forDesktopSize: (NSScreen.main ?? NSScreen.screens.first)?.frame.size)
+    private func previewSize(for recording: CapturedRecording) -> CGSize {
+        let sourceSize = recording.pixelSize == .zero ? recording.rect.size : recording.pixelSize
+        return Self.previewSize(forSourceSize: sourceSize)
+    }
+
+    nonisolated static func previewSize(
+        forSourceSize sourceSize: CGSize,
+        maximumSize maxSize: CGSize = CGSize(width: 240, height: 160)
+    ) -> CGSize {
+        guard sourceSize.width > 0, sourceSize.height > 0 else {
+            return CapturePreviewMetrics.previewSize(forDesktopSize: nil)
+        }
+
+        let scale = min(maxSize.width / sourceSize.width, maxSize.height / sourceSize.height)
+        return CGSize(
+            width: max(64, floor(sourceSize.width * scale)),
+            height: max(48, floor(sourceSize.height * scale))
+        )
     }
 }
 
@@ -340,6 +330,17 @@ private final class VideoQuickAccessContentView: NSView {
     var actionsViews: [NSView] = []
     var onHoverChanged: ((Bool) -> Void)?
     var hasThumbnailForTesting = false
+    var previewSurfaceFrameForTesting: CGRect? {
+        previewSurface?.frame
+    }
+
+    private weak var previewSurface: NSView?
+    private weak var playImageView: NSImageView?
+    private weak var durationLabel: NSTextField?
+    private weak var overlayView: NSView?
+    private weak var actionsView: NSView?
+    private weak var closeButton: NSButton?
+    private var floatingButtonDiameter: CGFloat = 20
     var preferredContentSize: CGSize = .zero {
         didSet {
             invalidateIntrinsicContentSize()
@@ -372,6 +373,60 @@ private final class VideoQuickAccessContentView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         nil
+    }
+
+    func installLayoutViews(
+        previewSurface: NSView,
+        playImageView: NSImageView,
+        durationLabel: NSTextField,
+        overlayView: NSView,
+        actionsView: NSView,
+        closeButton: NSButton,
+        floatingButtonDiameter: CGFloat
+    ) {
+        self.previewSurface = previewSurface
+        self.playImageView = playImageView
+        self.durationLabel = durationLabel
+        self.overlayView = overlayView
+        self.actionsView = actionsView
+        self.closeButton = closeButton
+        self.floatingButtonDiameter = floatingButtonDiameter
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+
+        previewSurface?.frame = bounds
+        playImageView?.frame = CGRect(
+            x: floor((bounds.width - 34) / 2),
+            y: floor((bounds.height - 34) / 2),
+            width: 34,
+            height: 34
+        )
+        let durationSize = CGSize(width: 52, height: 22)
+        durationLabel?.frame = CGRect(
+            x: bounds.maxX - durationSize.width - 9,
+            y: bounds.minY + 9,
+            width: durationSize.width,
+            height: durationSize.height
+        )
+        let overlayWidth = min(126, max(88, bounds.width - 14))
+        overlayView?.frame = CGRect(
+            x: floor((bounds.width - overlayWidth) / 2),
+            y: bounds.minY + 7,
+            width: overlayWidth,
+            height: 28
+        )
+        if let overlayView {
+            actionsView?.frame = overlayView.bounds.insetBy(dx: 7, dy: 4)
+        }
+        closeButton?.frame = CGRect(
+            x: bounds.maxX - floatingButtonDiameter - 6,
+            y: bounds.maxY - floatingButtonDiameter - 6,
+            width: floatingButtonDiameter,
+            height: floatingButtonDiameter
+        )
     }
 
     override func updateTrackingAreas() {
@@ -441,7 +496,12 @@ private final class VideoThumbnailImageView: NSView {
             imageSize: sourceSize,
             in: bounds
         )
-        image.draw(in: drawRect, from: .zero, operation: .copy, fraction: 1)
+        image.draw(
+            in: drawRect,
+            from: CGRect(origin: .zero, size: sourceSize),
+            operation: .copy,
+            fraction: 1
+        )
 
         NSColor.white.withAlphaComponent(0.32).setStroke()
         let border = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.25, dy: 0.25), xRadius: 12, yRadius: 12)

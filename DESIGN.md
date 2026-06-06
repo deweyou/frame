@@ -151,8 +151,9 @@ system tool, not a branded dashboard.
   language. It exposes Download, Copy, Preview, disabled Edit, and Close. Preview
   opens a playable video window; Edit remains pending. Use the first decodable
   recording frame as the thumbnail, with a lightweight video placeholder as the
-  fallback. Keep the panel borderless and assert the rendered content size so
-  the preview cannot collapse into a thin strip.
+  fallback. Preserve the recording's pixel aspect ratio inside a compact preview
+  bound. Keep the panel borderless and assert the rendered content size so the
+  preview cannot collapse into a thin strip.
 
 ## Capture History
 
