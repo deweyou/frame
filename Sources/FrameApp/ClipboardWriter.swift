@@ -20,6 +20,13 @@ struct ClipboardWriter {
             throw ClipboardWriterError.writeFailed
         }
     }
+
+    func write(fileURL: URL) throws {
+        pasteboard.clearContents()
+        guard pasteboard.writeObjects([fileURL as NSURL]) else {
+            throw ClipboardWriterError.writeFailed
+        }
+    }
 }
 
 enum ClipboardWriterError: LocalizedError {

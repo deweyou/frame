@@ -152,4 +152,21 @@ final class CaptureHistoryStoreTests: XCTestCase {
         XCTAssertNil(record)
         XCTAssertEqual(try store.records(), [])
     }
+
+    func testAddRecordingStoresMovieMetadataAndData() throws {
+        let record = try XCTUnwrap(try store.addRecording(
+            data: Data([9, 8, 7]),
+            filenameExtension: "mp4",
+            pixelSize: CGSize(width: 1280, height: 720),
+            rect: CGRect(x: 10, y: 20, width: 1280, height: 720),
+            date: Date(timeIntervalSince1970: 100),
+            configuration: .init(isEnabled: true, retention: .sevenDays, sizeLimit: .twoGB)
+        ))
+
+        XCTAssertEqual(record.kind, .recording)
+        XCTAssertTrue(record.filename.hasSuffix(".mp4"))
+        XCTAssertEqual(record.pixelWidth, 1280)
+        XCTAssertEqual(record.pixelHeight, 720)
+        XCTAssertEqual(try store.data(for: record), Data([9, 8, 7]))
+    }
 }

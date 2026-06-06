@@ -174,6 +174,15 @@ Agents should use this stable-sign-and-replace flow whenever the user asks to ru
 30. Confirm the pinned window has no toolbar or visible output buttons, keeps the image edge-to-edge, stays open after focus changes, and closes with the native red traffic-light close button.
 31. Right-click the pinned window and confirm Copy and Download work without closing it.
 32. Right-click the pinned window and confirm Edit opens or activates the preview/edit workspace without closing the pinned window.
+33. Use the screenshot shortcut again, draw a region, click the recording HUD button, and confirm the HUD switches into recording setup without closing the overlay.
+34. Record a short MP4 with cursor enabled. Confirm the HUD switches to elapsed-time recording controls, pause freezes the displayed duration, resume continues it, and stop finalizes the file.
+35. Confirm the menu bar icon becomes a red recording dot while recording and its Stop Recording menu item stops the same active session.
+36. Confirm the completed recording appears in a bottom-left Quick Access card with Download, Copy, Preview, disabled Edit, and Close.
+37. Confirm Preview opens a playable video window and Edit remains disabled.
+38. Confirm Copy places the recording file URL on the pasteboard and Download writes `Frame yyyy-MM-dd HH.mm.ss.mp4` to the configured screenshot folder.
+39. Repeat with GIF selected and confirm `Frame yyyy-MM-dd HH.mm.ss.gif` output is produced.
+40. Select an entire single display as the recording region and confirm the recording HUD remains usable but is absent from the output.
+41. Confirm local capture history lists recordings separately, opens playable recording files, copies file URLs, saves files, and deletes cached recording records.
 
 Keep using the same `FRAME_CODESIGN_IDENTITY` and the same `~/Applications/Frame.app` path while iterating. Changing either one can make macOS ask for Screen Recording permission again.
 
@@ -189,7 +198,7 @@ GitHub Actions runs on macOS and verifies:
 - generated `Info.plist` validity
 - generated app bundle signature metadata
 
-CI does not grant Screen Recording permission or run full desktop GUI smoke tests. See `docs/testing.md` for the component E2E boundary and expectations for new interactive requirements.
+CI does not grant Screen Recording permission or run full desktop GUI smoke tests. Live ScreenCaptureKit recording, HUD exclusion from output, and full-screen selection recording must be verified through the stable local app smoke flow above. See `docs/testing.md` for the component E2E boundary and expectations for new interactive requirements.
 
 ## Local Permission Reset
 
@@ -202,4 +211,4 @@ tccutil reset ScreenCapture dev.dewey.frame
 Then reopen the exact app bundle you want to authorize.
 
 ---
-*Last updated: 2026-05-28 | Reason: document settings persistence, localization, and configurable save folder smoke checks*
+*Last updated: 2026-06-03 | Reason: add local selection recording smoke checks*

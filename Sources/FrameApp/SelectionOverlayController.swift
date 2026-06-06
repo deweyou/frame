@@ -16,6 +16,7 @@ final class SelectionOverlayController {
 
     func startSelection(
         strings: AppStrings = AppStrings.current(),
+        onStartRecording: @escaping (SelectionOverlayWindow, SelectionCapture, RecordingOptions) -> Void = { _, _, _ in },
         completion: @escaping (SelectionOverlayCompletion?) -> Void
     ) {
         finishSelection(with: nil)
@@ -57,6 +58,14 @@ final class SelectionOverlayController {
                         belowWindowNumber: overlayWindowNumber
                     )
                 },
+                onStartRecording: { [weak self] selection, options in
+                    guard let self, let createdWindow else {
+                        return
+                    }
+
+                    self.prepareForRecording(on: createdWindow, selection: selection)
+                    onStartRecording(createdWindow, selection, options)
+                },
                 onComplete: { [weak self] completion in
                     self?.finishSelection(with: completion)
                 }
@@ -80,6 +89,22 @@ final class SelectionOverlayController {
         }
 
         activeWindow.setShowsCenteredHUDWhenEmpty(true)
+        activeWindow.makeKey()
+    }
+
+    private func prepareForRecording(on activeWindow: SelectionOverlayWindow, selection: SelectionCapture) {
+        removeKeyMonitor()
+        lastSelectionHistory = SelectionHistory(
+            rect: selection.rect,
+            displayID: displayID(for: screen(containing: selection.rect))
+        )
+
+        for window in overlayWindows where window !== activeWindow {
+            window.orderOut(nil)
+            window.close()
+        }
+        overlayWindows = [activeWindow]
+        activeWindow.enterActiveRecordingMode(elapsed: 0, isPaused: false)
         activeWindow.makeKey()
     }
 
@@ -141,6 +166,22 @@ final class SelectionOverlayController {
 
     func cancelSelection() {
         finishSelection(with: nil)
+    }
+
+    func dismissSelectionForRecording() {
+        guard completion != nil else {
+            return
+        }
+
+        completion = nil
+        removeKeyMonitor()
+
+        for window in overlayWindows {
+            window.orderOut(nil)
+            window.close()
+        }
+        overlayWindows.removeAll()
+        resetCursor()
     }
 
     private func confirmCurrentSelection() {

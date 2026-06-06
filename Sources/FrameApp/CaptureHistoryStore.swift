@@ -197,6 +197,7 @@ final class CaptureHistoryStore {
     func addCapture(
         kind: CaptureHistoryKind,
         data: Data,
+        filenameExtension: String? = nil,
         imageSize: CGSize,
         rect: CGRect,
         date: Date = Date(),
@@ -213,7 +214,8 @@ final class CaptureHistoryStore {
         try ensureDirectories()
 
         let id = UUID()
-        let filename = "\(id.uuidString).\(kind.fileExtension)"
+        let fileExtension = filenameExtension ?? kind.fileExtension
+        let filename = "\(id.uuidString).\(fileExtension)"
         let record = CaptureHistoryRecord(
             id: id,
             kind: kind,
@@ -242,6 +244,25 @@ final class CaptureHistoryStore {
             pngData: screenshot.pngData,
             imageSize: screenshot.image.size,
             rect: screenshot.rect,
+            date: date,
+            configuration: configuration
+        )
+    }
+
+    func addRecording(
+        data: Data,
+        filenameExtension: String,
+        pixelSize: CGSize,
+        rect: CGRect,
+        date: Date = Date(),
+        configuration: CaptureHistoryConfiguration = .current()
+    ) throws -> CaptureHistoryRecord? {
+        try addCapture(
+            kind: .recording,
+            data: data,
+            filenameExtension: filenameExtension,
+            imageSize: pixelSize,
+            rect: rect,
             date: date,
             configuration: configuration
         )

@@ -75,6 +75,13 @@ struct AppStrings {
         }
     }
 
+    var menuStopRecording: String {
+        switch language {
+        case .zhHans: "停止录制"
+        case .en: "Stop Recording"
+        }
+    }
+
     var menuQuit: String {
         switch language {
         case .zhHans: "退出"
@@ -282,6 +289,34 @@ struct AppStrings {
         switch language {
         case .zhHans: "打开预览"
         case .en: "Open Preview"
+        }
+    }
+
+    var videoQuickAccessDownload: String {
+        switch language {
+        case .zhHans: "下载"
+        case .en: "Download"
+        }
+    }
+
+    var videoQuickAccessCopy: String {
+        switch language {
+        case .zhHans: "复制"
+        case .en: "Copy"
+        }
+    }
+
+    var videoQuickAccessPreview: String {
+        switch language {
+        case .zhHans: "预览"
+        case .en: "Preview"
+        }
+    }
+
+    var videoQuickAccessEdit: String {
+        switch language {
+        case .zhHans: "编辑"
+        case .en: "Edit"
         }
     }
 
