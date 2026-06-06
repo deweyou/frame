@@ -10,7 +10,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let selectionOverlayController = SelectionOverlayController()
     private let captureService = CaptureService()
     private let quickAccessPanelController = QuickAccessPanelController()
-    private let videoQuickAccessPanelController = VideoQuickAccessPanelController()
     private let videoPreviewWindowController = VideoPreviewWindowController()
     private let imageWorkspacePanelController = ImageWorkspacePanelController()
     private let captureHistoryStore = CaptureHistoryStore()
@@ -539,7 +538,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showVideoQuickAccess(for recording: CapturedRecording, anchor: CGRect?) {
-        videoQuickAccessPanelController.show(
+        quickAccessPanelController.show(
             for: recording,
             preferredAnchor: anchor,
             strings: strings,

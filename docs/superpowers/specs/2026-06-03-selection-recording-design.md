@@ -26,8 +26,9 @@ In scope:
   visible while the desktop remains usable.
 - Status item recording state with a red recording icon and stop action.
 - MP4 and GIF output.
-- Video Quick Access at the active screen bottom-left corner, using the first
-  frame as the preview thumbnail when available.
+- Recording cards in the shared Quick Access stack at the active screen
+  bottom-left corner, using the first frame as the preview thumbnail when
+  available.
 - Copying the recorded file to the pasteboard.
 - A playable video preview window.
 - A visible but disabled/pending editing entry.
@@ -157,13 +158,13 @@ copies that file into the same configured save location used by screenshots.
 Copy writes the recorded file URL to `NSPasteboard`, so pasting into Finder,
 chat, or document targets behaves like pasting a movie or GIF file.
 
-## Video Quick Access And Preview
+## Recording Quick Access And Preview
 
-After finalization, recordings appear in a bottom-left Quick Access card aligned
-with screenshot Quick Access:
+After finalization, recordings appear as cards in the same bottom-left Quick
+Access stack used by screenshots:
 
 - anchor to the active screen bottom-left with the same padding model
-- stack upward with other Quick Access cards
+- stack upward with screenshot and recording Quick Access cards mixed together
 - stay lightweight and dismissible
 - use the recording's first frame as the thumbnail when it can be decoded
 - preserve the recording pixel aspect ratio inside a compact preview bound, so
@@ -209,8 +210,8 @@ Proposed components:
   into captured output.
 - `RecordingThumbnailProvider`: extracts a first-frame thumbnail for completed
   MP4 and GIF files when the output can be decoded.
-- `VideoQuickAccessPanelController` or a generalized Quick Access model: shows
-  completed recordings without forcing screenshot-only types into video flows.
+- `QuickAccessPanelController`: owns the shared bottom-left stack for screenshots
+  and recordings while keeping media-specific actions on each card type.
 - `VideoPreviewWindowController`: opens playable video previews and keeps edit
   controls pending/disabled.
 
@@ -291,8 +292,8 @@ capture:
 - Capture history can store and list recording records separately from
   screenshots.
 - File pasteboard writing uses file URLs for recordings.
-- Video Quick Access exposes download, copy, preview, disabled edit, and close
-  actions.
+- Recording Quick Access cards expose download, copy, preview, disabled edit,
+  and close actions in the shared stack.
 
 Manual smoke testing is required for:
 

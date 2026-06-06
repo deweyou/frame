@@ -9,9 +9,8 @@ flowchart TD
     Capture --> History[Local capture history]
     Capture --> QuickAccess[Quick Access preview]
     Recording --> History
-    Recording --> VideoQuickAccess[Video Quick Access]
-    VideoQuickAccess --> VideoPreview[Video preview]
-    VideoQuickAccess --> Output
+    Recording --> QuickAccess
+    QuickAccess --> VideoPreview[Video preview]
     QuickAccess --> Output[Copy, save/download, drag, preview, pin]
     QuickAccess --> Workspace[Image workspace]
     History --> Workspace
@@ -52,8 +51,8 @@ background-aware contrast, and direct-manipulation capture behavior.
 12. `CaptureService` converts the selected Cocoa rectangle into a Quartz capture rectangle and returns PNG data plus `NSImage`.
 13. `RecordingService` owns ScreenCaptureKit capture for one selected display region, hides Frame-owned HUD windows from output, honors cursor visibility, writes MP4 or GIF through the encoder boundary, and exposes pause, resume, stop, and cancel through `RecordingSessionControlling`.
 14. `ActiveScreenResolver` resolves the active window rectangle, falling back to the mouse screen or main screen.
-15. `QuickAccessPanelController` presents fixed-position screenshot previews at the active screen's bottom-left corner, stacks multiple previews upward, exposes localized icon-only hover actions, and acts as the drag source for moving captured image content into compatible target apps.
-16. `VideoQuickAccessPanelController` presents completed recordings at the same bottom-left anchor with download, copy, preview, disabled edit, and close actions.
+15. `QuickAccessPanelController` presents fixed-position screenshot and recording previews at the active screen's bottom-left corner, stacks mixed media cards upward, exposes localized icon-only hover actions, acts as the drag source for screenshot image content, and routes recording cards to download, copy, preview, disabled edit, and close actions.
+16. Recording thumbnails use the first decodable MP4 or GIF frame when available, otherwise the shared Quick Access stack shows a lightweight video placeholder.
 17. `VideoPreviewWindowController` opens a playable AVKit preview for local recording files. Editing controls remain disabled until editing ships.
 18. `ImageWorkspacePanelController` presents movable and resizable preview/edit workspace windows for preview sessions, plus separate image-only pinned windows. Preview/edit windows use native macOS close controls plus a top toolbar that leaves captured pixels unobstructed. Copy and download close both the preview/edit workspace and the originating Quick Access preview on success; edited-image save remains disabled until editing ships. Pinned windows expose copy, download, and edit through a context menu while keeping the pinned image open.
 19. `ClipboardWriter` writes captured images or recording file URLs to `NSPasteboard`.

@@ -5,10 +5,15 @@ final class QuickAccessPanelController: NSObject {
     private typealias ConfirmableAction = () -> Bool
     private typealias CloseAction = () -> Void
 
+    private let thumbnailProvider: RecordingThumbnailProvider
     private var previewItems: [QuickAccessPreviewItem] = []
     private var activeScreenObserver: NSObjectProtocol?
     private var followActiveScreenTimer: Timer?
     private var currentPreviewScreenID: CGDirectDisplayID?
+
+    init(thumbnailProvider: RecordingThumbnailProvider = RecordingThumbnailProvider()) {
+        self.thumbnailProvider = thumbnailProvider
+    }
 
     func show(
         for captured: CapturedScreenshot,
@@ -27,6 +32,7 @@ final class QuickAccessPanelController: NSObject {
         previewItems.append(
             QuickAccessPreviewItem(
                 screenshotID: captured.id,
+                recordingID: nil,
                 panel: panel,
                 ocrButton: content.ocrButton,
                 ocrProgressIndicator: content.ocrProgressIndicator,
@@ -36,6 +42,9 @@ final class QuickAccessPanelController: NSObject {
                 recognizeText: recognizeText,
                 openWorkspace: openWorkspace,
                 pin: pin,
+                downloadRecording: nil,
+                copyRecording: nil,
+                previewRecording: nil,
                 close: close
             )
         )
@@ -43,6 +52,53 @@ final class QuickAccessPanelController: NSObject {
         startFollowingActiveScreen()
 
         panel.orderFrontRegardless()
+    }
+
+    func show(
+        for recording: CapturedRecording,
+        preferredAnchor: CGRect?,
+        strings: AppStrings = AppStrings.current(),
+        download: @escaping () -> Bool,
+        copy: @escaping () -> Bool,
+        preview: @escaping () -> Bool,
+        close: @escaping () -> Void
+    ) {
+        if let item = previewItems.first(where: { $0.recordingID == recording.id }) {
+            item.panel.orderFrontRegardless()
+            return
+        }
+
+        let sourceSize = recording.pixelSize == .zero ? recording.rect.size : recording.pixelSize
+        let previewSize = Self.recordingPreviewSize(forSourceSize: sourceSize)
+        let panel = makePanel(size: previewSize)
+        let content = makeRecordingContentView(for: recording, previewSize: previewSize, strings: strings)
+        content.frame = CGRect(origin: .zero, size: previewSize)
+        content.autoresizingMask = [.width, .height]
+        panel.contentView = content
+        previewItems.append(
+            QuickAccessPreviewItem(
+                screenshotID: nil,
+                recordingID: recording.id,
+                panel: panel,
+                ocrButton: nil,
+                ocrProgressIndicator: nil,
+                statusLabel: nil,
+                copy: nil,
+                save: nil,
+                recognizeText: nil,
+                openWorkspace: nil,
+                pin: nil,
+                downloadRecording: download,
+                copyRecording: copy,
+                previewRecording: preview,
+                close: close
+            )
+        )
+        repositionPreviewStack(preferredAnchor: preferredAnchor, force: true)
+        startFollowingActiveScreen()
+
+        panel.orderFrontRegardless()
+        content.layoutSubtreeIfNeeded()
     }
 
     @discardableResult
@@ -59,36 +115,41 @@ final class QuickAccessPanelController: NSObject {
         guard let item = previewItems.first(where: { $0.screenshotID == screenshot.id }) else {
             return
         }
+        guard let ocrButton = item.ocrButton,
+              let ocrProgressIndicator = item.ocrProgressIndicator,
+              let statusLabel = item.statusLabel else {
+            return
+        }
 
         item.statusResetWorkItem?.cancel()
         item.statusResetWorkItem = nil
 
         switch status {
         case let .idle(accessibilityLabel):
-            item.ocrButton.isEnabled = true
-            item.ocrButton.alphaValue = 1
-            item.ocrButton.setAccessibilityHelp(accessibilityLabel)
-            item.ocrButton.toolTip = accessibilityLabel
-            item.ocrProgressIndicator.stopAnimation(nil)
-            item.ocrProgressIndicator.isHidden = true
-            item.statusLabel.alphaValue = 0
-            item.statusLabel.stringValue = ""
+            ocrButton.isEnabled = true
+            ocrButton.alphaValue = 1
+            ocrButton.setAccessibilityHelp(accessibilityLabel)
+            ocrButton.toolTip = accessibilityLabel
+            ocrProgressIndicator.stopAnimation(nil)
+            ocrProgressIndicator.isHidden = true
+            statusLabel.alphaValue = 0
+            statusLabel.stringValue = ""
         case let .recognizing(message):
-            item.ocrButton.isEnabled = false
-            item.ocrButton.alphaValue = 0.18
-            item.ocrButton.setAccessibilityHelp(message)
-            item.ocrButton.toolTip = nil
-            item.ocrProgressIndicator.isHidden = false
-            item.ocrProgressIndicator.startAnimation(nil)
-            item.statusLabel.alphaValue = 0
-            item.statusLabel.stringValue = ""
+            ocrButton.isEnabled = false
+            ocrButton.alphaValue = 0.18
+            ocrButton.setAccessibilityHelp(message)
+            ocrButton.toolTip = nil
+            ocrProgressIndicator.isHidden = false
+            ocrProgressIndicator.startAnimation(nil)
+            statusLabel.alphaValue = 0
+            statusLabel.stringValue = ""
         case let .message(message, resetAfter):
-            item.ocrButton.isEnabled = true
-            item.ocrButton.alphaValue = 1
-            item.ocrProgressIndicator.stopAnimation(nil)
-            item.ocrProgressIndicator.isHidden = true
-            item.statusLabel.stringValue = message
-            item.statusLabel.alphaValue = 1
+            ocrButton.isEnabled = true
+            ocrButton.alphaValue = 1
+            ocrProgressIndicator.stopAnimation(nil)
+            ocrProgressIndicator.isHidden = true
+            statusLabel.stringValue = message
+            statusLabel.alphaValue = 1
             if let resetAfter {
                 let workItem = DispatchWorkItem { [weak self, weak item] in
                     guard let self,
@@ -97,8 +158,8 @@ final class QuickAccessPanelController: NSObject {
                         return
                     }
 
-                    item.statusLabel.alphaValue = 0
-                    item.statusLabel.stringValue = ""
+                    item.statusLabel?.alphaValue = 0
+                    item.statusLabel?.stringValue = ""
                 }
                 item.statusResetWorkItem = workItem
                 DispatchQueue.main.asyncAfter(
@@ -132,8 +193,12 @@ final class QuickAccessPanelController: NSObject {
     private func makePanel(for image: NSImage) -> NSPanel {
         // Non-activating panels do not reliably participate in cursor-rect updates
         // while another app is focused, so Quick Access stays a normal floating panel.
+        makePanel(size: previewSize)
+    }
+
+    private func makePanel(size: CGSize) -> NSPanel {
         let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: previewSize),
+            contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -304,6 +369,132 @@ final class QuickAccessPanelController: NSObject {
         )
     }
 
+    private func makeRecordingContentView(
+        for recording: CapturedRecording,
+        previewSize: CGSize,
+        strings: AppStrings
+    ) -> RecordingQuickAccessContentView {
+        let contentView = RecordingQuickAccessContentView()
+        contentView.preferredContentSize = previewSize
+        contentView.wantsLayer = true
+        contentView.onHoverChanged = { [weak contentView] isHovered in
+            contentView?.setActionsVisible(isHovered)
+        }
+
+        let thumbnail = thumbnailProvider.thumbnail(for: recording.fileURL)
+        let previewSurface: NSView
+        if let thumbnail {
+            let imageView = RecordingThumbnailImageView(image: thumbnail)
+            imageView.setAccessibilityLabel(strings.videoQuickAccessPreview)
+            previewSurface = imageView
+            contentView.hasThumbnailForTesting = true
+        } else {
+            let visualEffectView = NSVisualEffectView()
+            visualEffectView.material = .hudWindow
+            visualEffectView.blendingMode = .behindWindow
+            visualEffectView.state = .active
+            visualEffectView.wantsLayer = true
+            visualEffectView.layer?.cornerRadius = 12
+            visualEffectView.layer?.cornerCurve = .continuous
+            visualEffectView.layer?.masksToBounds = true
+            visualEffectView.layer?.borderWidth = 0.5
+            visualEffectView.layer?.borderColor = NSColor.white.withAlphaComponent(0.32).cgColor
+            visualEffectView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            previewSurface = visualEffectView
+        }
+
+        let playImageView = NSImageView(
+            image: NSImage(systemSymbolName: "play.circle.fill", accessibilityDescription: strings.videoQuickAccessPreview) ?? NSImage()
+        )
+        playImageView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 34, weight: .medium)
+        playImageView.contentTintColor = .labelColor.withAlphaComponent(0.72)
+
+        let duration = NSTextField(labelWithString: formattedDuration(recording.duration))
+        duration.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        duration.textColor = .labelColor
+        duration.alignment = .center
+        duration.wantsLayer = true
+        duration.layer?.cornerRadius = 10
+        duration.layer?.cornerCurve = .continuous
+        duration.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
+
+        let stackView = NSStackView()
+        stackView.orientation = .horizontal
+        stackView.alignment = .centerY
+        stackView.distribution = .fillEqually
+        stackView.spacing = 5
+        stackView.addArrangedSubview(
+            makeIconButton(
+                title: strings.videoQuickAccessDownload,
+                symbolName: "square.and.arrow.down",
+                action: #selector(downloadRecordingButtonClicked),
+                style: .toolbar
+            )
+        )
+        stackView.addArrangedSubview(
+            makeIconButton(
+                title: strings.videoQuickAccessCopy,
+                symbolName: "doc.on.doc",
+                action: #selector(copyRecordingButtonClicked),
+                style: .toolbar
+            )
+        )
+        stackView.addArrangedSubview(
+            makeIconButton(
+                title: strings.videoQuickAccessPreview,
+                symbolName: "play.rectangle",
+                action: #selector(previewRecordingButtonClicked),
+                style: .toolbar
+            )
+        )
+        let editButton = makeIconButton(
+            title: strings.videoQuickAccessEdit,
+            symbolName: "slider.horizontal.3",
+            action: #selector(disabledRecordingEditButtonClicked),
+            style: .toolbar
+        )
+        editButton.isEnabled = false
+        editButton.contentTintColor = .disabledControlTextColor
+        stackView.addArrangedSubview(editButton)
+
+        let overlayView = NSVisualEffectView()
+        overlayView.material = .hudWindow
+        overlayView.blendingMode = .withinWindow
+        overlayView.state = .active
+        overlayView.wantsLayer = true
+        overlayView.layer?.cornerRadius = 14
+        overlayView.layer?.cornerCurve = .continuous
+        overlayView.layer?.masksToBounds = true
+        overlayView.alphaValue = 0
+
+        let closeButton = makeIconButton(
+            title: strings.quickAccessClose,
+            symbolName: "xmark",
+            action: #selector(closeButtonClicked),
+            style: .floatingCorner
+        )
+        closeButton.alphaValue = 0
+
+        contentView.actionsViews = [closeButton, overlayView]
+        contentView.addSubview(previewSurface)
+        contentView.addSubview(overlayView)
+        contentView.addSubview(closeButton)
+        previewSurface.addSubview(playImageView)
+        previewSurface.addSubview(duration)
+        overlayView.addSubview(stackView)
+        contentView.installLayoutViews(
+            previewSurface: previewSurface,
+            playImageView: playImageView,
+            durationLabel: duration,
+            overlayView: overlayView,
+            actionsView: stackView,
+            closeButton: closeButton,
+            floatingButtonDiameter: floatingButtonDiameter
+        )
+
+        return contentView
+    }
+
     private enum IconButtonStyle {
         case floatingCorner
         case toolbar
@@ -380,6 +571,26 @@ final class QuickAccessPanelController: NSObject {
         CapturePreviewMetrics.previewSize(forDesktopSize: (NSScreen.main ?? NSScreen.screens.first)?.frame.size)
     }
 
+    nonisolated static func recordingPreviewSize(
+        forSourceSize sourceSize: CGSize,
+        maximumSize maxSize: CGSize = CGSize(width: 240, height: 160)
+    ) -> CGSize {
+        guard sourceSize.width > 0, sourceSize.height > 0 else {
+            return CapturePreviewMetrics.previewSize(forDesktopSize: nil)
+        }
+
+        let scale = min(maxSize.width / sourceSize.width, maxSize.height / sourceSize.height)
+        return CGSize(
+            width: max(64, floor(sourceSize.width * scale)),
+            height: max(48, floor(sourceSize.height * scale))
+        )
+    }
+
+    private func formattedDuration(_ duration: TimeInterval) -> String {
+        let seconds = max(0, Int(duration.rounded(.down)))
+        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
+    }
+
     private func startFollowingActiveScreen() {
         guard followActiveScreenTimer == nil else {
             return
@@ -429,11 +640,12 @@ final class QuickAccessPanelController: NSObject {
             ?? NSScreen.main?.visibleFrame
             ?? NSScreen.screens.first?.visibleFrame
             ?? .zero
-        for (index, item) in previewItems.enumerated() {
+        var currentY = visibleFrame.minY + previewPadding
+        for item in previewItems {
             let panelSize = item.panel.frame.size
             let unclampedOrigin = CGPoint(
                 x: visibleFrame.minX + previewPadding,
-                y: visibleFrame.minY + previewPadding + CGFloat(index) * (panelSize.height + previewSpacing)
+                y: currentY
             )
             let origin = CGPoint(
                 x: min(
@@ -447,6 +659,7 @@ final class QuickAccessPanelController: NSObject {
             )
 
             item.panel.setFrameOrigin(origin)
+            currentY = origin.y + panelSize.height + previewSpacing
         }
     }
 
@@ -483,7 +696,7 @@ final class QuickAccessPanelController: NSObject {
             return
         }
 
-        if item.copy() {
+        if item.copy?() == true {
             closePreview(item, notify: false)
         }
     }
@@ -493,7 +706,7 @@ final class QuickAccessPanelController: NSObject {
             return
         }
 
-        _ = item.recognizeText()
+        _ = item.recognizeText?()
     }
 
     @objc private func saveButtonClicked(_ sender: NSButton) {
@@ -501,7 +714,7 @@ final class QuickAccessPanelController: NSObject {
             return
         }
 
-        if item.save() {
+        if item.save?() == true {
             closePreview(item, notify: false)
         }
     }
@@ -511,7 +724,7 @@ final class QuickAccessPanelController: NSObject {
             return
         }
 
-        _ = item.openWorkspace()
+        _ = item.openWorkspace?()
     }
 
     @objc private func pinButtonClicked(_ sender: NSButton) {
@@ -519,10 +732,36 @@ final class QuickAccessPanelController: NSObject {
             return
         }
 
-        if item.pin() {
+        if item.pin?() == true {
             closePreview(item, notify: false)
         }
     }
+
+    @objc private func downloadRecordingButtonClicked(_ sender: NSButton) {
+        guard let item = previewItem(for: sender.window) else {
+            return
+        }
+
+        _ = item.downloadRecording?()
+    }
+
+    @objc private func copyRecordingButtonClicked(_ sender: NSButton) {
+        guard let item = previewItem(for: sender.window) else {
+            return
+        }
+
+        _ = item.copyRecording?()
+    }
+
+    @objc private func previewRecordingButtonClicked(_ sender: NSButton) {
+        guard let item = previewItem(for: sender.window) else {
+            return
+        }
+
+        _ = item.previewRecording?()
+    }
+
+    @objc private func disabledRecordingEditButtonClicked(_ sender: NSButton) {}
 
     @objc private func closeButtonClicked(_ sender: NSButton) {
         guard let item = previewItem(for: sender.window) else {
@@ -566,34 +805,43 @@ private struct QuickAccessContent {
 }
 
 private final class QuickAccessPreviewItem {
-    let screenshotID: UUID
+    let screenshotID: UUID?
+    let recordingID: UUID?
     let panel: NSPanel
-    let ocrButton: NSButton
-    let ocrProgressIndicator: NSProgressIndicator
-    let statusLabel: NSTextField
-    let copy: () -> Bool
-    let save: () -> Bool
-    let recognizeText: () -> Bool
-    let openWorkspace: () -> Bool
-    let pin: () -> Bool
+    let ocrButton: NSButton?
+    let ocrProgressIndicator: NSProgressIndicator?
+    let statusLabel: NSTextField?
+    let copy: (() -> Bool)?
+    let save: (() -> Bool)?
+    let recognizeText: (() -> Bool)?
+    let openWorkspace: (() -> Bool)?
+    let pin: (() -> Bool)?
+    let downloadRecording: (() -> Bool)?
+    let copyRecording: (() -> Bool)?
+    let previewRecording: (() -> Bool)?
     let close: () -> Void
     var isTemporarilyHidden = false
     var statusResetWorkItem: DispatchWorkItem?
 
     init(
-        screenshotID: UUID,
+        screenshotID: UUID?,
+        recordingID: UUID?,
         panel: NSPanel,
-        ocrButton: NSButton,
-        ocrProgressIndicator: NSProgressIndicator,
-        statusLabel: NSTextField,
-        copy: @escaping () -> Bool,
-        save: @escaping () -> Bool,
-        recognizeText: @escaping () -> Bool,
-        openWorkspace: @escaping () -> Bool,
-        pin: @escaping () -> Bool,
+        ocrButton: NSButton?,
+        ocrProgressIndicator: NSProgressIndicator?,
+        statusLabel: NSTextField?,
+        copy: (() -> Bool)?,
+        save: (() -> Bool)?,
+        recognizeText: (() -> Bool)?,
+        openWorkspace: (() -> Bool)?,
+        pin: (() -> Bool)?,
+        downloadRecording: (() -> Bool)?,
+        copyRecording: (() -> Bool)?,
+        previewRecording: (() -> Bool)?,
         close: @escaping () -> Void
     ) {
         self.screenshotID = screenshotID
+        self.recordingID = recordingID
         self.panel = panel
         self.ocrButton = ocrButton
         self.ocrProgressIndicator = ocrProgressIndicator
@@ -603,11 +851,14 @@ private final class QuickAccessPreviewItem {
         self.recognizeText = recognizeText
         self.openWorkspace = openWorkspace
         self.pin = pin
+        self.downloadRecording = downloadRecording
+        self.copyRecording = copyRecording
+        self.previewRecording = previewRecording
         self.close = close
     }
 }
 
-private final class ScreenshotPreviewView: NSView {
+private class ScreenshotPreviewView: NSView {
     var actionsViews: [NSView] = []
     var onHoverChanged: ((Bool) -> Void)?
 
@@ -768,6 +1019,97 @@ private final class ScreenshotPreviewView: NSView {
         } else {
             NSCursor.arrow.set()
         }
+    }
+}
+
+private final class RecordingQuickAccessContentView: ScreenshotPreviewView {
+    var hasThumbnailForTesting = false
+    var previewSurfaceFrameForTesting: CGRect? {
+        previewSurface?.frame
+    }
+
+    private weak var previewSurface: NSView?
+    private weak var playImageView: NSImageView?
+    private weak var durationLabel: NSTextField?
+    private weak var overlayView: NSView?
+    private weak var actionsView: NSView?
+    private weak var closeButton: NSButton?
+    private var floatingButtonDiameter: CGFloat = 20
+    var preferredContentSize: CGSize = .zero {
+        didSet {
+            invalidateIntrinsicContentSize()
+        }
+    }
+
+    override var intrinsicContentSize: NSSize {
+        preferredContentSize == .zero ? super.intrinsicContentSize : preferredContentSize
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        guard preferredContentSize != .zero else {
+            super.setFrameSize(newSize)
+            return
+        }
+
+        let clampedSize = CGSize(
+            width: max(newSize.width, preferredContentSize.width),
+            height: max(newSize.height, preferredContentSize.height)
+        )
+        super.setFrameSize(clampedSize)
+    }
+
+    func installLayoutViews(
+        previewSurface: NSView,
+        playImageView: NSImageView,
+        durationLabel: NSTextField,
+        overlayView: NSView,
+        actionsView: NSView,
+        closeButton: NSButton,
+        floatingButtonDiameter: CGFloat
+    ) {
+        self.previewSurface = previewSurface
+        self.playImageView = playImageView
+        self.durationLabel = durationLabel
+        self.overlayView = overlayView
+        self.actionsView = actionsView
+        self.closeButton = closeButton
+        self.floatingButtonDiameter = floatingButtonDiameter
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+
+        previewSurface?.frame = bounds
+        playImageView?.frame = CGRect(
+            x: floor((bounds.width - 34) / 2),
+            y: floor((bounds.height - 34) / 2),
+            width: 34,
+            height: 34
+        )
+        let durationSize = CGSize(width: 52, height: 22)
+        durationLabel?.frame = CGRect(
+            x: bounds.maxX - durationSize.width - 9,
+            y: bounds.minY + 9,
+            width: durationSize.width,
+            height: durationSize.height
+        )
+        let overlayWidth = min(126, max(88, bounds.width - 14))
+        overlayView?.frame = CGRect(
+            x: floor((bounds.width - overlayWidth) / 2),
+            y: bounds.minY + 7,
+            width: overlayWidth,
+            height: 28
+        )
+        if let overlayView {
+            actionsView?.frame = overlayView.bounds.insetBy(dx: 7, dy: 4)
+        }
+        closeButton?.frame = CGRect(
+            x: bounds.maxX - floatingButtonDiameter - 6,
+            y: bounds.maxY - floatingButtonDiameter - 6,
+            width: floatingButtonDiameter,
+            height: floatingButtonDiameter
+        )
     }
 }
 
@@ -994,5 +1336,50 @@ private final class AspectFillImageView: NSView {
         )
 
         image.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
+    }
+}
+
+private final class RecordingThumbnailImageView: NSView {
+    private let image: NSImage
+
+    init(image: NSImage) {
+        self.image = image
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var isOpaque: Bool {
+        true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let clipPath = NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12)
+        clipPath.addClip()
+
+        NSColor.windowBackgroundColor.setFill()
+        bounds.fill()
+
+        let sourceSize = image.size == .zero ? bounds.size : image.size
+        let drawRect = CapturePreviewMetrics.aspectFillDrawRect(
+            imageSize: sourceSize,
+            in: bounds
+        )
+        image.draw(
+            in: drawRect,
+            from: CGRect(origin: .zero, size: sourceSize),
+            operation: .copy,
+            fraction: 1
+        )
+
+        NSColor.white.withAlphaComponent(0.32).setStroke()
+        let border = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.25, dy: 0.25), xRadius: 12, yRadius: 12)
+        border.lineWidth = 0.5
+        border.stroke()
     }
 }
