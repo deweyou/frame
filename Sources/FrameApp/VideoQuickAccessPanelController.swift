@@ -79,7 +79,7 @@ final class VideoQuickAccessPanelController {
     }
 
     func panelSizeForTesting(recordingID: UUID) -> CGSize? {
-        items[recordingID]?.preferredSize
+        items[recordingID]?.panel.frame.size
     }
 
     func contentFrameForTesting(recordingID: UUID) -> CGRect? {
@@ -348,6 +348,19 @@ private final class VideoQuickAccessContentView: NSView {
 
     override var intrinsicContentSize: NSSize {
         preferredContentSize == .zero ? super.intrinsicContentSize : preferredContentSize
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        guard preferredContentSize != .zero else {
+            super.setFrameSize(newSize)
+            return
+        }
+
+        let clampedSize = CGSize(
+            width: max(newSize.width, preferredContentSize.width),
+            height: max(newSize.height, preferredContentSize.height)
+        )
+        super.setFrameSize(clampedSize)
     }
 
     private var trackingArea: NSTrackingArea?
