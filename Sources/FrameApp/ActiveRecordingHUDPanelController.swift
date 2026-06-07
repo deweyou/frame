@@ -2,20 +2,31 @@ import AppKit
 
 @MainActor
 final class ActiveRecordingHUDPanelController {
+    static let recordingAccentColor = NSColor.systemRed
+    private static let panelSize = CGSize(width: 172, height: 42)
+    private static let buttonGroupWidth: CGFloat = 108
+
     private let panel = NSPanel(
-        contentRect: CGRect(origin: .zero, size: CGSize(width: 178, height: 42)),
+        contentRect: CGRect(origin: .zero, size: panelSize),
         styleMask: [.borderless, .nonactivatingPanel],
         backing: .buffered,
         defer: false
     )
-    private let rootView = NSVisualEffectView()
+    private let rootView = RecordingHUDRootView()
+    private let chromeView = RecordingHUDChromeView()
     private let buttonStackView = NSStackView()
     private let elapsedLabel = NSTextField(labelWithString: "00:00")
-    private var onPause: () -> Void = {}
-    private var onResume: () -> Void = {}
     private var onStop: () -> Void = {}
-    private var isPaused = false
+    private var onRestart: () -> Void = {}
+    private var onDelete: () -> Void = {}
     private var isStopping = false
+    private var isConfirmingDelete = false
+    private var renderedButtonState: ButtonState?
+
+    private struct ButtonState: Equatable {
+        let isStopping: Bool
+        let isConfirmingDelete: Bool
+    }
 
     init() {
         configurePanel()
@@ -26,28 +37,41 @@ final class ActiveRecordingHUDPanelController {
         near selectionRect: CGRect,
         elapsed: TimeInterval,
         isPaused: Bool,
-        pause: @escaping () -> Void,
-        resume: @escaping () -> Void,
-        stop: @escaping () -> Void
+        stop: @escaping () -> Void,
+        restart: @escaping () -> Void,
+        delete: @escaping () -> Void
     ) {
-        onPause = pause
-        onResume = resume
         onStop = stop
+        onRestart = restart
+        onDelete = delete
         isStopping = false
+        isConfirmingDelete = false
+        renderedButtonState = nil
+        resizePanelToContent()
         update(elapsed: elapsed, isPaused: isPaused)
         position(near: selectionRect)
+        refreshPanelRendering()
         panel.orderFrontRegardless()
+        enforcePanelFrameSize(display: true)
+        refreshPanelRendering()
+        Task { @MainActor [weak self] in
+            self?.enforcePanelFrameSize(display: true)
+            self?.refreshPanelRendering()
+        }
     }
 
     func update(elapsed: TimeInterval, isPaused: Bool) {
-        self.isPaused = isPaused
         elapsedLabel.stringValue = formattedElapsed(elapsed)
-        installButtons()
+        installButtonsIfNeeded()
     }
 
     func setStopping(_ isStopping: Bool) {
+        guard self.isStopping != isStopping else {
+            return
+        }
+
         self.isStopping = isStopping
-        installButtons()
+        installButtonsIfNeeded()
     }
 
     func close() {
@@ -64,8 +88,72 @@ final class ActiveRecordingHUDPanelController {
         elapsedLabel.stringValue
     }
 
+    func elapsedTextColorForTesting() -> NSColor? {
+        elapsedLabel.textColor
+    }
+
+    func buttonTintColorForTesting(accessibilityLabel: String) -> NSColor? {
+        buttonStackView.arrangedSubviews
+            .compactMap { $0 as? NSButton }
+            .first { $0.accessibilityLabel() == accessibilityLabel }?
+            .contentTintColor
+    }
+
     func panelSizeForTesting() -> CGSize {
         panel.frame.size
+    }
+
+    func panelSizeLimitsForTesting() -> (minSize: CGSize, maxSize: CGSize, contentMinSize: CGSize, contentMaxSize: CGSize) {
+        (
+            minSize: panel.minSize,
+            maxSize: panel.maxSize,
+            contentMinSize: panel.contentMinSize,
+            contentMaxSize: panel.contentMaxSize
+        )
+    }
+
+    func panelHasSystemShadowForTesting() -> Bool {
+        panel.hasShadow
+    }
+
+    func rootViewFrameForTesting() -> CGRect {
+        rootView.frame
+    }
+
+    func chromeViewFrameForTesting() -> CGRect {
+        chromeView.frame
+    }
+
+    func buttonObjectIDsForTesting() -> [ObjectIdentifier] {
+        buttonStackView.arrangedSubviews
+            .compactMap { $0 as? NSButton }
+            .map(ObjectIdentifier.init)
+    }
+
+    func setPanelFrameForTesting(_ frame: CGRect) {
+        panel.setFrame(frame, display: false)
+    }
+
+    func performButtonActionForTesting(accessibilityLabel: String) -> Bool {
+        guard let button = buttonStackView.arrangedSubviews
+            .compactMap({ $0 as? NSButton })
+            .first(where: { $0.accessibilityLabel() == accessibilityLabel }) else {
+            return false
+        }
+
+        switch accessibilityLabel {
+        case "停止录制":
+            stopClicked(button)
+        case "重新开始":
+            restartClicked(button)
+        case "删除录制":
+            deleteClicked(button)
+        case "确认删除":
+            deleteClicked(button)
+        default:
+            return false
+        }
+        return true
     }
 
     private func configurePanel() {
@@ -73,22 +161,27 @@ final class ActiveRecordingHUDPanelController {
         panel.level = .screenSaver
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.isReleasedWhenClosed = false
         panel.ignoresMouseEvents = false
         panel.sharingType = .none
+        panel.minSize = Self.panelSize
+        panel.maxSize = Self.panelSize
+        panel.contentMinSize = Self.panelSize
+        panel.contentMaxSize = Self.panelSize
     }
 
     private func configureContent() {
-        rootView.material = .hudWindow
-        rootView.blendingMode = .behindWindow
-        rootView.state = .active
+        rootView.frame = CGRect(origin: .zero, size: Self.panelSize)
+        rootView.autoresizingMask = [.width, .height]
         rootView.wantsLayer = true
-        rootView.layer?.cornerRadius = 21
-        rootView.layer?.cornerCurve = .continuous
-        rootView.layer?.masksToBounds = true
-        rootView.layer?.borderWidth = 0.5
-        rootView.layer?.borderColor = NSColor.white.withAlphaComponent(0.38).cgColor
+        rootView.layer?.isOpaque = false
+        rootView.layer?.backgroundColor = NSColor.clear.cgColor
+
+        chromeView.frame = CGRect(origin: .zero, size: Self.panelSize)
+        chromeView.translatesAutoresizingMaskIntoConstraints = false
+        chromeView.wantsLayer = true
+        chromeView.layer?.isOpaque = false
 
         buttonStackView.orientation = .horizontal
         buttonStackView.alignment = .centerY
@@ -99,48 +192,81 @@ final class ActiveRecordingHUDPanelController {
         elapsedLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
         elapsedLabel.alignment = .center
         elapsedLabel.lineBreakMode = .byTruncatingTail
+        elapsedLabel.textColor = Self.recordingAccentColor
         elapsedLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        rootView.addSubview(buttonStackView)
-        rootView.addSubview(elapsedLabel)
+        chromeView.addSubview(buttonStackView)
+        chromeView.addSubview(elapsedLabel)
+        rootView.chromeView = chromeView
+        rootView.addSubview(chromeView)
         panel.contentView = rootView
 
         NSLayoutConstraint.activate([
-            buttonStackView.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
-            buttonStackView.topAnchor.constraint(equalTo: rootView.topAnchor),
-            buttonStackView.bottomAnchor.constraint(equalTo: rootView.bottomAnchor),
-            buttonStackView.widthAnchor.constraint(equalToConstant: 84),
+            chromeView.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
+            chromeView.bottomAnchor.constraint(equalTo: rootView.bottomAnchor),
+            chromeView.widthAnchor.constraint(equalToConstant: Self.panelSize.width),
+            chromeView.heightAnchor.constraint(equalToConstant: Self.panelSize.height),
 
-            elapsedLabel.leadingAnchor.constraint(equalTo: buttonStackView.trailingAnchor, constant: 8),
-            elapsedLabel.trailingAnchor.constraint(equalTo: rootView.trailingAnchor, constant: -12),
-            elapsedLabel.centerYAnchor.constraint(equalTo: rootView.centerYAnchor),
+            buttonStackView.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor),
+            buttonStackView.topAnchor.constraint(equalTo: chromeView.topAnchor),
+            buttonStackView.bottomAnchor.constraint(equalTo: chromeView.bottomAnchor),
+            buttonStackView.widthAnchor.constraint(equalToConstant: Self.buttonGroupWidth),
+
+            elapsedLabel.leadingAnchor.constraint(equalTo: buttonStackView.trailingAnchor, constant: 4),
+            elapsedLabel.trailingAnchor.constraint(equalTo: chromeView.trailingAnchor, constant: -10),
+            elapsedLabel.centerYAnchor.constraint(equalTo: chromeView.centerYAnchor),
         ])
+        resizePanelToContent()
     }
 
-    private func installButtons(isPaused: Bool) {
-        self.isPaused = isPaused
-        installButtons()
-    }
+    private func installButtonsIfNeeded() {
+        let nextButtonState = ButtonState(isStopping: isStopping, isConfirmingDelete: isConfirmingDelete)
+        guard renderedButtonState != nextButtonState else {
+            return
+        }
 
-    private func installButtons() {
+        renderedButtonState = nextButtonState
         buttonStackView.arrangedSubviews.forEach { view in
             buttonStackView.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
 
-        buttonStackView.addArrangedSubview(
-            isPaused
-                ? makeButton(title: "继续", symbolName: "play.fill", action: #selector(resumeClicked))
-                : makeButton(title: "暂停", symbolName: "pause.fill", action: #selector(pauseClicked))
-        )
         let stopButton = makeButton(
             title: isStopping ? "正在停止" : "停止录制",
             symbolName: isStopping ? "hourglass" : "stop.fill",
             action: #selector(stopClicked)
         )
         stopButton.isEnabled = !isStopping
-        stopButton.contentTintColor = isStopping ? .disabledControlTextColor : .labelColor
+        stopButton.contentTintColor = isStopping ? .disabledControlTextColor : Self.recordingAccentColor
         buttonStackView.addArrangedSubview(stopButton)
+        buttonStackView.addArrangedSubview(
+            makeButton(title: "重新开始", symbolName: "arrow.clockwise", action: #selector(restartClicked))
+        )
+        let deleteButton = makeButton(
+            title: isConfirmingDelete ? "确认删除" : "删除录制",
+            symbolName: isConfirmingDelete ? "trash.fill" : "trash",
+            action: #selector(deleteClicked)
+        )
+        deleteButton.contentTintColor = isConfirmingDelete ? Self.recordingAccentColor : .labelColor
+        buttonStackView.addArrangedSubview(deleteButton)
+    }
+
+    private func resizePanelToContent() {
+        panel.setContentSize(Self.panelSize)
+        rootView.frame = CGRect(origin: .zero, size: Self.panelSize)
+        chromeView.frame = CGRect(origin: .zero, size: Self.panelSize)
+        enforcePanelFrameSize(display: false)
+    }
+
+    private func refreshPanelRendering() {
+        rootView.needsLayout = true
+        rootView.layoutSubtreeIfNeeded()
+        rootView.needsDisplay = true
+        rootView.layer?.setNeedsDisplay()
+        chromeView.needsDisplay = true
+        chromeView.layer?.setNeedsDisplay()
+        panel.contentView?.needsDisplay = true
+        panel.displayIfNeeded()
     }
 
     private func makeButton(title: String, symbolName: String, action: Selector) -> NSButton {
@@ -181,20 +307,26 @@ final class ActiveRecordingHUDPanelController {
             max(selectionRect.midX - panelSize.width / 2, visibleFrame.minX + inset),
             visibleFrame.maxX - panelSize.width - inset
         )
-        panel.setFrameOrigin(CGPoint(x: x, y: y))
+        panel.setFrame(
+            CGRect(origin: CGPoint(x: x, y: y), size: Self.panelSize),
+            display: true
+        )
+    }
+
+    private func enforcePanelFrameSize(display: Bool) {
+        guard panel.frame.size != Self.panelSize else {
+            return
+        }
+
+        panel.setFrame(
+            CGRect(origin: panel.frame.origin, size: Self.panelSize),
+            display: display
+        )
     }
 
     private func formattedElapsed(_ elapsed: TimeInterval) -> String {
         let wholeSeconds = max(0, Int(elapsed.rounded(.down)))
         return String(format: "%02d:%02d", wholeSeconds / 60, wholeSeconds % 60)
-    }
-
-    @objc private func pauseClicked(_ sender: NSButton) {
-        onPause()
-    }
-
-    @objc private func resumeClicked(_ sender: NSButton) {
-        onResume()
     }
 
     @objc private func stopClicked(_ sender: NSButton) {
@@ -204,6 +336,21 @@ final class ActiveRecordingHUDPanelController {
         setStopping(true)
         onStop()
     }
+
+    @objc private func restartClicked(_ sender: NSButton) {
+        isConfirmingDelete = false
+        installButtonsIfNeeded()
+        onRestart()
+    }
+
+    @objc private func deleteClicked(_ sender: NSButton) {
+        guard isConfirmingDelete else {
+            isConfirmingDelete = true
+            installButtonsIfNeeded()
+            return
+        }
+        onDelete()
+    }
 }
 
 private final class RecordingHUDButton: NSButton {
@@ -212,5 +359,43 @@ private final class RecordingHUDButton: NSButton {
         if isEnabled {
             addCursorRect(bounds, cursor: .pointingHand)
         }
+    }
+}
+
+private final class RecordingHUDChromeView: NSView {
+    override var isOpaque: Bool {
+        false
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        let path = NSBezierPath(
+            roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
+            xRadius: 20.5,
+            yRadius: 20.5
+        )
+        NSColor.windowBackgroundColor.withAlphaComponent(0.78).setFill()
+        path.fill()
+        NSColor.white.withAlphaComponent(0.38).setStroke()
+        path.lineWidth = 0.5
+        path.stroke()
+    }
+}
+
+private final class RecordingHUDRootView: NSView {
+    weak var chromeView: NSView?
+
+    override var isOpaque: Bool {
+        false
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let chromeView,
+              chromeView.frame.contains(point) else {
+            return nil
+        }
+
+        return super.hitTest(point)
     }
 }

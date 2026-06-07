@@ -1,7 +1,13 @@
 import AppKit
 
 @MainActor
-final class KeyboardHintOverlayController {
+protocol KeyboardHintOverlayControlling: AnyObject {
+    func show(text: String, near rect: CGRect)
+    func hide()
+}
+
+@MainActor
+final class KeyboardHintOverlayController: KeyboardHintOverlayControlling {
     private var panel: NSPanel?
 
     func show(text: String, near rect: CGRect) {

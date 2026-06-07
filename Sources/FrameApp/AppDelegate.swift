@@ -16,9 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let ocrService = OCRService()
     private let ocrTextPanelController = OCRTextPanelController()
     private let clipboardWriter = ClipboardWriter()
-    private let recordingService: RecordingServicing = ScreenCaptureRecordingService()
+    private let recordingService: RecordingServicing
     private let recordingFileWriter = RecordingFileWriter()
-    private let keyboardHintOverlayController = KeyboardHintOverlayController()
+    private let keyboardHintOverlayController: KeyboardHintOverlayControlling
     private let activeRecordingHUDPanelController = ActiveRecordingHUDPanelController()
     private let recordingBoundaryOverlayController = RecordingBoundaryOverlayController()
     private let settingsWindowController = SettingsWindowController()
@@ -33,9 +33,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var activeRecordingClock: RecordingElapsedClock?
     private var activeRecordingElapsedTimer: Timer?
     private var activeRecordingQuickAccessAnchor: CGRect?
-    private var pendingRecordingStartTimer: Timer?
-    private var pendingRecordingStartContext: PendingRecordingStartContext?
+    private var pendingRecordingStartTask: Task<Void, Never>?
     private var isStoppingActiveRecording = false
+
+    init(
+        recordingService: RecordingServicing = ScreenCaptureRecordingService(),
+        keyboardHintOverlayController: KeyboardHintOverlayControlling = KeyboardHintOverlayController()
+    ) {
+        self.recordingService = recordingService
+        self.keyboardHintOverlayController = keyboardHintOverlayController
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         strings = AppStrings.current()
@@ -153,7 +161,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
                     switch completion {
                     case let .startRecording(selection, options):
-                        self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
                         self.startRecording(
                             selection: selection,
                             options: options,
@@ -284,12 +291,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         anchor: CGRect?
     ) {
         guard activeRecordingSession == nil,
-              pendingRecordingStartTimer == nil else {
+              pendingRecordingStartTask == nil else {
             NSSound.beep()
             return
         }
 
-        beginRecordingCountdown(
+        quickAccessPanelController.setPreviewRestorationSuppressed(true)
+        quickAccessPanelController.closePreviewsForRecordingStart()
+        keyboardHintOverlayController.hide()
+
+        beginRecordingPreparation(
             selection: selection,
             options: options,
             overlayWindow: overlayWindow,
@@ -297,61 +308,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func beginRecordingCountdown(
+    private func beginRecordingPreparation(
         selection: SelectionCapture,
         options: RecordingOptions,
         overlayWindow: SelectionOverlayWindow?,
         anchor: CGRect?
     ) {
-        let countdownSeconds = 5
         activeRecordingQuickAccessAnchor = anchor
-        pendingRecordingStartContext = PendingRecordingStartContext(
-            selection: selection,
-            options: options,
-            overlayWindow: overlayWindow,
-            anchor: anchor,
-            remainingSeconds: countdownSeconds
-        )
-        recordingBoundaryOverlayController.show(rect: selection.rect, countdownText: "\(countdownSeconds)")
+        recordingBoundaryOverlayController.show(rect: selection.rect, preparationState: .loading)
         if overlayWindow != nil {
             selectionOverlayController.dismissSelectionForRecording()
         }
 
-        let timer = Timer(
-            timeInterval: 1,
-            target: self,
-            selector: #selector(recordingCountdownTimerFired(_:)),
-            userInfo: nil,
-            repeats: true
-        )
-        pendingRecordingStartTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
-    }
-
-    @objc private func recordingCountdownTimerFired(_ timer: Timer) {
-        guard let context = pendingRecordingStartContext else {
-            timer.invalidate()
-            pendingRecordingStartTimer = nil
-            recordingBoundaryOverlayController.close()
-            return
-        }
-
-        context.remainingSeconds -= 1
-        guard context.remainingSeconds > 0 else {
-            timer.invalidate()
-            pendingRecordingStartTimer = nil
-            pendingRecordingStartContext = nil
-            recordingBoundaryOverlayController.updateCountdown(nil)
+        pendingRecordingStartTask = Task { @MainActor [weak self, weak overlayWindow] in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard let self, !Task.isCancelled else {
+                return
+            }
+            self.pendingRecordingStartTask = nil
+            self.recordingBoundaryOverlayController.updatePreparationState(nil)
             beginRecordingNow(
-                selection: context.selection,
-                options: context.options,
-                overlayWindow: context.overlayWindow,
-                anchor: context.anchor
+                selection: selection,
+                options: options,
+                overlayWindow: overlayWindow,
+                anchor: anchor
             )
-            return
         }
-
-        recordingBoundaryOverlayController.updateCountdown("\(context.remainingSeconds)")
     }
 
     private func beginRecordingNow(
@@ -382,25 +364,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     near: selection.rect,
                     elapsed: 0,
                     isPaused: false,
-                    pause: { [weak self] in
-                        self?.pauseActiveRecording()
-                    },
-                    resume: { [weak self] in
-                        self?.resumeActiveRecording()
-                    },
                     stop: { [weak self] in
                         self?.stopActiveRecording()
+                    },
+                    restart: { [weak self] in
+                        self?.restartActiveRecording()
+                    },
+                    delete: { [weak self] in
+                        self?.deleteActiveRecording()
                     }
                 )
                 self.statusItemController?.setRecordingState(.recording)
                 self.startRecordingElapsedTimer()
 
-                if options.showsKeyboardHints {
-                    self.keyboardHintOverlayController.show(text: "⌘ ⇧ A", near: selection.rect)
-                }
-
                 NSLog("Frame 已开始录屏：rect=\(selection.rect.debugDescription), format=\(options.format.rawValue)")
             } catch {
+                self.quickAccessPanelController.setPreviewRestorationSuppressed(false)
                 if overlayWindow == nil {
                     self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
                 }
@@ -467,8 +446,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         isStoppingActiveRecording = true
-        activeRecordingHUDPanelController.setStopping(true)
         let duration = currentRecordingElapsed()
+        activeRecordingElapsedTimer?.invalidate()
+        activeRecordingElapsedTimer = nil
+        activeRecordingHUDPanelController.setStopping(true)
 
         Task { @MainActor [weak self] in
             guard let self else {
@@ -500,6 +481,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func restartActiveRecording() {
+        guard let session = activeRecordingSession,
+              let selection = activeRecordingSelection else {
+            return
+        }
+        let options = activeRecordingOptions
+        let anchor = activeRecordingQuickAccessAnchor
+        activeRecordingHUDPanelController.setStopping(true)
+
+        Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            await session.cancel()
+            self.finishActiveRecording()
+            self.startRecording(
+                selection: selection,
+                options: options,
+                overlayWindow: nil,
+                anchor: anchor
+            )
+            NSLog("Frame 录屏已重新开始")
+        }
+    }
+
+    private func deleteActiveRecording() {
+        guard let session = activeRecordingSession else {
+            return
+        }
+        activeRecordingHUDPanelController.setStopping(true)
+
+        Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            await session.cancel()
+            self.finishActiveRecording()
+            NSLog("Frame 录屏已删除")
+        }
+    }
+
     private func startRecordingElapsedTimer() {
         activeRecordingElapsedTimer?.invalidate()
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
@@ -521,9 +545,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func finishActiveRecording() {
-        pendingRecordingStartTimer?.invalidate()
-        pendingRecordingStartTimer = nil
-        pendingRecordingStartContext = nil
+        pendingRecordingStartTask?.cancel()
+        pendingRecordingStartTask = nil
         activeRecordingElapsedTimer?.invalidate()
         activeRecordingElapsedTimer = nil
         activeRecordingHUDPanelController.close()
@@ -535,6 +558,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         activeRecordingClock = nil
         activeRecordingQuickAccessAnchor = nil
         isStoppingActiveRecording = false
+        quickAccessPanelController.setPreviewRestorationSuppressed(false)
+    }
+
+    func startRecordingForTesting(
+        selection: SelectionCapture,
+        options: RecordingOptions,
+        anchor: CGRect? = nil
+    ) {
+        startRecording(
+            selection: selection,
+            options: options,
+            overlayWindow: nil,
+            anchor: anchor
+        )
+    }
+
+    func finishActiveRecordingForTesting() {
+        finishActiveRecording()
+    }
+
+    func stopActiveRecordingForTesting() {
+        stopActiveRecording()
+    }
+
+    func restartActiveRecordingForTesting() {
+        restartActiveRecording()
+    }
+
+    func deleteActiveRecordingForTesting() {
+        deleteActiveRecording()
+    }
+
+    func activeRecordingElapsedTimerIsValidForTesting() -> Bool {
+        activeRecordingElapsedTimer?.isValid == true
     }
 
     private func showVideoQuickAccess(for recording: CapturedRecording, anchor: CGRect?) {
@@ -974,28 +1031,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.informativeText = error.localizedDescription
         alert.addButton(withTitle: strings.ok)
         alert.runModal()
-    }
-}
-
-private final class PendingRecordingStartContext {
-    let selection: SelectionCapture
-    let options: RecordingOptions
-    weak var overlayWindow: SelectionOverlayWindow?
-    let anchor: CGRect?
-    var remainingSeconds: Int
-
-    init(
-        selection: SelectionCapture,
-        options: RecordingOptions,
-        overlayWindow: SelectionOverlayWindow?,
-        anchor: CGRect?,
-        remainingSeconds: Int
-    ) {
-        self.selection = selection
-        self.options = options
-        self.overlayWindow = overlayWindow
-        self.anchor = anchor
-        self.remainingSeconds = remainingSeconds
     }
 }
 

@@ -62,6 +62,44 @@ final class RecordingServiceTests: XCTestCase {
 
         XCTAssertEqual(normalized, CGSize(width: 2, height: 2))
     }
+
+    func testOverlayConfigurationFollowsRecordingOptions() {
+        XCTAssertTrue(RecordingOverlayConfiguration(options: .defaults).recordsMouseClicks)
+        XCTAssertTrue(RecordingOverlayConfiguration(options: .defaults).recordsKeyboardHints)
+
+        let disabled = RecordingOverlayConfiguration(
+            options: RecordingOptions(
+                format: .mp4,
+                showsCursor: false,
+                showsKeyboardHints: false,
+                audioSource: .none
+            )
+        )
+        XCTAssertFalse(disabled.isEnabled)
+        XCTAssertFalse(disabled.recordsMouseClicks)
+        XCTAssertFalse(disabled.recordsKeyboardHints)
+    }
+
+    @MainActor
+    func testDisplayResolverCarriesExternalDisplayIDWhenAppKitAndCaptureFramesDiffer() throws {
+        let builtInScreen = RecordingScreen(
+            displayID: 1,
+            frame: CGRect(x: 0, y: 0, width: 1920, height: 1243)
+        )
+        let externalScreen = RecordingScreen(
+            displayID: 3,
+            frame: CGRect(x: -2055, y: 1243, width: 3008, height: 1692)
+        )
+        let selection = CGRect(x: -1200, y: 1800, width: 800, height: 500)
+
+        let resolved = try RecordingDisplayResolver.resolve(
+            selection: selection,
+            screens: [builtInScreen, externalScreen]
+        )
+
+        XCTAssertEqual(resolved.displayID, 3)
+        XCTAssertEqual(resolved.screenFrame, externalScreen.frame)
+    }
 }
 
 private final class FakeRecordingService: RecordingServicing {

@@ -40,8 +40,14 @@ protocol RecordingServicing: Sendable {
 }
 
 struct RecordingDisplaySelection: Equatable {
+    let displayID: CGDirectDisplayID
     let screenFrame: CGRect
     let selectionRect: CGRect
+}
+
+struct RecordingScreen: Equatable {
+    let displayID: CGDirectDisplayID
+    let frame: CGRect
 }
 
 enum RecordingServiceError: LocalizedError {
@@ -66,6 +72,13 @@ enum RecordingServiceError: LocalizedError {
 
 enum RecordingDisplayResolver {
     static func resolve(selection: CGRect, screenFrames: [CGRect]) throws -> RecordingDisplaySelection {
+        try resolve(
+            selection: selection,
+            screens: screenFrames.map { RecordingScreen(displayID: 0, frame: $0) }
+        )
+    }
+
+    static func resolve(selection: CGRect, screens: [RecordingScreen]) throws -> RecordingDisplaySelection {
         guard !selection.isNull,
               !selection.isEmpty,
               selection.width > 0,
@@ -73,23 +86,23 @@ enum RecordingDisplayResolver {
             throw RecordingServiceError.invalidSelectionRect(selection)
         }
 
-        let intersectingScreens = screenFrames.filter { screenFrame in
-            let intersection = screenFrame.intersection(selection)
+        let intersectingScreens = screens.filter { screen in
+            let intersection = screen.frame.intersection(selection)
             return !intersection.isNull && !intersection.isEmpty
         }
 
         guard intersectingScreens.count == 1,
-              let screenFrame = intersectingScreens.first else {
+              let screen = intersectingScreens.first else {
             throw intersectingScreens.isEmpty
                 ? RecordingServiceError.displayNotFound
                 : RecordingServiceError.selectionSpansMultipleDisplays
         }
 
-        guard screenFrame.contains(selection) else {
+        guard screen.frame.contains(selection) else {
             throw RecordingServiceError.selectionSpansMultipleDisplays
         }
 
-        return RecordingDisplaySelection(screenFrame: screenFrame, selectionRect: selection)
+        return RecordingDisplaySelection(displayID: screen.displayID, screenFrame: screen.frame, selectionRect: selection)
     }
 }
 
@@ -106,7 +119,9 @@ final class ScreenCaptureRecordingService: RecordingServicing {
     func startRecording(_ request: RecordingRequest) async throws -> RecordingSessionControlling {
         let resolvedSelection = try RecordingDisplayResolver.resolve(
             selection: request.selection.rect,
-            screenFrames: NSScreen.screens.map(\.frame)
+            screens: NSScreen.screens.map { screen in
+                RecordingScreen(displayID: displayID(for: screen), frame: screen.frame)
+            }
         )
         let session = try await ScreenCaptureRecordingSession(
             request: request,
@@ -114,6 +129,11 @@ final class ScreenCaptureRecordingService: RecordingServicing {
         )
         try await session.start()
         return session
+    }
+
+    private func displayID(for screen: NSScreen) -> CGDirectDisplayID {
+        let key = NSDeviceDescriptionKey("NSScreenNumber")
+        return (screen.deviceDescription[key] as? NSNumber).map { CGDirectDisplayID($0.uint32Value) } ?? 0
     }
 }
 
@@ -125,6 +145,9 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
     private var stream: SCStream?
     private var encoder: RecordingFrameEncoding?
     private var outputURL: URL?
+    private var overlayRenderer: RecordingOverlayRenderer?
+    private var overlayEventMonitors: [Any] = []
+    private var liveOverlayController: RecordingLiveOverlayController!
     private var startedAt = Date()
     private var isPaused = false
     private(set) var state: RecordingSessionState = .recording
@@ -133,45 +156,95 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
         self.request = request
         self.resolvedSelection = resolvedSelection
         super.init()
+        self.liveOverlayController = await MainActor.run {
+            RecordingLiveOverlayController()
+        }
     }
 
     func start() async throws {
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard let display = content.displays.first(where: { $0.frame.equalTo(resolvedSelection.screenFrame) })
-            ?? content.displays.first(where: { !$0.frame.intersection(resolvedSelection.screenFrame).isNull })
-            ?? content.displays.first else {
-            throw RecordingServiceError.displayNotFound
-        }
-
         let pixelSize = normalizedRecordingPixelSize(for: resolvedSelection.selectionRect)
-        let outputURL = makeTemporaryOutputURL(format: request.options.format)
-        let encoder: RecordingFrameEncoding = switch request.options.format {
-        case .mp4:
-            try MP4RecordingFrameEncoder(outputURL: outputURL, pixelSize: pixelSize)
-        case .gif:
-            try GIFRecordingFrameEncoder(outputURL: outputURL)
+        let overlayConfiguration = RecordingOverlayConfiguration(options: request.options)
+        let overlayEventStore: RecordingOverlayEventStore?
+        let liveOverlayWindowNumber: Int?
+        if overlayConfiguration.isEnabled {
+            let eventStore = RecordingOverlayEventStore()
+            overlayEventStore = eventStore
+            overlayRenderer = RecordingOverlayRenderer(eventStore: eventStore, pixelSize: pixelSize)
+            liveOverlayWindowNumber = await MainActor.run {
+                liveOverlayController.show(
+                    screenFrame: resolvedSelection.screenFrame,
+                    selectionRect: resolvedSelection.selectionRect,
+                    pixelSize: pixelSize,
+                    eventStore: eventStore
+                )
+                return liveOverlayController.windowNumber
+            }
+        } else {
+            overlayEventStore = nil
+            overlayRenderer = nil
+            liveOverlayWindowNumber = nil
         }
 
-        let configuration = SCStreamConfiguration()
-        configuration.width = Int(pixelSize.width)
-        configuration.height = Int(pixelSize.height)
-        configuration.sourceRect = sourceRect(for: resolvedSelection)
-        configuration.queueDepth = 6
-        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
-        configuration.showsCursor = request.options.showsCursor
-        configuration.capturesAudio = false
-        configuration.pixelFormat = kCVPixelFormatType_32BGRA
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            guard let display = content.displays.first(where: { $0.displayID == resolvedSelection.displayID && resolvedSelection.displayID != 0 })
+                ?? content.displays.first(where: { $0.frame.equalTo(resolvedSelection.screenFrame) })
+                ?? content.displays.first(where: { !$0.frame.intersection(resolvedSelection.screenFrame).isNull })
+                ?? content.displays.first else {
+                throw RecordingServiceError.displayNotFound
+            }
 
-        let filter = SCContentFilter(display: display, excludingWindows: [])
-        let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
-        try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
-        try await stream.startCapture()
+            let outputURL = makeTemporaryOutputURL(format: request.options.format)
+            let encoder: RecordingFrameEncoding = switch request.options.format {
+            case .mp4:
+                try MP4RecordingFrameEncoder(outputURL: outputURL, pixelSize: pixelSize)
+            case .gif:
+                try GIFRecordingFrameEncoder(outputURL: outputURL)
+            }
 
-        self.stream = stream
-        self.encoder = encoder
-        self.outputURL = outputURL
-        startedAt = Date()
-        setState(.recording)
+            let configuration = SCStreamConfiguration()
+            configuration.width = Int(pixelSize.width)
+            configuration.height = Int(pixelSize.height)
+            configuration.sourceRect = sourceRect(for: resolvedSelection)
+            configuration.queueDepth = 6
+            configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
+            configuration.showsCursor = request.options.showsCursor
+            configuration.capturesAudio = false
+            configuration.pixelFormat = kCVPixelFormatType_32BGRA
+
+            let excludedWindows = content.windows.filter { window in
+                RecordingOverlayCaptureExclusion.shouldExclude(
+                    windowID: window.windowID,
+                    liveOverlayWindowNumber: liveOverlayWindowNumber
+                )
+            }
+            let filter = SCContentFilter(display: display, excludingWindows: excludedWindows)
+            let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
+            try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
+            try await stream.startCapture()
+
+            self.stream = stream
+            self.encoder = encoder
+            self.outputURL = outputURL
+            startedAt = Date()
+            if let overlayEventStore {
+                await MainActor.run {
+                    installOverlayEventMonitors(
+                        configuration: overlayConfiguration,
+                        eventStore: overlayEventStore,
+                        pixelSize: pixelSize
+                    )
+                }
+            }
+            setState(.recording)
+        } catch {
+            await MainActor.run {
+                removeOverlayEventMonitors()
+                liveOverlayController.close()
+            }
+            overlayRenderer = nil
+            throw error
+        }
     }
 
     func pause() async throws {
@@ -190,6 +263,10 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
 
     func stop() async throws -> CapturedRecording {
         setState(.finishing)
+        await MainActor.run {
+            removeOverlayEventMonitors()
+            liveOverlayController.close()
+        }
         if let stream {
             try await stream.stopCapture()
         }
@@ -212,6 +289,10 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
     }
 
     func cancel() async {
+        await MainActor.run {
+            removeOverlayEventMonitors()
+            liveOverlayController.close()
+        }
         try? await stream?.stopCapture()
         setState(.finished)
     }
@@ -247,6 +328,74 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
     private func normalizedRecordingPixelSize(for rect: CGRect) -> CGSize {
         RecordingPixelDimensions.normalizedForVideo(recordingPixelSize(for: rect))
     }
+
+    @MainActor
+    private func installOverlayEventMonitors(
+        configuration: RecordingOverlayConfiguration,
+        eventStore: RecordingOverlayEventStore,
+        pixelSize: CGSize
+    ) {
+        removeOverlayEventMonitors()
+
+        if configuration.recordsMouseClicks {
+            let mouseMonitor = NSEvent.addGlobalMonitorForEvents(
+                matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+            ) { [weak self, weak eventStore] event in
+                guard let self, let eventStore else {
+                    return
+                }
+
+                let screenPoint = NSEvent.mouseLocation
+                guard self.resolvedSelection.selectionRect.contains(screenPoint) else {
+                    return
+                }
+
+                eventStore.recordClick(
+                    at: RecordingOverlayCoordinateMapper.pixelPoint(
+                        screenPoint: screenPoint,
+                        selectionRect: self.resolvedSelection.selectionRect,
+                        pixelSize: pixelSize
+                    ),
+                    time: event.timestamp
+                )
+            }
+            if let mouseMonitor {
+                overlayEventMonitors.append(mouseMonitor)
+            }
+        }
+
+        if configuration.recordsKeyboardHints {
+            let keyHandler: (NSEvent) -> Void = { [weak eventStore] event in
+                eventStore?.recordKey(
+                    label: RecordingOverlayKeyFormatter.label(
+                        charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+                        modifierFlags: event.modifierFlags
+                    ),
+                    time: event.timestamp
+                )
+            }
+            if let globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: keyHandler) {
+                overlayEventMonitors.append(globalKeyMonitor)
+            }
+            if let localKeyMonitor = NSEvent.addLocalMonitorForEvents(
+                matching: .keyDown,
+                handler: { event in
+                    keyHandler(event)
+                    return event
+                }
+            ) {
+                overlayEventMonitors.append(localKeyMonitor)
+            }
+        }
+    }
+
+    @MainActor
+    private func removeOverlayEventMonitors() {
+        for monitor in overlayEventMonitors {
+            NSEvent.removeMonitor(monitor)
+        }
+        overlayEventMonitors.removeAll()
+    }
 }
 
 private extension Int {
@@ -269,13 +418,17 @@ extension ScreenCaptureRecordingSession: SCStreamOutput, SCStreamDelegate {
         }
 
         do {
-            try encoder?.append(sampleBuffer)
+            try encoder?.append(sampleBuffer, overlayRenderer: overlayRenderer)
         } catch {
             setState(.failed(error.localizedDescription))
         }
     }
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
+        Task { @MainActor [weak self] in
+            self?.removeOverlayEventMonitors()
+            self?.liveOverlayController.close()
+        }
         setState(.failed(error.localizedDescription))
     }
 }

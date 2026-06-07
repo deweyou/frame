@@ -27,10 +27,8 @@ final class VideoPreviewWindowController {
         window.isReleasedWhenClosed = false
         window.center()
 
-        let playerView = AVPlayerView()
-        playerView.player = AVPlayer(url: recording.fileURL)
-        playerView.controlsStyle = .floating
-        playerView.translatesAutoresizingMaskIntoConstraints = false
+        let mediaView = makeMediaView(for: recording)
+        mediaView.translatesAutoresizingMaskIntoConstraints = false
 
         let toolbar = NSStackView()
         toolbar.orientation = .horizontal
@@ -43,14 +41,14 @@ final class VideoPreviewWindowController {
 
         let root = NSView()
         root.addSubview(toolbar)
-        root.addSubview(playerView)
+        root.addSubview(mediaView)
         NSLayoutConstraint.activate([
             toolbar.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
             toolbar.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
-            playerView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            playerView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            playerView.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 8),
-            playerView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            mediaView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            mediaView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            mediaView.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 8),
+            mediaView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
 
         window.contentView = root
@@ -60,6 +58,28 @@ final class VideoPreviewWindowController {
 
     func isEditingEnabledForTesting(recordingID: UUID) -> Bool {
         items[recordingID]?.isEditingEnabled ?? false
+    }
+
+    func windowForTesting(recordingID: UUID) -> NSWindow? {
+        items[recordingID]?.window
+    }
+
+    private func makeMediaView(for recording: CapturedRecording) -> NSView {
+        switch recording.format {
+        case .gif:
+            let imageView = NSImageView()
+            imageView.image = NSImage(contentsOf: recording.fileURL)
+            imageView.imageScaling = .scaleProportionallyUpOrDown
+            imageView.animates = true
+            imageView.wantsLayer = true
+            imageView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            return imageView
+        case .mp4:
+            let playerView = AVPlayerView()
+            playerView.player = AVPlayer(url: recording.fileURL)
+            playerView.controlsStyle = .floating
+            return playerView
+        }
     }
 
     private func makeButton(title: String, symbolName: String, action: @escaping () -> Bool) -> NSButton {

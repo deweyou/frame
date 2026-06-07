@@ -2,6 +2,8 @@ import AppKit
 
 @MainActor
 final class QuickAccessPanelController: NSObject {
+    static let previewWindowTitle = "Frame Quick Access Preview"
+
     private typealias ConfirmableAction = () -> Bool
     private typealias CloseAction = () -> Void
 
@@ -10,6 +12,7 @@ final class QuickAccessPanelController: NSObject {
     private var activeScreenObserver: NSObjectProtocol?
     private var followActiveScreenTimer: Timer?
     private var currentPreviewScreenID: CGDirectDisplayID?
+    private var isPreviewRestorationSuppressed = false
 
     init(thumbnailProvider: RecordingThumbnailProvider = RecordingThumbnailProvider()) {
         self.thumbnailProvider = thumbnailProvider
@@ -72,7 +75,12 @@ final class QuickAccessPanelController: NSObject {
         let sourceSize = recording.pixelSize == .zero ? recording.rect.size : recording.pixelSize
         let previewSize = Self.recordingPreviewSize(forSourceSize: sourceSize)
         let panel = makePanel(size: previewSize)
-        let content = makeRecordingContentView(for: recording, previewSize: previewSize, strings: strings)
+        let content = makeRecordingContentView(
+            for: recording,
+            previewSize: previewSize,
+            strings: strings,
+            preview: preview
+        )
         content.frame = CGRect(origin: .zero, size: previewSize)
         content.autoresizingMask = [.width, .height]
         panel.contentView = content
@@ -172,13 +180,30 @@ final class QuickAccessPanelController: NSObject {
     }
 
     func temporarilyHidePreviews() {
-        for item in previewItems where item.panel.isVisible {
+        for item in previewItems {
             item.isTemporarilyHidden = true
-            item.panel.orderOut(nil)
+            hideTemporarily(item.panel)
+        }
+    }
+
+    func closePreviewsForRecordingStart() {
+        closeAllPreviews(notify: false)
+        closeOrphanPreviewPanels()
+    }
+
+    func setPreviewRestorationSuppressed(_ isSuppressed: Bool) {
+        isPreviewRestorationSuppressed = isSuppressed
+        if isSuppressed {
+            temporarilyHidePreviews()
         }
     }
 
     func restoreTemporarilyHiddenPreviews() {
+        guard !isPreviewRestorationSuppressed else {
+            temporarilyHidePreviews()
+            return
+        }
+
         let hiddenItems = previewItems.filter(\.isTemporarilyHidden)
         guard !hiddenItems.isEmpty else {
             return
@@ -187,8 +212,20 @@ final class QuickAccessPanelController: NSObject {
         repositionPreviewStack(preferredAnchor: ActiveScreenResolver.preferredQuickAccessFollowAnchor(), force: true)
         for item in hiddenItems {
             item.isTemporarilyHidden = false
+            restoreTemporarilyHiddenPanel(item.panel)
             item.panel.orderFrontRegardless()
         }
+    }
+
+    private func hideTemporarily(_ panel: NSPanel) {
+        panel.ignoresMouseEvents = true
+        panel.alphaValue = 0
+        panel.orderOut(nil)
+    }
+
+    private func restoreTemporarilyHiddenPanel(_ panel: NSPanel) {
+        panel.alphaValue = 1
+        panel.ignoresMouseEvents = false
     }
 
     private func makePanel(for image: NSImage) -> NSPanel {
@@ -217,6 +254,7 @@ final class QuickAccessPanelController: NSObject {
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.isOpaque = false
+        panel.title = Self.previewWindowTitle
 
         return panel
     }
@@ -373,11 +411,13 @@ final class QuickAccessPanelController: NSObject {
     private func makeRecordingContentView(
         for recording: CapturedRecording,
         previewSize: CGSize,
-        strings: AppStrings
+        strings: AppStrings,
+        preview: @escaping () -> Bool
     ) -> RecordingQuickAccessContentView {
         let contentView = RecordingQuickAccessContentView()
         contentView.preferredContentSize = previewSize
         contentView.wantsLayer = true
+        contentView.onPreviewRequested = preview
         contentView.onHoverChanged = { [weak contentView] isHovered in
             contentView?.setActionsVisible(isHovered)
         }
@@ -576,15 +616,7 @@ final class QuickAccessPanelController: NSObject {
         forSourceSize sourceSize: CGSize,
         maximumSize maxSize: CGSize = CGSize(width: CapturePreviewMetrics.previewWidth, height: 160)
     ) -> CGSize {
-        guard sourceSize.width > 0, sourceSize.height > 0 else {
-            return CapturePreviewMetrics.previewSize(forDesktopSize: nil)
-        }
-
-        let scale = min(maxSize.width / sourceSize.width, maxSize.height / sourceSize.height)
-        return CGSize(
-            width: max(64, floor(sourceSize.width * scale)),
-            height: max(48, floor(sourceSize.height * scale))
-        )
+        CapturePreviewMetrics.previewSize(forDesktopSize: nil)
     }
 
     private func formattedDuration(_ duration: TimeInterval) -> String {
@@ -788,6 +820,26 @@ final class QuickAccessPanelController: NSObject {
         stopFollowingActiveScreenIfNeeded()
         if notify {
             item.close()
+        }
+    }
+
+    private func closeAllPreviews(notify: Bool) {
+        let closingItems = previewItems
+        for item in closingItems {
+            item.statusResetWorkItem?.cancel()
+            item.panel.close()
+            if notify {
+                item.close()
+            }
+        }
+        previewItems.removeAll()
+        stopFollowingActiveScreenIfNeeded()
+    }
+
+    private func closeOrphanPreviewPanels() {
+        for window in NSApp.windows where window.title == Self.previewWindowTitle {
+            window.orderOut(nil)
+            window.close()
         }
     }
 }
@@ -1025,6 +1077,7 @@ private class ScreenshotPreviewView: NSView {
 
 private final class RecordingQuickAccessContentView: ScreenshotPreviewView {
     var hasThumbnailForTesting = false
+    var onPreviewRequested: (() -> Bool)?
     var previewSurfaceFrameForTesting: CGRect? {
         previewSurface?.frame
     }
@@ -1044,6 +1097,30 @@ private final class RecordingQuickAccessContentView: ScreenshotPreviewView {
 
     override var intrinsicContentSize: NSSize {
         preferredContentSize == .zero ? super.intrinsicContentSize : preferredContentSize
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard bounds.contains(point),
+              isPointInPlayOverlay(point),
+              !isPointInActionControls(point) else {
+            super.mouseUp(with: event)
+            return
+        }
+
+        _ = onPreviewRequested?()
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if bounds.contains(point),
+           isPointInPlayOverlay(point),
+           !isPointInActionControls(point) {
+            NSCursor.pointingHand.set()
+            return
+        }
+
+        super.cursorUpdate(with: event)
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -1076,6 +1153,20 @@ private final class RecordingQuickAccessContentView: ScreenshotPreviewView {
         self.closeButton = closeButton
         self.floatingButtonDiameter = floatingButtonDiameter
         needsLayout = true
+    }
+
+    private func isPointInActionControls(_ point: NSPoint) -> Bool {
+        [overlayView, closeButton].contains { view in
+            view?.frame.contains(point) == true
+        }
+    }
+
+    private func isPointInPlayOverlay(_ point: NSPoint) -> Bool {
+        guard let playImageView else {
+            return false
+        }
+
+        return playImageView.frame.insetBy(dx: -8, dy: -8).contains(point)
     }
 
     override func layout() {
@@ -1340,8 +1431,17 @@ private final class AspectFillImageView: NSView {
     }
 }
 
-private final class RecordingThumbnailImageView: NSView {
+@MainActor
+protocol RecordingThumbnailDrawableForTesting: AnyObject {
+    var lastDrawRectForTesting: CGRect { get }
+}
+
+private final class RecordingThumbnailImageView: NSView, RecordingThumbnailDrawableForTesting {
     private let image: NSImage
+
+    var lastDrawRectForTesting: CGRect {
+        drawRectForCurrentBounds()
+    }
 
     init(image: NSImage) {
         self.image = image
@@ -1367,10 +1467,7 @@ private final class RecordingThumbnailImageView: NSView {
         bounds.fill()
 
         let sourceSize = image.size == .zero ? bounds.size : image.size
-        let drawRect = CapturePreviewMetrics.aspectFillDrawRect(
-            imageSize: sourceSize,
-            in: bounds
-        )
+        let drawRect = drawRectForCurrentBounds()
         image.draw(
             in: drawRect,
             from: CGRect(origin: .zero, size: sourceSize),
@@ -1382,5 +1479,13 @@ private final class RecordingThumbnailImageView: NSView {
         let border = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.25, dy: 0.25), xRadius: 12, yRadius: 12)
         border.lineWidth = 0.5
         border.stroke()
+    }
+
+    private func drawRectForCurrentBounds() -> CGRect {
+        let sourceSize = image.size == .zero ? bounds.size : image.size
+        return CapturePreviewMetrics.aspectFillDrawRect(
+            imageSize: sourceSize,
+            in: bounds
+        )
     }
 }

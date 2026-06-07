@@ -175,7 +175,7 @@ Agents should use this stable-sign-and-replace flow whenever the user asks to ru
 31. Right-click the pinned window and confirm Copy and Download work without closing it.
 32. Right-click the pinned window and confirm Edit opens or activates the preview/edit workspace without closing the pinned window.
 33. Use the screenshot shortcut again, draw a region, click the recording HUD button, and confirm the HUD switches into recording setup without closing the overlay.
-34. Record a short MP4 with cursor enabled. Confirm the HUD switches to elapsed-time recording controls, pause freezes the displayed duration, resume continues it, and stop finalizes the file.
+34. Record a short MP4 with cursor enabled. Confirm start shows a brief preparation/loading state instead of a countdown, then switches to elapsed-time recording controls; stop finalizes the file, restart discards the current take and records the same area again, and delete requires confirmation before discarding without Quick Access.
 35. Confirm the menu bar icon becomes a red recording dot while recording and its Stop Recording menu item stops the same active session.
 36. Confirm the completed recording appears in a bottom-left Quick Access card with Download, Copy, Preview, disabled Edit, and Close.
 37. Confirm Preview opens a playable video window and Edit remains disabled.

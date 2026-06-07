@@ -452,13 +452,116 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         controller.temporarilyHidePreviews()
 
         XCTAssertEqual(previewPanels.filter(\.isVisible).count, 0)
+        XCTAssertTrue(previewPanels.allSatisfy { $0.alphaValue == 0 })
+        XCTAssertTrue(previewPanels.allSatisfy(\.ignoresMouseEvents))
         XCTAssertEqual(closeCount, 0)
 
         controller.restoreTemporarilyHiddenPreviews()
 
         XCTAssertEqual(previewPanels.filter(\.isVisible).count, 2)
+        XCTAssertTrue(previewPanels.allSatisfy { $0.alphaValue == 1 })
+        XCTAssertTrue(previewPanels.allSatisfy { !$0.ignoresMouseEvents })
         XCTAssertTrue(controller.closePreview(for: firstScreenshot, notify: false))
         XCTAssertEqual(previewPanels.filter(\.isVisible).count, 1)
+    }
+
+    func testQuickAccessRestoreCanBeSuppressedDuringRecording() throws {
+        _ = NSApplication.shared
+        let screenshot = CapturedScreenshot(
+            pngData: try makePNGData(),
+            image: NSImage(size: NSSize(width: 2, height: 2)),
+            rect: CGRect(x: 0, y: 0, width: 2, height: 2)
+        )
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+
+        controller.show(
+            for: screenshot,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .zhHans),
+            copy: { true },
+            save: { true },
+            recognizeText: { true },
+            openWorkspace: { true },
+            pin: { true },
+            close: {}
+        )
+
+        let previewPanels = NSApp.windows.filter { !windowsBeforeShow.contains(ObjectIdentifier($0)) }
+        XCTAssertEqual(previewPanels.count, 1)
+
+        controller.setPreviewRestorationSuppressed(true)
+        controller.restoreTemporarilyHiddenPreviews()
+
+        XCTAssertEqual(previewPanels.filter(\.isVisible).count, 0)
+        XCTAssertTrue(previewPanels.allSatisfy { $0.alphaValue == 0 })
+        XCTAssertTrue(previewPanels.allSatisfy(\.ignoresMouseEvents))
+
+        controller.setPreviewRestorationSuppressed(false)
+        controller.restoreTemporarilyHiddenPreviews()
+
+        XCTAssertEqual(previewPanels.filter(\.isVisible).count, 1)
+        XCTAssertTrue(previewPanels.allSatisfy { $0.alphaValue == 1 })
+        XCTAssertTrue(previewPanels.allSatisfy { !$0.ignoresMouseEvents })
+    }
+
+    func testQuickAccessClosesExistingPreviewsWhenRecordingStarts() throws {
+        _ = NSApplication.shared
+        let screenshot = CapturedScreenshot(
+            pngData: try makePNGData(),
+            image: NSImage(size: NSSize(width: 2, height: 2)),
+            rect: CGRect(x: 0, y: 0, width: 2, height: 2)
+        )
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        var closeCount = 0
+
+        controller.show(
+            for: screenshot,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .zhHans),
+            copy: { true },
+            save: { true },
+            recognizeText: { true },
+            openWorkspace: { true },
+            pin: { true },
+            close: {
+                closeCount += 1
+            }
+        )
+
+        let previewPanels = NSApp.windows.filter { !windowsBeforeShow.contains(ObjectIdentifier($0)) }
+        XCTAssertEqual(previewPanels.count, 1)
+
+        controller.closePreviewsForRecordingStart()
+        controller.restoreTemporarilyHiddenPreviews()
+
+        XCTAssertEqual(previewPanels.filter(\.isVisible).count, 0)
+        XCTAssertEqual(closeCount, 0)
+    }
+
+    func testQuickAccessClosesOrphanPreviewPanelsWhenRecordingStarts() {
+        _ = NSApplication.shared
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        let orphanPanel = NSPanel(
+            contentRect: CGRect(x: 40, y: 40, width: 200, height: 132),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        orphanPanel.title = QuickAccessPanelController.previewWindowTitle
+        orphanPanel.isReleasedWhenClosed = false
+        orphanPanel.orderFrontRegardless()
+        defer {
+            orphanPanel.close()
+        }
+
+        controller.closePreviewsForRecordingStart()
+
+        XCTAssertFalse(orphanPanel.isVisible)
     }
 
     func testQuickAccessActionButtonsReceivePanelMouseClicks() throws {
