@@ -6,7 +6,7 @@ final class RecordingBoundaryOverlayController {
     private var boundaryView: RecordingBoundaryView?
     private var displayedSelectionRect: CGRect?
 
-    func show(rect: CGRect, countdownText: String? = nil) {
+    func show(rect: CGRect, preparationState: RecordingPreparationState? = nil) {
         close()
 
         let normalizedRect = rect.integral
@@ -30,7 +30,7 @@ final class RecordingBoundaryOverlayController {
             frame: CGRect(origin: .zero, size: screenFrame.size),
             selectionRect: localSelectionRect
         )
-        boundaryView.countdownText = countdownText
+        boundaryView.preparationState = preparationState
         panel.contentView = boundaryView
         panel.orderFrontRegardless()
 
@@ -39,8 +39,8 @@ final class RecordingBoundaryOverlayController {
         displayedSelectionRect = localSelectionRect
     }
 
-    func updateCountdown(_ text: String?) {
-        boundaryView?.countdownText = text
+    func updatePreparationState(_ state: RecordingPreparationState?) {
+        boundaryView?.preparationState = state
     }
 
     func close() {
@@ -59,8 +59,8 @@ final class RecordingBoundaryOverlayController {
         displayedSelectionRect
     }
 
-    func countdownTextForTesting() -> String? {
-        boundaryView?.countdownText
+    func preparationStateForTesting() -> RecordingPreparationState? {
+        boundaryView?.preparationState
     }
 
     func ignoresMouseEventsForTesting() -> Bool? {
@@ -88,13 +88,16 @@ final class RecordingBoundaryOverlayController {
     }
 }
 
+enum RecordingPreparationState: Equatable {
+    case loading
+}
+
 private final class RecordingBoundaryView: NSView {
     private let selectionRect: CGRect
-    private let countdownLabel = NSTextField(labelWithString: "")
-    var countdownText: String? {
+    private let preparationIndicator = NSProgressIndicator()
+    var preparationState: RecordingPreparationState? {
         didSet {
-            countdownLabel.stringValue = countdownText ?? ""
-            countdownLabel.isHidden = countdownText == nil
+            updatePreparationIndicator()
         }
     }
 
@@ -107,7 +110,7 @@ private final class RecordingBoundaryView: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
-        configureCountdownLabel()
+        configurePreparationIndicator()
     }
 
     @available(*, unavailable)
@@ -124,30 +127,40 @@ private final class RecordingBoundaryView: NSView {
 
     override func layout() {
         super.layout()
-        countdownLabel.frame = countdownLabelFrame()
+        preparationIndicator.frame = preparationIndicatorFrame()
     }
 
-    private func configureCountdownLabel() {
-        countdownLabel.isHidden = true
-        countdownLabel.alignment = .center
-        countdownLabel.font = .monospacedDigitSystemFont(ofSize: 42, weight: .semibold)
-        countdownLabel.textColor = .labelColor
-        countdownLabel.translatesAutoresizingMaskIntoConstraints = true
-        countdownLabel.wantsLayer = true
-        countdownLabel.layer?.cornerRadius = 28
-        countdownLabel.layer?.cornerCurve = .continuous
-        countdownLabel.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
-        countdownLabel.layer?.borderWidth = 0.5
-        countdownLabel.layer?.borderColor = NSColor.white.withAlphaComponent(0.38).cgColor
-        addSubview(countdownLabel)
+    private func configurePreparationIndicator() {
+        preparationIndicator.isHidden = true
+        preparationIndicator.style = .spinning
+        preparationIndicator.controlSize = .regular
+        preparationIndicator.isIndeterminate = true
+        preparationIndicator.translatesAutoresizingMaskIntoConstraints = true
+        preparationIndicator.wantsLayer = true
+        preparationIndicator.layer?.cornerRadius = 20
+        preparationIndicator.layer?.cornerCurve = .continuous
+        preparationIndicator.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
+        preparationIndicator.layer?.borderWidth = 0.5
+        preparationIndicator.layer?.borderColor = NSColor.white.withAlphaComponent(0.38).cgColor
+        addSubview(preparationIndicator)
     }
 
-    private func countdownLabelFrame() -> CGRect {
-        let side: CGFloat = 72
+    private func preparationIndicatorFrame() -> CGRect {
+        let side: CGFloat = 44
         let center = CGPoint(x: selectionRect.midX, y: selectionRect.midY)
         let x = min(max(center.x - side / 2, bounds.minX + 12), bounds.maxX - side - 12)
         let y = min(max(center.y - side / 2, bounds.minY + 12), bounds.maxY - side - 12)
         return CGRect(x: x, y: y, width: side, height: side)
+    }
+
+    private func updatePreparationIndicator() {
+        let isLoading = preparationState == .loading
+        preparationIndicator.isHidden = !isLoading
+        if isLoading {
+            preparationIndicator.startAnimation(nil)
+        } else {
+            preparationIndicator.stopAnimation(nil)
+        }
     }
 
     private func drawDimmedBackdrop(excluding selectionRect: CGRect) {

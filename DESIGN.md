@@ -67,11 +67,15 @@ system tool, not a branded dashboard.
 - The screenshot HUD may switch into recording setup without closing the
   selection overlay. Setup controls stay compact and cover start recording,
   MP4/GIF format, cursor visibility, and keyboard hint visibility.
-- Starting a recording enters a five-second passive countdown before frames are
-  written, giving the user time to prepare the desktop without a sudden flash.
+- Keyboard hint visibility is retained as a setup option, but recording start
+  must not show a static placeholder hint. Reintroduce a keyboard hint overlay
+  only when it reflects real key activity.
+- Starting a recording enters a short preparation/loading state before frames
+  are written, giving Frame time to settle transient HUD state without making
+  the user wait through a visible countdown.
 - Active recording freezes the selected rectangle and replaces size editing
-  with elapsed recording time. The action group contains pause or resume plus
-  stop.
+  with elapsed recording time. The action group contains stop, restart, and
+  delete; pause/resume is not shown in the first refined recording HUD.
 - During active recording, keep a visible non-interactive mask and selected
   region around the recorded rectangle while allowing desktop apps below it to
   receive mouse and keyboard interaction. Follow the screenshot selection visual

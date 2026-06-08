@@ -61,11 +61,11 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
     func testRecordingQuickAccessScalesPreviewToRecordingAspectRatio() {
         XCTAssertEqual(
             QuickAccessPanelController.recordingPreviewSize(forSourceSize: CGSize(width: 1282, height: 504)),
-            CGSize(width: 200, height: 78)
+            CapturePreviewMetrics.previewSize(forDesktopSize: nil)
         )
         XCTAssertEqual(
             QuickAccessPanelController.recordingPreviewSize(forSourceSize: CGSize(width: 998, height: 734)),
-            CGSize(width: 200, height: 147)
+            CapturePreviewMetrics.previewSize(forDesktopSize: nil)
         )
     }
 
@@ -107,8 +107,97 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         }
         let contentView = try XCTUnwrap(panel.contentView)
         contentView.layoutSubtreeIfNeeded()
-        XCTAssertNotNil(findPreviewSurface(in: contentView))
+        let previewSurface = try XCTUnwrap(findPreviewSurface(in: contentView))
+        XCTAssertEqual(previewSurface.frame, contentView.bounds)
+        let thumbnailView = try XCTUnwrap(previewSurface as? RecordingThumbnailDrawableForTesting)
+        XCTAssertTrue(thumbnailView.lastDrawRectForTesting.contains(contentView.bounds))
         XCTAssertEqual(RecordingThumbnailProvider().thumbnail(for: gifURL)?.size, CGSize(width: 2, height: 2))
+    }
+
+    func testClickingRecordingPlayOverlayOpensPreview() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let recording = CapturedRecording(
+            id: UUID(),
+            fileURL: URL(fileURLWithPath: "/tmp/test.mp4"),
+            format: .mp4,
+            rect: CGRect(x: 0, y: 0, width: 1282, height: 504),
+            pixelSize: CGSize(width: 1282, height: 504),
+            byteSize: 10,
+            duration: 24
+        )
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        var previewCallCount = 0
+
+        controller.show(
+            for: recording,
+            preferredAnchor: CGRect(x: 0, y: 0, width: 100, height: 100),
+            strings: AppStrings(language: .en),
+            download: { true },
+            copy: { true },
+            preview: {
+                previewCallCount += 1
+                return true
+            },
+            close: {}
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer {
+            panel.close()
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let windowPoint = contentView.convert(NSPoint(x: contentView.bounds.midX, y: contentView.bounds.midY), to: nil)
+
+        panel.sendEvent(try makeMouseButtonEvent(type: .leftMouseDown, point: windowPoint, panel: panel))
+        panel.sendEvent(try makeMouseButtonEvent(type: .leftMouseUp, point: windowPoint, panel: panel))
+
+        XCTAssertEqual(previewCallCount, 1)
+    }
+
+    func testClickingRecordingPreviewOutsidePlayOverlayDoesNotOpenPreview() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let recording = CapturedRecording(
+            id: UUID(),
+            fileURL: URL(fileURLWithPath: "/tmp/test.mp4"),
+            format: .mp4,
+            rect: CGRect(x: 0, y: 0, width: 1282, height: 504),
+            pixelSize: CGSize(width: 1282, height: 504),
+            byteSize: 10,
+            duration: 24
+        )
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        var previewCallCount = 0
+
+        controller.show(
+            for: recording,
+            preferredAnchor: CGRect(x: 0, y: 0, width: 100, height: 100),
+            strings: AppStrings(language: .en),
+            download: { true },
+            copy: { true },
+            preview: {
+                previewCallCount += 1
+                return true
+            },
+            close: {}
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer {
+            panel.close()
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let windowPoint = contentView.convert(NSPoint(x: 24, y: contentView.bounds.midY), to: nil)
+
+        panel.sendEvent(try makeMouseButtonEvent(type: .leftMouseDown, point: windowPoint, panel: panel))
+        panel.sendEvent(try makeMouseButtonEvent(type: .leftMouseUp, point: windowPoint, panel: panel))
+
+        XCTAssertEqual(previewCallCount, 0)
     }
 
     func testQuickAccessStacksScreenshotsAndRecordingsTogether() throws {
@@ -197,7 +286,10 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
             close: {}
         )
         controller.temporarilyHidePreviews()
-        XCTAssertEqual(newPreviewPanels(excluding: windowsBeforeShow).filter(\.isVisible).count, 0)
+        let hiddenPanels = newPreviewPanels(excluding: windowsBeforeShow)
+        XCTAssertEqual(hiddenPanels.filter(\.isVisible).count, 0)
+        XCTAssertTrue(hiddenPanels.allSatisfy { $0.alphaValue == 0 })
+        XCTAssertTrue(hiddenPanels.allSatisfy(\.ignoresMouseEvents))
 
         controller.show(
             for: recording,
@@ -214,6 +306,8 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
             panels.forEach { $0.close() }
         }
         XCTAssertEqual(panels.filter(\.isVisible).count, 2)
+        XCTAssertTrue(panels.allSatisfy { $0.alphaValue == 1 })
+        XCTAssertTrue(panels.allSatisfy { !$0.ignoresMouseEvents })
     }
 
     private func makeOneFrameGIF(at url: URL) throws {
@@ -287,6 +381,20 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
 
     private func findPreviewSurface(in view: NSView) -> NSView? {
         view.subviews.first
+    }
+
+    private func makeMouseButtonEvent(type: NSEvent.EventType, point: NSPoint, panel: NSPanel) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.mouseEvent(
+            with: type,
+            location: point,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: panel.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: type == .leftMouseDown ? 1 : 0
+        ))
     }
 
     private func newPreviewPanels(excluding windowsBeforeShow: Set<ObjectIdentifier>) -> [NSPanel] {

@@ -17,16 +17,16 @@ final class RecordingBoundaryOverlayControllerTests: XCTestCase {
             width: 320,
             height: 180
         )
-        controller.show(rect: rect, countdownText: "5")
+        controller.show(rect: rect, preparationState: .loading)
 
         XCTAssertEqual(controller.frameForTesting(), screenFrame.integral)
         XCTAssertEqual(
             controller.selectionRectForTesting(),
             rect.integral.offsetBy(dx: -screenFrame.minX, dy: -screenFrame.minY)
         )
-        XCTAssertEqual(controller.countdownTextForTesting(), "5")
-        controller.updateCountdown("4")
-        XCTAssertEqual(controller.countdownTextForTesting(), "4")
+        XCTAssertEqual(controller.preparationStateForTesting(), .loading)
+        controller.updatePreparationState(nil)
+        XCTAssertNil(controller.preparationStateForTesting())
         XCTAssertEqual(controller.ignoresMouseEventsForTesting(), true)
         XCTAssertEqual(controller.sharingTypeForTesting(), NSWindow.SharingType.none)
     }

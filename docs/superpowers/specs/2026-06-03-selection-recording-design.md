@@ -1,5 +1,9 @@
 # Selection Recording Design
 
+Update: `2026-06-07-recording-hud-interaction-design.md` supersedes this
+document's active recording HUD controls. The refined HUD removes visible
+pause/resume controls and prioritizes stop, restart, and delete.
+
 ## Goal
 
 Add a first recording workflow that grows out of the existing screenshot
@@ -20,8 +24,8 @@ In scope:
   screen.
 - One display per recording.
 - Recording setup controls for format, cursor visibility, and keyboard hints.
-- Five-second start countdown, followed by active recording HUD with elapsed
-  recording time, pause or resume, and stop.
+- Short preparation/loading state, followed by active recording HUD with
+  elapsed recording time, pause or resume, and stop.
 - Non-interactive recording overlay that keeps the mask and selected region
   visible while the desktop remains usable.
 - Status item recording state with a red recording icon and stop action.
@@ -39,6 +43,7 @@ Out of scope for this version:
 - Recording multiple displays into one recording session.
 - Audio recording.
 - A stop-recording keyboard shortcut.
+- Live keyboard hint visualization.
 - Active video editing.
 - Cloud sync, sharing, annotation, OCR on video, or scrolling capture.
 
@@ -52,9 +57,9 @@ Out of scope for this version:
 5. Clicking the recording action switches the HUD into recording setup mode.
 6. Setup mode keeps the selected region active and shows icon-only controls for:
    start recording, MP4/GIF format, show cursor, and keyboard hints.
-7. Clicking start enters a five-second countdown so the user can prepare the
-   desktop before captured frames are written.
-8. Countdown completion begins recording that selected region.
+7. Clicking start enters a short loading state so Frame can settle transient HUD
+   state before captured frames are written.
+8. Preparation completion begins recording that selected region.
 9. The HUD switches to active recording mode and shows elapsed recording time,
    pause/resume, and stop.
 10. The status item switches to a red recording icon. Opening or clicking the
@@ -96,9 +101,10 @@ captured without blocking other apps. The active recording overlay is Frame-owne
 chrome and must be excluded from captured pixels. It should follow the screenshot
 selection visual language and avoid a red recording border.
 
-Before recording starts, the same passive recording overlay displays a five
-second countdown. The countdown is visible to the user, and capture begins only
-after it completes.
+Before recording starts, the same passive recording overlay displays a compact
+loading affordance. Capture begins only after the short preparation delay
+completes, so the first frame does not include transient click or HUD transition
+state.
 
 The recording HUD should sit outside the selection when there is enough room. If
 the selected region covers the full screen, the HUD may be visually inside the
@@ -236,8 +242,9 @@ same broad permission area, but platform prompts may mention screen and audio
 access on newer macOS versions. Since audio is out of scope, no microphone
 permission should be requested in this version.
 
-Recording HUD windows, keyboard hint overlays, recording boundary overlays, and
-Frame-owned transient surfaces must be excluded from captured content. The
+Recording HUD windows, recording boundary overlays, and Frame-owned transient
+surfaces must be excluded from captured content. If live keyboard hint overlays
+are implemented later, they must follow the same exclusion rule. The
 implementation should use the appropriate AppKit/ScreenCaptureKit window-sharing
 and content-filtering mechanisms so visual controls remain visible to the user
 without entering the recording.

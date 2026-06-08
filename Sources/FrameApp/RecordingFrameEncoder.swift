@@ -7,7 +7,7 @@ import ImageIO
 import UniformTypeIdentifiers
 
 protocol RecordingFrameEncoding: AnyObject {
-    func append(_ sampleBuffer: CMSampleBuffer) throws
+    func append(_ sampleBuffer: CMSampleBuffer, overlayRenderer: RecordingOverlayRenderer?) throws
     func finish() async throws -> URL
 }
 
@@ -49,7 +49,7 @@ final class MP4RecordingFrameEncoder: RecordingFrameEncoding {
         )
     }
 
-    func append(_ sampleBuffer: CMSampleBuffer) throws {
+    func append(_ sampleBuffer: CMSampleBuffer, overlayRenderer: RecordingOverlayRenderer?) throws {
         guard CMSampleBufferDataIsReady(sampleBuffer) else {
             return
         }
@@ -59,6 +59,7 @@ final class MP4RecordingFrameEncoder: RecordingFrameEncoding {
         }
 
         let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let outputBuffer = overlayRenderer?.render(pixelBuffer: imageBuffer, at: presentationTime) ?? imageBuffer
         if firstPresentationTime == nil {
             firstPresentationTime = presentationTime
         }
@@ -83,7 +84,7 @@ final class MP4RecordingFrameEncoder: RecordingFrameEncoding {
         }
 
         if input.isReadyForMoreMediaData {
-            guard adaptor.append(imageBuffer, withPresentationTime: normalizedPresentationTime) else {
+            guard adaptor.append(outputBuffer, withPresentationTime: normalizedPresentationTime) else {
                 throw RecordingServiceError.outputFailed(writer.error?.localizedDescription ?? "MP4 帧写入失败。")
             }
         }
@@ -116,16 +117,17 @@ final class GIFRecordingFrameEncoder: RecordingFrameEncoding {
         }
     }
 
-    func append(_ sampleBuffer: CMSampleBuffer) throws {
+    func append(_ sampleBuffer: CMSampleBuffer, overlayRenderer: RecordingOverlayRenderer?) throws {
         guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
             return
         }
 
         let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let outputBuffer = overlayRenderer?.render(pixelBuffer: imageBuffer, at: presentationTime) ?? imageBuffer
         let delay = lastFrameTime.map { max(0.02, presentationTime.seconds - $0.seconds) } ?? 0.08
         lastFrameTime = presentationTime
 
-        let ciImage = CIImage(cvPixelBuffer: imageBuffer)
+        let ciImage = CIImage(cvPixelBuffer: outputBuffer)
         guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
             return
         }

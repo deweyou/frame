@@ -99,13 +99,13 @@ final class SelectionOverlayController {
             displayID: displayID(for: screen(containing: selection.rect))
         )
 
-        for window in overlayWindows where window !== activeWindow {
+        for window in overlayWindows {
             window.orderOut(nil)
             window.close()
         }
-        overlayWindows = [activeWindow]
-        activeWindow.enterActiveRecordingMode(elapsed: 0, isPaused: false)
-        activeWindow.makeKey()
+        overlayWindows.removeAll()
+        completion = nil
+        resetCursor()
     }
 
     private func activeScreen(from screens: [NSScreen]) -> NSScreen {

@@ -90,6 +90,10 @@ final class SelectionOverlayWindow {
         overlayView.hudButtonImageDescriptionsForTesting()
     }
 
+    func hudButtonLayoutMetricsForTesting() -> (buttonWidth: CGFloat, hoverDiameter: CGFloat, screenshotModeWidth: CGFloat) {
+        overlayView.hudButtonLayoutMetricsForTesting()
+    }
+
     func performHUDActionForTesting(accessibilityLabel: String) -> Bool {
         overlayView.performHUDActionForTesting(accessibilityLabel: accessibilityLabel)
     }
@@ -132,6 +136,10 @@ final class SelectionOverlayWindow {
 
     func recordingHUDFrameForTesting() -> CGRect {
         overlayView.recordingHUDFrameForTesting()
+    }
+
+    func startRecordingButtonIsPrimaryForTesting() -> Bool {
+        overlayView.startRecordingButtonIsPrimaryForTesting()
     }
 
     func isDelayCountdownActiveForTesting() -> Bool {
@@ -188,8 +196,12 @@ private final class SelectionOverlayNativeWindow: NSWindow {
 @MainActor
 private final class SelectionOverlayView: NSView {
     private let hudHeight: CGFloat = 42
-    private let buttonWidth: CGFloat = 42
+    private let buttonWidth: CGFloat = 36
+    private let defaultHUDSpacing: CGFloat = 7
+    private let activeRecordingHUDSpacing: CGFloat = 4
+    private let setupPrimaryButtonWidth: CGFloat = 92
     private let sizeViewWidth: CGFloat = 127
+    private let activeRecordingElapsedWidth: CGFloat = 56
     private let screenFrame: CGRect
     private let onInteraction: () -> Void
     private let onWindowSelectionRequested: (CGPoint, Int?) -> WindowCandidate?
@@ -198,6 +210,7 @@ private final class SelectionOverlayView: NSView {
     private let hudStackView = NSStackView()
     private let modeView = NSVisualEffectView()
     private var modeViewWidthConstraint: NSLayoutConstraint?
+    private var sizeViewWidthConstraint: NSLayoutConstraint?
     private var modeButtonConstraints: [NSLayoutConstraint] = []
     private let sizeView = NSVisualEffectView()
     private let sizeControl = HUDSizeControl()
@@ -478,7 +491,7 @@ private final class SelectionOverlayView: NSView {
         hudStackView.orientation = .horizontal
         hudStackView.alignment = .centerY
         hudStackView.distribution = .fill
-        hudStackView.spacing = 7
+        hudStackView.spacing = defaultHUDSpacing
         hudStackView.translatesAutoresizingMaskIntoConstraints = true
 
         configureGlass(modeView, cornerRadius: 21)
@@ -500,12 +513,14 @@ private final class SelectionOverlayView: NSView {
         addSubview(tooltipView)
 
         let modeViewWidthConstraint = modeView.widthAnchor.constraint(equalToConstant: modeViewWidth)
+        let sizeViewWidthConstraint = sizeView.widthAnchor.constraint(equalToConstant: currentSizeViewWidth)
         self.modeViewWidthConstraint = modeViewWidthConstraint
+        self.sizeViewWidthConstraint = sizeViewWidthConstraint
         sizeControl.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             modeViewWidthConstraint,
             modeView.heightAnchor.constraint(equalToConstant: hudHeight),
-            sizeView.widthAnchor.constraint(equalToConstant: sizeViewWidth),
+            sizeViewWidthConstraint,
             sizeView.heightAnchor.constraint(equalToConstant: hudHeight),
             sizeControl.leadingAnchor.constraint(equalTo: sizeView.leadingAnchor),
             sizeControl.trailingAnchor.constraint(equalTo: sizeView.trailingAnchor),
@@ -527,11 +542,31 @@ private final class SelectionOverlayView: NSView {
     }
 
     private var modeViewWidth: CGFloat {
-        CGFloat(modeView.subviews.compactMap { $0 as? HUDIconButton }.count) * buttonWidth
+        modeView.subviews
+            .compactMap { $0 as? HUDIconButton }
+            .reduce(0) { $0 + $1.preferredHUDWidth }
+    }
+
+    private var currentHUDSpacing: CGFloat {
+        switch recordingHUDMode {
+        case .active:
+            activeRecordingHUDSpacing
+        case .screenshot, .setup:
+            defaultHUDSpacing
+        }
+    }
+
+    private var currentSizeViewWidth: CGFloat {
+        switch recordingHUDMode {
+        case .active:
+            activeRecordingElapsedWidth
+        case .screenshot, .setup:
+            sizeViewWidth
+        }
     }
 
     private var hudSize: CGSize {
-        CGSize(width: modeViewWidth + hudStackView.spacing + sizeViewWidth, height: hudHeight)
+        CGSize(width: modeViewWidth + currentHUDSpacing + currentSizeViewWidth, height: hudHeight)
     }
 
     private func installModeButtons(_ buttons: [HUDIconButton]) {
@@ -545,7 +580,7 @@ private final class SelectionOverlayView: NSView {
             modeView.addSubview(button)
             modeButtonConstraints.append(contentsOf: [
                 button.centerYAnchor.constraint(equalTo: modeView.centerYAnchor),
-                button.widthAnchor.constraint(equalToConstant: buttonWidth),
+                button.widthAnchor.constraint(equalToConstant: button.preferredHUDWidth),
                 button.heightAnchor.constraint(equalToConstant: hudHeight),
             ])
 
@@ -560,6 +595,12 @@ private final class SelectionOverlayView: NSView {
 
         NSLayoutConstraint.activate(modeButtonConstraints)
         modeViewWidthConstraint?.constant = modeViewWidth
+        updateHUDLayoutMetrics()
+    }
+
+    private func updateHUDLayoutMetrics() {
+        hudStackView.spacing = currentHUDSpacing
+        sizeViewWidthConstraint?.constant = currentSizeViewWidth
     }
 
     private func configureCountdownLabel() {
@@ -629,8 +670,9 @@ private final class SelectionOverlayView: NSView {
 
     private func makeActiveRecordingButtons(isPaused: Bool) -> [HUDIconButton] {
         [
-            isPaused ? makeResumeRecordingButton() : makePauseRecordingButton(),
             makeStopRecordingButton(),
+            makeRestartRecordingButton(),
+            makeDeleteRecordingButton(),
         ]
     }
 
@@ -712,6 +754,17 @@ private final class SelectionOverlayView: NSView {
         let button = HUDIconButton(
             symbolName: "record.circle.fill",
             accessibilityDescription: "开始录制"
+        )
+        button.preferredHUDWidth = setupPrimaryButtonWidth
+        button.isPrimaryAction = true
+        button.image = nil
+        button.title = "开始录制"
+        button.attributedTitle = NSAttributedString(
+            string: "开始录制",
+            attributes: [
+                .foregroundColor: NSColor.white,
+                .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+            ]
         )
         button.target = self
         button.action = #selector(startRecordingButtonClicked)
@@ -807,6 +860,34 @@ private final class SelectionOverlayView: NSView {
         return button
     }
 
+    private func makeRestartRecordingButton() -> HUDIconButton {
+        let button = HUDIconButton(
+            symbolName: "arrow.clockwise",
+            accessibilityDescription: "重新开始"
+        )
+        button.target = self
+        button.action = #selector(restartRecordingButtonClicked)
+        button.onHoverChange = { [weak self, weak button] isHovering in
+            self?.setHUDTooltip(isHovering ? "重新开始" : nil, anchorView: button)
+        }
+        button.contentTintColor = hudTheme.foregroundColor
+        return button
+    }
+
+    private func makeDeleteRecordingButton() -> HUDIconButton {
+        let button = HUDIconButton(
+            symbolName: "trash",
+            accessibilityDescription: "删除录制"
+        )
+        button.target = self
+        button.action = #selector(deleteRecordingButtonClicked)
+        button.onHoverChange = { [weak self, weak button] isHovering in
+            self?.setHUDTooltip(isHovering ? "删除录制" : nil, anchorView: button)
+        }
+        button.contentTintColor = hudTheme.foregroundColor
+        return button
+    }
+
     private func configureSizeControl() {
         sizeControl.onWidthCommit = { [weak self] width in
             self?.applySizeEdit(.width, value: width)
@@ -835,9 +916,10 @@ private final class SelectionOverlayView: NSView {
         placeholderView.layer?.backgroundColor = theme.backgroundColor.cgColor
         placeholderLabel.textColor = theme.foregroundColor
         for button in modeView.subviews.compactMap({ $0 as? HUDIconButton }) {
-            button.contentTintColor = theme.foregroundColor
+            button.contentTintColor = hudTintColor(for: button, theme: theme)
             button.hoverColor = theme.hoverColor
         }
+        updateRecordingElapsedColor()
         tooltipView.applyTheme(theme)
         if let displayedLocalRect {
             updateSizeControl(
@@ -846,6 +928,19 @@ private final class SelectionOverlayView: NSView {
             )
         } else {
             updateSizeControl(width: 0, height: 0)
+        }
+    }
+
+    private func hudTintColor(for button: HUDIconButton, theme: HUDTheme) -> NSColor {
+        button.accessibilityLabel() == "停止录制" ? .systemRed : theme.foregroundColor
+    }
+
+    private func updateRecordingElapsedColor() {
+        switch recordingHUDMode {
+        case .active:
+            recordingElapsedLabel.textColor = .systemRed
+        case .screenshot, .setup:
+            recordingElapsedLabel.textColor = hudTheme.foregroundColor
         }
     }
 
@@ -1056,6 +1151,10 @@ private final class SelectionOverlayView: NSView {
         onRecordingStop()
     }
 
+    @objc private func restartRecordingButtonClicked() {}
+
+    @objc private func deleteRecordingButtonClicked() {}
+
     private func updateRecordingOptions(
         format: RecordingFormat? = nil,
         showsCursor: Bool? = nil,
@@ -1256,6 +1355,19 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
+        if recordingHUDMode == .setup {
+            let centeredOrigin = CGPoint(
+                x: displayedLocalRect.midX - visibleSize.width / 2,
+                y: displayedLocalRect.midY - visibleSize.height / 2
+            )
+            let origin = CGPoint(
+                x: min(max(centeredOrigin.x, bounds.minX + 12), bounds.maxX - visibleSize.width - 12),
+                y: min(max(centeredOrigin.y, bounds.minY + 18), bounds.maxY - visibleSize.height - 18)
+            )
+            hudStackView.frame = CGRect(origin: origin, size: visibleSize)
+            return
+        }
+
         let inset: CGFloat = 10
         let spacing: CGFloat = 10
         let horizontalCenter = displayedLocalRect.midX - visibleSize.width / 2
@@ -1325,6 +1437,14 @@ private final class SelectionOverlayView: NSView {
             .map(\.symbolName)
     }
 
+    func hudButtonLayoutMetricsForTesting() -> (buttonWidth: CGFloat, hoverDiameter: CGFloat, screenshotModeWidth: CGFloat) {
+        (
+            buttonWidth: buttonWidth,
+            hoverDiameter: HUDIconButton.hoverDiameter,
+            screenshotModeWidth: CGFloat(makeScreenshotModeButtons().count) * buttonWidth
+        )
+    }
+
     func performHUDActionForTesting(accessibilityLabel: String) -> Bool {
         guard modeView.subviews.compactMap({ $0 as? NSButton }).contains(where: {
             $0.accessibilityLabel() == accessibilityLabel
@@ -1355,6 +1475,10 @@ private final class SelectionOverlayView: NSView {
             resumeRecordingButtonClicked()
         case "停止录制":
             stopRecordingButtonClicked()
+        case "重新开始":
+            restartRecordingButtonClicked()
+        case "删除录制":
+            deleteRecordingButtonClicked()
         case ocrActionText:
             ocrButtonClicked()
         default:
@@ -1384,6 +1508,13 @@ private final class SelectionOverlayView: NSView {
 
     func recordingHUDFrameForTesting() -> CGRect {
         hudStackView.frame
+    }
+
+    func startRecordingButtonIsPrimaryForTesting() -> Bool {
+        modeView.subviews
+            .compactMap { $0 as? HUDIconButton }
+            .first { $0.accessibilityLabel() == "开始录制" }?
+            .isPrimaryAction == true
     }
 
     func isDelayCountdownActiveForTesting() -> Bool {
@@ -1559,7 +1690,11 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
-        applyHUDTheme(luminance < 0.48 ? .lightContent : .darkContent)
+        applyHUDTheme(
+            ScreenLuminanceSampler.prefersLightHUDContent(backgroundLuminance: luminance)
+                ? .lightContent
+                : .darkContent
+        )
     }
 
     private func updateVisibleHUDTheme() {
@@ -2127,8 +2262,17 @@ private extension NSCursor {
 }
 
 private final class HUDIconButton: NSButton {
+    static let hoverDiameter: CGFloat = 36
+
     let symbolName: String
+    var preferredHUDWidth: CGFloat = 36
+    var isPrimaryAction = false {
+        didSet {
+            updatePrimaryAppearance()
+        }
+    }
     private let hoverLayer = CALayer()
+    private let primaryLayer = CALayer()
     private var trackingArea: NSTrackingArea?
     var onHoverChange: ((Bool) -> Void)?
     var hoverColor: NSColor = HUDTheme.lightContent.hoverColor {
@@ -2157,9 +2301,12 @@ private final class HUDIconButton: NSButton {
         focusRingType = .none
         wantsLayer = true
         layer?.masksToBounds = false
+        primaryLayer.backgroundColor = NSColor.systemRed.cgColor
+        primaryLayer.opacity = 0
+        layer?.insertSublayer(primaryLayer, at: 0)
         hoverLayer.backgroundColor = hoverColor.cgColor
         hoverLayer.opacity = 0
-        layer?.insertSublayer(hoverLayer, at: 0)
+        layer?.insertSublayer(hoverLayer, above: primaryLayer)
         setAccessibilityLabel(accessibilityDescription)
     }
 
@@ -2171,18 +2318,21 @@ private final class HUDIconButton: NSButton {
     override func layout() {
         super.layout()
 
-        let hoverDiameter: CGFloat = 32
-        hoverLayer.cornerRadius = hoverDiameter / 2
+        primaryLayer.cornerRadius = 16
+        primaryLayer.cornerCurve = .continuous
+        primaryLayer.frame = bounds.insetBy(dx: 4, dy: 5)
+        hoverLayer.cornerRadius = Self.hoverDiameter / 2
         hoverLayer.bounds = CGRect(
             x: 0,
             y: 0,
-            width: hoverDiameter,
-            height: hoverDiameter
+            width: Self.hoverDiameter,
+            height: Self.hoverDiameter
         )
         hoverLayer.position = CGPoint(
             x: bounds.midX,
             y: bounds.midY
         )
+        updatePrimaryAppearance()
     }
 
     override func updateTrackingAreas() {
@@ -2223,7 +2373,14 @@ private final class HUDIconButton: NSButton {
     }
 
     private func updateHoverAppearance() {
-        animateHoverLayer(opacity: isHovering ? 1 : 0)
+        animateHoverLayer(opacity: isPrimaryAction ? 0 : (isHovering ? 1 : 0))
+    }
+
+    private func updatePrimaryAppearance() {
+        primaryLayer.opacity = isPrimaryAction ? 1 : 0
+        if isPrimaryAction {
+            hoverLayer.opacity = 0
+        }
     }
 
     private func animateHoverLayer(opacity: Float) {
@@ -2488,14 +2645,18 @@ enum ScreenLuminanceSampler {
         }
 
         let sortedSamples = samples.sorted()
-        let median = sortedSamples[sortedSamples.count / 2]
-        if median >= 0.48 {
-            let upperQuartileIndex = min(sortedSamples.count - 1, Int((CGFloat(sortedSamples.count - 1) * 0.75).rounded()))
-            return sortedSamples[upperQuartileIndex]
+        let lowerQuartileIndex = max(0, Int((CGFloat(sortedSamples.count - 1) * 0.25).rounded()))
+        let lowerQuartile = sortedSamples[lowerQuartileIndex]
+        if lowerQuartile < 0.58 {
+            return lowerQuartile
         }
 
-        let lowerQuartileIndex = max(0, Int((CGFloat(sortedSamples.count - 1) * 0.25).rounded()))
-        return sortedSamples[lowerQuartileIndex]
+        let upperQuartileIndex = min(sortedSamples.count - 1, Int((CGFloat(sortedSamples.count - 1) * 0.75).rounded()))
+        return sortedSamples[upperQuartileIndex]
+    }
+
+    static func prefersLightHUDContent(backgroundLuminance: CGFloat) -> Bool {
+        backgroundLuminance < 0.58
     }
 
     private static func quartzCaptureRect(for cocoaRect: CGRect) -> CGRect {

@@ -52,6 +52,18 @@ final class SelectionOverlayChromeTests: XCTestCase {
 
         XCTAssertEqual(ScreenLuminanceSampler.estimatedBackgroundLuminance(from: samples), 0.14)
     }
+
+    func testHUDBackgroundEstimateTreatsMixedGrayAndWhiteAsGrayBackground() {
+        let samples = Array(repeating: CGFloat(0.46), count: 64)
+            + Array(repeating: CGFloat(0.86), count: 64)
+
+        XCTAssertEqual(ScreenLuminanceSampler.estimatedBackgroundLuminance(from: samples), 0.46)
+    }
+
+    func testHUDThemeKeepsLightContentOnMiddleGrayBackgrounds() {
+        XCTAssertTrue(ScreenLuminanceSampler.prefersLightHUDContent(backgroundLuminance: 0.54))
+        XCTAssertFalse(ScreenLuminanceSampler.prefersLightHUDContent(backgroundLuminance: 0.70))
+    }
 }
 
 private extension SelectionChromeCornerPath {
