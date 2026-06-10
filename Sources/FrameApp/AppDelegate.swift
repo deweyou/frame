@@ -7,7 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItemController: StatusItemController?
     private var hotKeyController: HotKeyController?
-    private let selectionOverlayController = SelectionOverlayController()
+    private let selectionOverlayController: SelectionOverlayControlling
     private let captureService = CaptureService()
     private let quickAccessPanelController = QuickAccessPanelController()
     private let videoPreviewWindowController = VideoPreviewWindowController()
@@ -19,6 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let recordingService: RecordingServicing
     private let recordingFileWriter = RecordingFileWriter()
     private let keyboardHintOverlayController: KeyboardHintOverlayControlling
+    private let hasScreenRecordingAccess: () -> Bool
+    private let showMissingScreenRecordingPermission: () -> Void
+    private let playInvalidActionFeedback: () -> Void
     private let activeRecordingHUDPanelController = ActiveRecordingHUDPanelController()
     private let recordingBoundaryOverlayController = RecordingBoundaryOverlayController()
     private let settingsWindowController = SettingsWindowController()
@@ -37,11 +40,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isStoppingActiveRecording = false
 
     init(
+        selectionOverlayController: SelectionOverlayControlling = SelectionOverlayController(),
         recordingService: RecordingServicing = ScreenCaptureRecordingService(),
-        keyboardHintOverlayController: KeyboardHintOverlayControlling = KeyboardHintOverlayController()
+        keyboardHintOverlayController: KeyboardHintOverlayControlling = KeyboardHintOverlayController(),
+        hasScreenRecordingAccess: @escaping () -> Bool = { ScreenRecordingPermission.hasAccess },
+        showMissingScreenRecordingPermission: @escaping () -> Void = { ScreenRecordingPermission.showMissingPermissionAlert() },
+        playInvalidActionFeedback: @escaping () -> Void = { NSSound.beep() }
     ) {
+        self.selectionOverlayController = selectionOverlayController
         self.recordingService = recordingService
         self.keyboardHintOverlayController = keyboardHintOverlayController
+        self.hasScreenRecordingAccess = hasScreenRecordingAccess
+        self.showMissingScreenRecordingPermission = showMissingScreenRecordingPermission
+        self.playInvalidActionFeedback = playInvalidActionFeedback
         super.init()
     }
 
@@ -123,10 +134,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showCaptureHistory()
     }
 
-    func startCaptureFlow() {
-        guard ScreenRecordingPermission.hasAccess else {
-            ScreenRecordingPermission.showMissingPermissionAlert()
-            return
+    private var isCaptureFlowBusy: Bool {
+        selectionOverlayController.isSelecting
+            || pendingRecordingStartTask != nil
+            || activeRecordingSession != nil
+            || isStoppingActiveRecording
+    }
+
+    @discardableResult
+    func startCaptureFlow() -> Bool {
+        guard !isCaptureFlowBusy else {
+            recordScreenshotShortcutHintIfRecording()
+            playInvalidActionFeedback()
+            return false
+        }
+
+        guard hasScreenRecordingAccess() else {
+            showMissingScreenRecordingPermission()
+            return false
         }
 
         quickAccessPanelController.temporarilyHidePreviews()
@@ -196,6 +221,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
             }
+        }
+
+        return true
+    }
+
+    private func recordScreenshotShortcutHintIfRecording() {
+        guard let activeRecordingSession else {
+            return
+        }
+
+        let shortcut = hotKeyController?.shortcut ?? SettingsStore.screenshotShortcut()
+        activeRecordingSession.recordKeyboardHint(recordingHintLabel(for: shortcut))
+    }
+
+    private func recordingHintLabel(for shortcut: ScreenshotShortcut) -> String {
+        switch shortcut {
+        case .commandShiftA:
+            "⌘⇧A"
+        case .commandShiftS:
+            "⌘⇧S"
+        case .commandShiftD:
+            "⌘⇧D"
+        case .commandShiftF:
+            "⌘⇧F"
         }
     }
 
@@ -574,6 +623,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    @discardableResult
+    func startCaptureFlowForTesting() -> Bool {
+        startCaptureFlow()
+    }
+
     func finishActiveRecordingForTesting() {
         finishActiveRecording()
     }
@@ -592,6 +646,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func activeRecordingElapsedTimerIsValidForTesting() -> Bool {
         activeRecordingElapsedTimer?.isValid == true
+    }
+
+    func hasActiveRecordingForTesting() -> Bool {
+        activeRecordingSession != nil && activeRecordingSelection != nil
     }
 
     private func showVideoQuickAccess(for recording: CapturedRecording, anchor: CGRect?) {

@@ -170,21 +170,29 @@ private final class RecordingLiveOverlayView: NSView {
 
     private func drawKeyHint(_ keyHint: RecordingOverlaySnapshot.KeyHint) {
         let progress = min(1, max(0, keyHint.age / 0.9))
-        let alpha = progress < 0.78 ? 1 : max(0, 1 - ((progress - 0.78) / 0.22))
+        let alpha = keyHint.isTransient && progress >= 0.78 ? max(0, 1 - ((progress - 0.78) / 0.22)) : 1
+        let minDimension = min(selectionRect.width, selectionRect.height)
+        let fontSize = min(46, max(20, minDimension * 0.16))
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 18, weight: .semibold),
+            .font: NSFont.monospacedSystemFont(ofSize: fontSize, weight: .semibold),
             .foregroundColor: NSColor.white.withAlphaComponent(0.95 * alpha),
         ]
         let textSize = (keyHint.label as NSString).size(withAttributes: attributes)
-        let horizontalPadding: CGFloat = 18
-        let pillSize = CGSize(width: max(68, textSize.width + horizontalPadding * 2), height: 38)
+        let horizontalPadding = max(12, fontSize * 0.48)
+        let verticalPadding = max(6, fontSize * 0.28)
+        let maxPillWidth = max(48, selectionRect.width - 24)
+        let pillSize = CGSize(
+            width: min(maxPillWidth, max(fontSize * 2.2, textSize.width + horizontalPadding * 2)),
+            height: textSize.height + verticalPadding * 2
+        )
         let rect = CGRect(
             x: floor(selectionRect.midX - pillSize.width / 2),
-            y: max(selectionRect.minY + 18, bounds.minY + 14),
+            y: max(selectionRect.minY + max(12, fontSize * 0.6), bounds.minY + 10),
             width: pillSize.width,
             height: pillSize.height
         )
-        let path = NSBezierPath(roundedRect: rect, xRadius: 19, yRadius: 19)
+        let radius = min(22, pillSize.height / 2)
+        let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
         NSColor.black.withAlphaComponent(0.58 * alpha).setFill()
         path.fill()
 

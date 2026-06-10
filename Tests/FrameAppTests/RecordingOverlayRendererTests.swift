@@ -16,21 +16,109 @@ final class RecordingOverlayRendererTests: XCTestCase {
     func testKeyEventLabelUsesModifierSymbolsAndUppercaseCharacter() {
         let label = RecordingOverlayKeyFormatter.label(
             charactersIgnoringModifiers: "p",
+            keyCode: 35,
             modifierFlags: [.command, .shift]
         )
 
         XCTAssertEqual(label, "⌘⇧P")
     }
 
+    func testKeyEventLabelShowsPlainTextInputWithoutShortcutModifiers() {
+        let label = RecordingOverlayKeyFormatter.label(
+            charactersIgnoringModifiers: "a",
+            keyCode: 0,
+            modifierFlags: []
+        )
+
+        XCTAssertEqual(label, "A")
+    }
+
+    func testKeyEventLabelAllowsNamedKeysWithoutShortcutModifiers() {
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: " ", keyCode: 49, modifierFlags: []), "␣")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: "\u{1b}", keyCode: 53, modifierFlags: []), "esc")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: "\r", keyCode: 36, modifierFlags: []), "↩")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: "\t", keyCode: 48, modifierFlags: []), "⇥")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: "\u{7f}", keyCode: 51, modifierFlags: []), "⌫")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: "\u{F700}", keyCode: 126, modifierFlags: []), "↑")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: "\u{F701}", keyCode: 125, modifierFlags: []), "↓")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: "\u{F702}", keyCode: 123, modifierFlags: []), "←")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: "\u{F703}", keyCode: 124, modifierFlags: []), "→")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: nil, keyCode: 122, modifierFlags: []), "F1")
+    }
+
+    func testKeyEventLabelFallsBackToKeyCodeForGlobalEventTapKeys() {
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: nil, keyCode: 0, modifierFlags: []), "A")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: nil, keyCode: 11, modifierFlags: []), "B")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: nil, keyCode: 18, modifierFlags: []), "1")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: nil, keyCode: 29, modifierFlags: []), "0")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: nil, keyCode: 49, modifierFlags: []), "␣")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: nil, keyCode: 63, modifierFlags: []), "fn")
+        XCTAssertEqual(RecordingOverlayKeyFormatter.label(charactersIgnoringModifiers: nil, keyCode: 57, modifierFlags: []), "⇪")
+    }
+
+    func testModifierLabelsIncludeFunctionButDoNotPersistCapsLockState() {
+        XCTAssertEqual(
+            RecordingOverlayKeyFormatter.modifierLabels(for: [.capsLock, .function, .command]),
+            ["⌘", "fn"]
+        )
+    }
+
+    func testKeyboardStateDisplaysHeldModifiersAndKeysUntilReleased() {
+        let state = RecordingOverlayKeyboardState()
+
+        state.updateModifierFlags(.command, time: 1)
+        XCTAssertEqual(state.snapshot(at: 1)?.label, "⌘")
+
+        state.updateModifierFlags([.command, .shift], time: 1.1)
+        XCTAssertEqual(state.snapshot(at: 1.1)?.label, "⌘⇧")
+
+        state.keyDown(keyCode: 0, label: "A", modifierFlags: [.command, .shift], time: 1.2)
+        XCTAssertEqual(state.snapshot(at: 1.2)?.label, "⌘⇧A")
+
+        state.keyUp(keyCode: 0, modifierFlags: [.command, .shift], time: 1.3)
+        XCTAssertEqual(state.snapshot(at: 1.3)?.label, "⌘⇧A")
+        XCTAssertEqual(state.snapshot(at: 1.5)?.label, "⌘⇧")
+
+        state.updateModifierFlags([], time: 1.4)
+        XCTAssertNil(state.snapshot(at: 1.4))
+    }
+
+    func testKeyboardStateClearsImmediatelyWhenAllKeysAreReleased() {
+        let state = RecordingOverlayKeyboardState(releaseLingerDuration: 0.16)
+
+        state.keyDown(keyCode: 0, label: "A", modifierFlags: [], time: 1)
+        state.keyUp(keyCode: 0, modifierFlags: [], time: 1.03)
+
+        XCTAssertNil(state.snapshot(at: 1.03))
+        XCTAssertNil(state.snapshot(at: 1.08))
+    }
+
+    func testKeyboardStateKeepsReleasedKeyBrieflyWhenModifiersRemainHeld() {
+        let state = RecordingOverlayKeyboardState(releaseLingerDuration: 0.16)
+
+        let modifiers: NSEvent.ModifierFlags = [.command, .shift]
+        state.updateModifierFlags(modifiers, time: 1)
+        state.keyDown(keyCode: 0, label: "A", modifierFlags: modifiers, time: 1.02)
+        state.keyUp(keyCode: 0, modifierFlags: modifiers, time: 1.04)
+
+        XCTAssertEqual(state.snapshot(at: 1.08)?.label, "⌘⇧A")
+        XCTAssertEqual(state.snapshot(at: 1.24)?.label, "⌘⇧")
+
+        state.updateModifierFlags([], time: 1.25)
+        XCTAssertNil(state.snapshot(at: 1.25))
+    }
+
     func testEventStoreReturnsOnlyActiveEvents() {
         let store = RecordingOverlayEventStore()
         store.recordClick(at: CGPoint(x: 10, y: 10), time: 1)
-        store.recordKey(label: "A", time: 1)
+        store.recordKeyDown(keyCode: 0, label: "A", modifierFlags: [], time: 1)
 
         XCTAssertEqual(store.snapshot(at: 1.2).clicks.count, 1)
         XCTAssertEqual(store.snapshot(at: 1.2).keyHint?.label, "A")
         XCTAssertEqual(store.snapshot(at: 2.2).clicks.count, 0)
-        XCTAssertNil(store.snapshot(at: 2.2).keyHint)
+        XCTAssertEqual(store.snapshot(at: 2.2).keyHint?.label, "A")
+        store.recordKeyUp(keyCode: 0, modifierFlags: [], time: 2.3)
+        XCTAssertNil(store.snapshot(at: 2.5).keyHint)
     }
 
     func testRendererChangesPixelsWhenClickOverlayIsActive() throws {
@@ -42,6 +130,34 @@ final class RecordingOverlayRendererTests: XCTestCase {
         let rendered = try XCTUnwrap(renderer.render(pixelBuffer: source, at: CMTime(seconds: 1.1, preferredTimescale: 600)))
 
         XCTAssertNotEqual(pixel(at: CGPoint(x: 40, y: 40), in: rendered), pixel(at: CGPoint(x: 40, y: 40), in: source))
+    }
+
+    func testRendererDrawsKeyboardHintFromBackgroundQueue() throws {
+        let source = try makePixelBuffer(width: 180, height: 120, fill: (30, 30, 30, 255))
+        let store = RecordingOverlayEventStore()
+        store.recordTransientKey(label: "⌘⇧A", time: 1)
+        let renderer = RecordingOverlayRenderer(eventStore: store, pixelSize: CGSize(width: 180, height: 120))
+
+        let rendered = DispatchQueue.global(qos: .userInitiated).sync {
+            renderer.render(pixelBuffer: source, at: CMTime(seconds: 1.1, preferredTimescale: 600))
+        }
+
+        let output = try XCTUnwrap(rendered)
+        XCTAssertNotEqual(pixel(at: CGPoint(x: 90, y: 84), in: output), pixel(at: CGPoint(x: 90, y: 84), in: source))
+    }
+
+    func testRendererKeepsHeldKeyboardHintVisibleUntilKeyUp() throws {
+        let source = try makePixelBuffer(width: 220, height: 140, fill: (30, 30, 30, 255))
+        let store = RecordingOverlayEventStore()
+        store.recordKeyDown(keyCode: 0, label: "A", modifierFlags: [.command, .shift], time: 1)
+        let renderer = RecordingOverlayRenderer(eventStore: store, pixelSize: CGSize(width: 220, height: 140))
+
+        let heldOutput = try XCTUnwrap(renderer.render(pixelBuffer: source, at: CMTime(seconds: 10, preferredTimescale: 600)))
+        XCTAssertNotEqual(pixel(at: CGPoint(x: 110, y: 98), in: heldOutput), pixel(at: CGPoint(x: 110, y: 98), in: source))
+
+        store.recordKeyUp(keyCode: 0, modifierFlags: [], time: 10.1)
+        let releasedOutput = try XCTUnwrap(renderer.render(pixelBuffer: source, at: CMTime(seconds: 10.3, preferredTimescale: 600)))
+        XCTAssertTrue(releasedOutput === source)
     }
 
     func testRendererReturnsOriginalBufferWhenNoOverlayIsActive() throws {

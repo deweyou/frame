@@ -23,7 +23,7 @@ Screenshots are often a tiny step inside a larger workflow: explaining an idea, 
 - PNG output: saved files use the `Frame yyyy-MM-dd HH.mm.ss.png` filename format.
 - Clipboard copy: copy the captured image for pasting into chat, docs, or other apps.
 - Desktop save: save the PNG to the current user's Desktop.
-- Selection recording: switch the selection HUD into recording mode, choose MP4 or GIF, show or hide the cursor, pause or resume, and stop from the HUD or the red menu bar recording item.
+- Selection recording: switch the selection HUD into recording mode, choose MP4 or GIF, show or hide mouse cursor and click highlights together, record held-key hints, and stop, restart, or delete from the recording HUD or red menu bar recording item.
 - Recording output: copy the recorded file, download it to the configured save folder, or open a playable preview. Edit is visible but pending.
 - Local capture history: recover recent captures from the menu bar. History is enabled by default, keeps captures for 7 days, and uses a 2 GB local cache limit.
 - Multi-display selection: show capture overlays across connected displays and account for Retina scale and screen coordinates.

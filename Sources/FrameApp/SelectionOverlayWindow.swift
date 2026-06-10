@@ -90,6 +90,14 @@ final class SelectionOverlayWindow {
         overlayView.hudButtonImageDescriptionsForTesting()
     }
 
+    func hudButtonSlashStatesForTesting() -> [String: Bool] {
+        overlayView.hudButtonSlashStatesForTesting()
+    }
+
+    func hudButtonIconPointSizesForTesting() -> [String: CGFloat] {
+        overlayView.hudButtonIconPointSizesForTesting()
+    }
+
     func hudButtonLayoutMetricsForTesting() -> (buttonWidth: CGFloat, hoverDiameter: CGFloat, screenshotModeWidth: CGFloat) {
         overlayView.hudButtonLayoutMetricsForTesting()
     }
@@ -160,6 +168,14 @@ final class SelectionOverlayWindow {
 
     func tooltipLayoutForTesting(text: String) -> (size: CGSize, textFrame: CGRect) {
         overlayView.tooltipLayoutForTesting(text: text)
+    }
+
+    func tooltipColorsForTesting() -> (foreground: NSColor, background: NSColor) {
+        overlayView.tooltipColorsForTesting()
+    }
+
+    func setTooltipThemeForTesting(_ theme: String) {
+        overlayView.setTooltipThemeForTesting(theme)
     }
 
     func clearSelection() {
@@ -663,7 +679,7 @@ private final class SelectionOverlayView: NSView {
         [
             makeStartRecordingButton(),
             makeRecordingFormatButton(),
-            makeShowCursorButton(),
+            makeShowMouseClickHighlightsButton(),
             makeShowKeyboardHintsButton(),
         ]
     }
@@ -790,15 +806,17 @@ private final class SelectionOverlayView: NSView {
         return button
     }
 
-    private func makeShowCursorButton() -> HUDIconButton {
+    private func makeShowMouseClickHighlightsButton() -> HUDIconButton {
+        let showsMouseHints = currentRecordingOptions.showsCursor || currentRecordingOptions.showsMouseClickHighlights
         let button = HUDIconButton(
-            symbolName: currentRecordingOptions.showsCursor ? "cursorarrow" : "cursorarrow.slash",
-            accessibilityDescription: "显示鼠标指针"
+            symbolName: "cursorarrow.rays",
+            accessibilityDescription: "显示鼠标提示",
+            showsSlashOverlay: !showsMouseHints
         )
         button.target = self
-        button.action = #selector(showCursorButtonClicked)
+        button.action = #selector(showMouseClickHighlightsButtonClicked)
         button.onHoverChange = { [weak self, weak button] isHovering in
-            self?.setHUDTooltip(isHovering ? "显示鼠标指针" : nil, anchorView: button)
+            self?.setHUDTooltip(isHovering ? "显示鼠标提示" : nil, anchorView: button)
         }
         button.contentTintColor = hudTheme.foregroundColor
         return button
@@ -806,8 +824,10 @@ private final class SelectionOverlayView: NSView {
 
     private func makeShowKeyboardHintsButton() -> HUDIconButton {
         let button = HUDIconButton(
-            symbolName: currentRecordingOptions.showsKeyboardHints ? "keyboard" : "keyboard.badge.eye.slash",
-            accessibilityDescription: "显示键盘提示"
+            symbolName: "keyboard.badge.eye",
+            accessibilityDescription: "显示键盘提示",
+            iconPointSize: 14.5,
+            showsSlashOverlay: !currentRecordingOptions.showsKeyboardHints
         )
         button.target = self
         button.action = #selector(showKeyboardHintsButtonClicked)
@@ -916,7 +936,9 @@ private final class SelectionOverlayView: NSView {
         placeholderView.layer?.backgroundColor = theme.backgroundColor.cgColor
         placeholderLabel.textColor = theme.foregroundColor
         for button in modeView.subviews.compactMap({ $0 as? HUDIconButton }) {
-            button.contentTintColor = hudTintColor(for: button, theme: theme)
+            let tintColor = hudTintColor(for: button, theme: theme)
+            button.contentTintColor = tintColor
+            button.slashColor = tintColor
             button.hoverColor = theme.hoverColor
         }
         updateRecordingElapsedColor()
@@ -932,7 +954,10 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func hudTintColor(for button: HUDIconButton, theme: HUDTheme) -> NSColor {
-        button.accessibilityLabel() == "停止录制" ? .systemRed : theme.foregroundColor
+        if button.accessibilityLabel() == "停止录制" {
+            return .systemRed
+        }
+        return theme.foregroundColor
     }
 
     private func updateRecordingElapsedColor() {
@@ -1129,8 +1154,9 @@ private final class SelectionOverlayView: NSView {
         updateRecordingOptions(format: newFormat)
     }
 
-    @objc private func showCursorButtonClicked() {
-        updateRecordingOptions(showsCursor: !currentRecordingOptions.showsCursor)
+    @objc private func showMouseClickHighlightsButtonClicked() {
+        let showsMouseHints = currentRecordingOptions.showsCursor || currentRecordingOptions.showsMouseClickHighlights
+        updateRecordingOptions(showsCursor: !showsMouseHints, showsMouseClickHighlights: !showsMouseHints)
     }
 
     @objc private func showKeyboardHintsButtonClicked() {
@@ -1158,11 +1184,13 @@ private final class SelectionOverlayView: NSView {
     private func updateRecordingOptions(
         format: RecordingFormat? = nil,
         showsCursor: Bool? = nil,
+        showsMouseClickHighlights: Bool? = nil,
         showsKeyboardHints: Bool? = nil
     ) {
         currentRecordingOptions = RecordingOptions(
             format: format ?? currentRecordingOptions.format,
             showsCursor: showsCursor ?? currentRecordingOptions.showsCursor,
+            showsMouseClickHighlights: showsMouseClickHighlights ?? currentRecordingOptions.showsMouseClickHighlights,
             showsKeyboardHints: showsKeyboardHints ?? currentRecordingOptions.showsKeyboardHints,
             audioSource: currentRecordingOptions.audioSource
         )
@@ -1437,6 +1465,26 @@ private final class SelectionOverlayView: NSView {
             .map(\.symbolName)
     }
 
+    func hudButtonSlashStatesForTesting() -> [String: Bool] {
+        Dictionary(
+            uniqueKeysWithValues: modeView.subviews
+                .compactMap { $0 as? HUDIconButton }
+                .compactMap { button in
+                    button.accessibilityLabel().map { ($0, button.showsSlashOverlay) }
+                }
+        )
+    }
+
+    func hudButtonIconPointSizesForTesting() -> [String: CGFloat] {
+        Dictionary(
+            uniqueKeysWithValues: modeView.subviews
+                .compactMap { $0 as? HUDIconButton }
+                .compactMap { button in
+                    button.accessibilityLabel().map { ($0, button.iconPointSize) }
+                }
+        )
+    }
+
     func hudButtonLayoutMetricsForTesting() -> (buttonWidth: CGFloat, hoverDiameter: CGFloat, screenshotModeWidth: CGFloat) {
         (
             buttonWidth: buttonWidth,
@@ -1465,8 +1513,8 @@ private final class SelectionOverlayView: NSView {
             startRecordingButtonClicked()
         case "MP4", "GIF":
             recordingFormatButtonClicked()
-        case "显示鼠标指针":
-            showCursorButtonClicked()
+        case "显示鼠标提示", "显示鼠标指针", "显示点击提示":
+            showMouseClickHighlightsButtonClicked()
         case "显示键盘提示":
             showKeyboardHintsButtonClicked()
         case "暂停":
@@ -1539,6 +1587,14 @@ private final class SelectionOverlayView: NSView {
 
     func tooltipLayoutForTesting(text: String) -> (size: CGSize, textFrame: CGRect) {
         tooltipView.layoutMetrics(for: text)
+    }
+
+    func tooltipColorsForTesting() -> (foreground: NSColor, background: NSColor) {
+        tooltipView.colorsForTesting()
+    }
+
+    func setTooltipThemeForTesting(_ theme: String) {
+        tooltipView.applyTheme(theme == "darkContent" ? .darkContent : .lightContent)
     }
 
     private var displayedLocalRect: CGRect? {
@@ -2265,6 +2321,8 @@ private final class HUDIconButton: NSButton {
     static let hoverDiameter: CGFloat = 36
 
     let symbolName: String
+    let showsSlashOverlay: Bool
+    let iconPointSize: CGFloat
     var preferredHUDWidth: CGFloat = 36
     var isPrimaryAction = false {
         didSet {
@@ -2273,11 +2331,17 @@ private final class HUDIconButton: NSButton {
     }
     private let hoverLayer = CALayer()
     private let primaryLayer = CALayer()
+    private let slashLayer = CAShapeLayer()
     private var trackingArea: NSTrackingArea?
     var onHoverChange: ((Bool) -> Void)?
     var hoverColor: NSColor = HUDTheme.lightContent.hoverColor {
         didSet {
             hoverLayer.backgroundColor = hoverColor.cgColor
+        }
+    }
+    var slashColor: NSColor = HUDTheme.lightContent.foregroundColor {
+        didSet {
+            slashLayer.strokeColor = slashColor.cgColor
         }
     }
     private var isHovering = false {
@@ -2286,15 +2350,23 @@ private final class HUDIconButton: NSButton {
         }
     }
 
-    init(symbolName: String, accessibilityDescription: String) {
+    init(
+        symbolName: String,
+        accessibilityDescription: String,
+        iconPointSize: CGFloat = 17,
+        showsSlashOverlay: Bool = false
+    ) {
         self.symbolName = symbolName
+        self.showsSlashOverlay = showsSlashOverlay
+        self.iconPointSize = iconPointSize
         super.init(frame: .zero)
 
         title = ""
         image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription)
+            ?? NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: accessibilityDescription)
         imagePosition = .imageOnly
         imageScaling = .scaleNone
-        symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
+        symbolConfiguration = NSImage.SymbolConfiguration(pointSize: iconPointSize, weight: .semibold)
         bezelStyle = .regularSquare
         isBordered = false
         setButtonType(.momentaryChange)
@@ -2307,6 +2379,12 @@ private final class HUDIconButton: NSButton {
         hoverLayer.backgroundColor = hoverColor.cgColor
         hoverLayer.opacity = 0
         layer?.insertSublayer(hoverLayer, above: primaryLayer)
+        slashLayer.fillColor = nil
+        slashLayer.strokeColor = slashColor.cgColor
+        slashLayer.lineCap = .round
+        slashLayer.lineWidth = 2.5
+        slashLayer.isHidden = !showsSlashOverlay
+        layer?.insertSublayer(slashLayer, above: hoverLayer)
         setAccessibilityLabel(accessibilityDescription)
     }
 
@@ -2332,6 +2410,16 @@ private final class HUDIconButton: NSButton {
             x: bounds.midX,
             y: bounds.midY
         )
+        slashLayer.frame = CGRect(
+            x: bounds.midX - 11,
+            y: bounds.midY - 11,
+            width: 22,
+            height: 22
+        )
+        let slashPath = CGMutablePath()
+        slashPath.move(to: CGPoint(x: 5, y: 17))
+        slashPath.addLine(to: CGPoint(x: 17, y: 5))
+        slashLayer.path = slashPath
         updatePrimaryAppearance()
     }
 
@@ -2467,6 +2555,7 @@ private final class CountdownView: NSView {
 
 private final class HUDTooltipView: NSView {
     private var foregroundColor = NSColor.white
+    private var backgroundColor = NSColor.black.withAlphaComponent(0.42)
     private let font = NSFont.systemFont(ofSize: 11, weight: .medium)
     private let horizontalPadding: CGFloat = 9
     private let verticalPadding: CGFloat = 5
@@ -2536,14 +2625,20 @@ private final class HUDTooltipView: NSView {
     }
 
     func applyTheme(_ theme: HUDTheme) {
-        foregroundColor = theme.foregroundColor
-        layer?.backgroundColor = switch theme {
+        switch theme {
         case .lightContent:
-            NSColor.black.withAlphaComponent(0.42).cgColor
+            foregroundColor = .white.withAlphaComponent(0.92)
+            backgroundColor = .black.withAlphaComponent(0.42)
         case .darkContent:
-            NSColor.white.withAlphaComponent(0.64).cgColor
+            foregroundColor = .black.withAlphaComponent(0.86)
+            backgroundColor = .white.withAlphaComponent(0.92)
         }
+        layer?.backgroundColor = backgroundColor.cgColor
         needsDisplay = true
+    }
+
+    func colorsForTesting() -> (foreground: NSColor, background: NSColor) {
+        (foregroundColor, backgroundColor)
     }
 
     private var textAttributes: [NSAttributedString.Key: Any] {

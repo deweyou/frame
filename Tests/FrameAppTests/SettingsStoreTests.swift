@@ -134,6 +134,7 @@ final class SettingsStoreTests: XCTestCase {
         let options = RecordingOptions(
             format: .gif,
             showsCursor: false,
+            showsMouseClickHighlights: false,
             showsKeyboardHints: false,
             audioSource: .none
         )
@@ -141,6 +142,29 @@ final class SettingsStoreTests: XCTestCase {
         SettingsStore.setRecordingOptions(options, defaults: defaults)
 
         XCTAssertEqual(SettingsStore.recordingOptions(defaults: defaults), options)
+    }
+
+    func testRecordingOptionsMergePersistedCursorAndClickHighlightValues() {
+        let options = RecordingOptions(
+            format: .mp4,
+            showsCursor: false,
+            showsMouseClickHighlights: true,
+            showsKeyboardHints: false,
+            audioSource: .none
+        )
+
+        SettingsStore.setRecordingOptions(options, defaults: defaults)
+
+        XCTAssertEqual(
+            SettingsStore.recordingOptions(defaults: defaults),
+            RecordingOptions(
+                format: .mp4,
+                showsCursor: true,
+                showsMouseClickHighlights: true,
+                showsKeyboardHints: false,
+                audioSource: .none
+            )
+        )
     }
 
     func testRecordingOptionsFallbackWhenPersistedFormatIsInvalid() {

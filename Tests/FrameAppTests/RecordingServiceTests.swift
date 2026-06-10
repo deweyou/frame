@@ -67,10 +67,24 @@ final class RecordingServiceTests: XCTestCase {
         XCTAssertTrue(RecordingOverlayConfiguration(options: .defaults).recordsMouseClicks)
         XCTAssertTrue(RecordingOverlayConfiguration(options: .defaults).recordsKeyboardHints)
 
+        let clickHighlightsWithoutCursor = RecordingOverlayConfiguration(
+            options: RecordingOptions(
+                format: .mp4,
+                showsCursor: false,
+                showsMouseClickHighlights: true,
+                showsKeyboardHints: false,
+                audioSource: .none
+            )
+        )
+        XCTAssertTrue(clickHighlightsWithoutCursor.isEnabled)
+        XCTAssertTrue(clickHighlightsWithoutCursor.recordsMouseClicks)
+        XCTAssertFalse(clickHighlightsWithoutCursor.recordsKeyboardHints)
+
         let disabled = RecordingOverlayConfiguration(
             options: RecordingOptions(
                 format: .mp4,
                 showsCursor: false,
+                showsMouseClickHighlights: false,
                 showsKeyboardHints: false,
                 audioSource: .none
             )
@@ -127,6 +141,8 @@ private final class FakeRecordingSession: RecordingSessionControlling, @unchecke
     func cancel() async {
         state = .finished
     }
+
+    func recordKeyboardHint(_ label: String) {}
 
     func stop() async throws -> CapturedRecording {
         state = .finished
