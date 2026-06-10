@@ -25,6 +25,8 @@ final class RecordingBoundaryOverlayControllerTests: XCTestCase {
             rect.integral.offsetBy(dx: -screenFrame.minX, dy: -screenFrame.minY)
         )
         XCTAssertEqual(controller.preparationStateForTesting(), .loading)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(controller.preparationIndicatorFrameForTesting()).width, 32)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(controller.preparationIndicatorFrameForTesting()).height, 32)
         controller.updatePreparationState(nil)
         XCTAssertNil(controller.preparationStateForTesting())
         XCTAssertEqual(controller.ignoresMouseEventsForTesting(), true)

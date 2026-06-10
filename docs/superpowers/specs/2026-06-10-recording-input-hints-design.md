@@ -3,8 +3,8 @@
 ## Goal
 
 Align Frame recording input hints with the CleanShot X style of lightweight
-recording enhancements: users can record the cursor, highlight mouse clicks in
-the output, and show keyboard shortcuts during recording without reopening the
+recording enhancements: users can enable mouse cursor plus click highlights
+together, and show keyboard shortcuts during recording without reopening the
 selection flow by accident.
 
 This extends the selection recording workflow from
@@ -17,10 +17,9 @@ In scope:
 
 - Prevent screenshot shortcut re-entry while Frame is selecting, counting down,
   actively recording, paused, or finalizing a recording.
-- Keep the existing cursor visibility option and make it part of the same input
-  hints model.
-- Add mouse click highlights that are visible in the recorded output.
-- Add real keyboard shortcut hints during recording.
+- Merge cursor visibility and mouse click highlights into one compact mouse
+  hint control.
+- Add real keyboard input hints during recording.
 - Keep input hint controls compact and compatible with the existing recording
   setup HUD.
 
@@ -33,28 +32,24 @@ Out of scope:
 
 ## Product Behavior
 
-Frame recording setup should expose input hints as separate choices:
+Frame recording setup should expose input hints as compact choices:
 
-- Show cursor: include or omit the system pointer in the recorded video.
-- Highlight clicks: render a short click ripple at the click location and include
-  it in the recorded video.
-- Show keyboard shortcuts: show compact keycaps for shortcut-style input while
-  recording.
+- Show mouse hints: include or omit the system pointer and click ripple in the
+  recorded video together.
+- Show keyboard input: show keycaps for currently held keys and key combinations
+  while recording.
 
 The defaults should favor useful demos without surprising sensitive capture:
 
-- Show cursor defaults to on.
-- Highlight clicks defaults to on.
-- Keyboard shortcuts default to on, but only shortcut-style keys are shown by
-  default: keys with Command, Control, Option, Shift, or named non-text keys such
-  as Escape, Return, Tab, arrows, Space, and Delete.
-- Plain text typing is not shown in this version.
+- Mouse hints default to on.
+- Keyboard hints default to on and show any currently held key. Modifier-only
+  states should appear as they are pressed, then combine with subsequent keys.
 
 Keyboard hints can appear in the recorded output when enabled because CleanShot X
-positions keystrokes as an output enhancement. Frame should still avoid exposing
-plain typed text. The hint surface should be compact, bottom-centered inside the
-recorded region when space allows, and omitted when the key event occurs outside
-the active recording state.
+positions keystrokes as an output enhancement. Frame records keycap labels rather
+than typed text fields; users can disable keyboard hints before sensitive input.
+The hint surface should be bottom-centered inside the recorded region when space
+allows, and omitted when the key event occurs outside the active recording state.
 
 Mouse click highlights should appear only when the click lands inside the
 recorded selection. Left and right clicks may share the same first version style:
@@ -89,7 +84,7 @@ code into `AppDelegate`.
 Proposed components:
 
 - `RecordingInputHintOptions` in `FrameCore`, or an extension to
-  `RecordingOptions`, for cursor, click highlight, and keyboard hint choices.
+  `RecordingOptions`, for unified mouse hints and keyboard hint choices.
 - `RecordingInputMonitor` in `FrameApp`, responsible for local/global mouse and
   keyboard event observation during active recording only.
 - `RecordingClickHighlightOverlayController`, responsible for drawing click
@@ -119,8 +114,9 @@ the recorded selection are ignored. Events inside the selection create a ripple
 using the click location converted into the recording overlay's coordinate
 space.
 
-Keyboard monitoring should observe key-down events during active recording. It
-should build a display string from modifiers and the key:
+Keyboard monitoring should observe modifier changes, key-down, and key-up events
+during active recording. It should build a display string from currently held
+modifiers and keys:
 
 - Command: `⌘`
 - Shift: `⇧`
@@ -132,8 +128,9 @@ should build a display string from modifiers and the key:
 - Delete: `Delete`
 - Arrow keys: `↑`, `↓`, `←`, `→`
 
-Repeated key-down events from key repeat should refresh the same hint rather
-than stacking duplicates.
+Repeated key-down events from key repeat should refresh the same held key rather
+than stacking duplicates. Releasing a key should remove it from the displayed
+hint; releasing all keys should hide the hint.
 
 ## Visual Design
 
@@ -149,7 +146,8 @@ Keyboard hint:
 - HUD-style rounded keycaps or a compact pill.
 - Monospaced or system semibold text.
 - Bottom-center placement inside the recorded selection when possible.
-- Short hold time, roughly 900 to 1200 ms after the last shortcut event.
+- Held-key hints remain visible while keys are pressed. Transient fallback hints
+  may fade after roughly 900 to 1200 ms.
 
 Both surfaces must scale with display backing scale so output looks crisp on
 Retina displays.
@@ -175,6 +173,6 @@ Manual verification should include:
   highlight appears in the saved MP4/GIF.
 - Click outside the selected region and confirm no highlight appears in the
   output.
-- Press shortcuts during recording and confirm only shortcut-style input is
-  shown.
+- Press keys during recording and confirm ordinary keys, modifier-only states,
+  combinations, named keys, and arrow keys are shown while held.
 - Confirm stop controls and recording boundary are not recorded into the output.

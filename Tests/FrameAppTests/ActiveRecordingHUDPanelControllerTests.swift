@@ -116,13 +116,12 @@ final class ActiveRecordingHUDPanelControllerTests: XCTestCase {
         XCTAssertTrue(controller.performButtonActionForTesting(accessibilityLabel: "停止录制"))
         XCTAssertTrue(controller.performButtonActionForTesting(accessibilityLabel: "重新开始"))
         XCTAssertTrue(controller.performButtonActionForTesting(accessibilityLabel: "删除录制"))
-        XCTAssertTrue(controller.performButtonActionForTesting(accessibilityLabel: "确认删除"))
         XCTAssertTrue(didStop)
         XCTAssertTrue(didRestart)
         XCTAssertTrue(didDelete)
     }
 
-    func testDeleteRequiresSecondConfirmationClick() {
+    func testDeleteInvokesImmediately() {
         let controller = ActiveRecordingHUDPanelController()
         defer {
             controller.close()
@@ -139,14 +138,7 @@ final class ActiveRecordingHUDPanelControllerTests: XCTestCase {
         )
 
         XCTAssertTrue(controller.performButtonActionForTesting(accessibilityLabel: "删除录制"))
-        XCTAssertFalse(didDelete)
-        XCTAssertEqual(controller.buttonLabelsForTesting(), ["停止录制", "重新开始", "确认删除"])
-        XCTAssertEqual(
-            controller.buttonTintColorForTesting(accessibilityLabel: "确认删除"),
-            ActiveRecordingHUDPanelController.recordingAccentColor
-        )
-
-        XCTAssertTrue(controller.performButtonActionForTesting(accessibilityLabel: "确认删除"))
         XCTAssertTrue(didDelete)
+        XCTAssertEqual(controller.buttonLabelsForTesting(), ["停止录制", "重新开始", "删除录制"])
     }
 }

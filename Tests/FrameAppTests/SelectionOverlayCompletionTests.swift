@@ -97,8 +97,39 @@ final class SelectionOverlayCompletionTests: XCTestCase {
         XCTAssertEqual(window.recordingHUDModeForTesting(), "setup")
         XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("开始录制"))
         XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("MP4"))
-        XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("显示鼠标指针"))
+        XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("显示鼠标提示"))
+        XCTAssertFalse(window.hudButtonAccessibilityLabelsForTesting().contains("显示鼠标指针"))
+        XCTAssertFalse(window.hudButtonAccessibilityLabelsForTesting().contains("显示点击提示"))
         XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("显示键盘提示"))
+    }
+
+    @MainActor
+    func testRecordingKeyboardHintButtonKeepsVisibleIconWhenDisabled() throws {
+        SettingsStore.setRecordingOptions(.defaults)
+        defer {
+            SettingsStore.setRecordingOptions(.defaults)
+        }
+
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        let window = try makeOverlayWindowForTesting(
+            initialGlobalRect: CGRect(
+                x: screen.frame.minX + 20,
+                y: screen.frame.minY + 20,
+                width: 240,
+                height: 160
+            )
+        )
+
+        XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "录屏"))
+        XCTAssertTrue(window.hudButtonImageDescriptionsForTesting().contains("keyboard.badge.eye"))
+        XCTAssertEqual(window.hudButtonSlashStatesForTesting()["显示键盘提示"], false)
+        XCTAssertEqual(window.hudButtonIconPointSizesForTesting()["显示键盘提示"], 14.5)
+        XCTAssertEqual(window.hudButtonIconPointSizesForTesting()["显示鼠标提示"], 17)
+
+        XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "显示键盘提示"))
+
+        XCTAssertTrue(window.hudButtonImageDescriptionsForTesting().contains("keyboard.badge.eye"))
+        XCTAssertEqual(window.hudButtonSlashStatesForTesting()["显示键盘提示"], true)
     }
 
     @MainActor
@@ -146,6 +177,38 @@ final class SelectionOverlayCompletionTests: XCTestCase {
         XCTAssertEqual(startedSelection?.rect, window.activeSelectionForTesting()?.rect)
         XCTAssertEqual(startedOptions, RecordingOptions.defaults)
         XCTAssertNil(completion)
+    }
+
+    @MainActor
+    func testRecordingSetupMouseHintButtonTogglesCursorAndClickHighlightOptionsTogether() throws {
+        SettingsStore.setRecordingOptions(.defaults)
+        defer {
+            SettingsStore.setRecordingOptions(.defaults)
+        }
+
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        var startedOptions: RecordingOptions?
+        let window = try makeOverlayWindowForTesting(
+            initialGlobalRect: CGRect(
+                x: screen.frame.minX + 20,
+                y: screen.frame.minY + 20,
+                width: 240,
+                height: 160
+            ),
+            onStartRecording: { _, options in
+                startedOptions = options
+            }
+        )
+
+        XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "录屏"))
+        XCTAssertFalse(window.performHUDActionForTesting(accessibilityLabel: "显示鼠标指针"))
+        XCTAssertFalse(window.performHUDActionForTesting(accessibilityLabel: "显示点击提示"))
+        XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "显示鼠标提示"))
+        XCTAssertEqual(window.hudButtonSlashStatesForTesting()["显示鼠标提示"], true)
+        XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "开始录制"))
+
+        XCTAssertEqual(startedOptions?.showsCursor, false)
+        XCTAssertEqual(startedOptions?.showsMouseClickHighlights, false)
     }
 
     @MainActor
@@ -221,6 +284,21 @@ final class SelectionOverlayCompletionTests: XCTestCase {
 
         XCTAssertEqual(leftPadding, rightPadding, accuracy: 0.5)
         XCTAssertGreaterThanOrEqual(leftPadding, 9)
+    }
+
+    @MainActor
+    func testHUDTooltipUsesContrastingTextForThemeBackground() throws {
+        let window = try makeOverlayWindowForTesting()
+
+        window.setTooltipThemeForTesting("lightContent")
+        let darkTooltip = window.tooltipColorsForTesting()
+        XCTAssertLessThan(darkTooltip.background.relativeLuminanceForTesting, 0.2)
+        XCTAssertGreaterThan(darkTooltip.foreground.relativeLuminanceForTesting, 0.8)
+
+        window.setTooltipThemeForTesting("darkContent")
+        let lightTooltip = window.tooltipColorsForTesting()
+        XCTAssertGreaterThan(lightTooltip.background.relativeLuminanceForTesting, 0.8)
+        XCTAssertLessThan(lightTooltip.foreground.relativeLuminanceForTesting, 0.2)
     }
 
     @MainActor
@@ -335,4 +413,13 @@ final class SelectionOverlayCompletionTests: XCTestCase {
 @MainActor
 private final class CompletionBox {
     var completion: SelectionOverlayCompletion?
+}
+
+private extension NSColor {
+    var relativeLuminanceForTesting: CGFloat {
+        let color = usingColorSpace(.deviceRGB) ?? self
+        return 0.2126 * color.redComponent
+            + 0.7152 * color.greenComponent
+            + 0.0722 * color.blueComponent
+    }
 }

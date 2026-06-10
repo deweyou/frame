@@ -5,6 +5,89 @@ import XCTest
 
 @MainActor
 final class AppDelegateRecordingTests: XCTestCase {
+    func testCaptureFlowIgnoresRepeatedShortcutWhileSelectionIsActive() {
+        _ = NSApplication.shared
+        let selectionOverlay = SpySelectionOverlayController()
+        var beepCount = 0
+        let delegate = AppDelegate(
+            selectionOverlayController: selectionOverlay,
+            hasScreenRecordingAccess: { true },
+            showMissingScreenRecordingPermission: {},
+            playInvalidActionFeedback: { beepCount += 1 }
+        )
+
+        XCTAssertTrue(delegate.startCaptureFlowForTesting())
+        XCTAssertEqual(selectionOverlay.startSelectionCallCount, 1)
+
+        XCTAssertFalse(delegate.startCaptureFlowForTesting())
+
+        XCTAssertEqual(selectionOverlay.startSelectionCallCount, 1)
+        XCTAssertEqual(beepCount, 1)
+    }
+
+    func testCaptureFlowIgnoresShortcutWhileRecordingIsActive() async throws {
+        _ = NSApplication.shared
+        let recordingService = SpyRecordingService()
+        let selectionOverlay = SpySelectionOverlayController()
+        var beepCount = 0
+        let delegate = AppDelegate(
+            selectionOverlayController: selectionOverlay,
+            recordingService: recordingService,
+            hasScreenRecordingAccess: { true },
+            showMissingScreenRecordingPermission: {},
+            playInvalidActionFeedback: { beepCount += 1 }
+        )
+        defer {
+            delegate.finishActiveRecordingForTesting()
+        }
+
+        delegate.startRecordingForTesting(
+            selection: SelectionCapture(
+                rect: CGRect(x: 40, y: 60, width: 320, height: 180),
+                kind: .region
+            ),
+            options: .defaults
+        )
+        try await waitUntil {
+            recordingService.sessions.count == 1
+        }
+
+        XCTAssertFalse(delegate.startCaptureFlowForTesting())
+
+        XCTAssertEqual(selectionOverlay.startSelectionCallCount, 0)
+        XCTAssertEqual(beepCount, 1)
+    }
+
+    func testCaptureFlowRecordsShortcutHintWhileRecordingIsActive() async throws {
+        _ = NSApplication.shared
+        let recordingService = SpyRecordingService()
+        let delegate = AppDelegate(
+            recordingService: recordingService,
+            hasScreenRecordingAccess: { true },
+            showMissingScreenRecordingPermission: {},
+            playInvalidActionFeedback: {}
+        )
+        defer {
+            delegate.finishActiveRecordingForTesting()
+        }
+
+        delegate.startRecordingForTesting(
+            selection: SelectionCapture(
+                rect: CGRect(x: 40, y: 60, width: 320, height: 180),
+                kind: .region
+            ),
+            options: .defaults
+        )
+        try await waitUntil {
+            recordingService.sessions.count == 1
+        }
+        let session = try XCTUnwrap(recordingService.sessions.first)
+
+        XCTAssertFalse(delegate.startCaptureFlowForTesting())
+
+        XCTAssertEqual(session.recordedKeyboardHints, ["⌘⇧A"])
+    }
+
     func testRecordingStartDoesNotShowStaticKeyboardHintOverlay() async throws {
         _ = NSApplication.shared
         let recordingService = SpyRecordingService()
@@ -58,7 +141,7 @@ final class AppDelegateRecordingTests: XCTestCase {
 
         delegate.startRecordingForTesting(selection: selection, options: options)
         try await waitUntil {
-            recordingService.sessions.count == 1
+            recordingService.sessions.count == 1 && delegate.hasActiveRecordingForTesting()
         }
         let firstSession = try XCTUnwrap(recordingService.sessions.first)
 
@@ -69,8 +152,9 @@ final class AppDelegateRecordingTests: XCTestCase {
 
         XCTAssertEqual(firstSession.cancelCallCount, 1)
         XCTAssertEqual(recordingService.recordedRequests.count, 2)
-        XCTAssertEqual(recordingService.recordedRequests[1].selection, selection)
-        XCTAssertEqual(recordingService.recordedRequests[1].options, options)
+        let restartedRequest = try XCTUnwrap(recordingService.recordedRequests.dropFirst().first)
+        XCTAssertEqual(restartedRequest.selection, selection)
+        XCTAssertEqual(restartedRequest.options, options)
     }
 
     func testDeleteRecordingCancelsCurrentSessionWithoutRestarting() async throws {
@@ -143,6 +227,29 @@ final class AppDelegateRecordingTests: XCTestCase {
     }
 }
 
+@MainActor
+private final class SpySelectionOverlayController: SelectionOverlayControlling {
+    private(set) var startSelectionCallCount = 0
+    private var activeCompletion: ((SelectionOverlayCompletion?) -> Void)?
+
+    var isSelecting: Bool {
+        activeCompletion != nil
+    }
+
+    func startSelection(
+        strings: AppStrings,
+        onStartRecording: @escaping (SelectionOverlayWindow, SelectionCapture, RecordingOptions) -> Void,
+        completion: @escaping (SelectionOverlayCompletion?) -> Void
+    ) {
+        startSelectionCallCount += 1
+        activeCompletion = completion
+    }
+
+    func dismissSelectionForRecording() {
+        activeCompletion = nil
+    }
+}
+
 private final class SpyKeyboardHintOverlayController: KeyboardHintOverlayControlling {
     private(set) var showCalls: [(text: String, rect: CGRect)] = []
     private(set) var hideCallCount = 0
@@ -187,6 +294,7 @@ private final class SpyRecordingSession: RecordingSessionControlling, @unchecked
     private let lock = NSLock()
     private var currentState: RecordingSessionState = .recording
     private var cancelCalls = 0
+    private var keyboardHints: [String] = []
 
     var state: RecordingSessionState {
         lock.withLock {
@@ -197,6 +305,12 @@ private final class SpyRecordingSession: RecordingSessionControlling, @unchecked
     var cancelCallCount: Int {
         lock.withLock {
             cancelCalls
+        }
+    }
+
+    var recordedKeyboardHints: [String] {
+        lock.withLock {
+            keyboardHints
         }
     }
 
@@ -231,6 +345,12 @@ private final class SpyRecordingSession: RecordingSessionControlling, @unchecked
         lock.withLock {
             cancelCalls += 1
             currentState = .finished
+        }
+    }
+
+    func recordKeyboardHint(_ label: String) {
+        lock.withLock {
+            keyboardHints.append(label)
         }
     }
 }

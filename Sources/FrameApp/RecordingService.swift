@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import CoreMedia
 import FrameCore
 @preconcurrency import ScreenCaptureKit
@@ -33,6 +34,7 @@ protocol RecordingSessionControlling: AnyObject, Sendable {
     func resume() async throws
     func stop() async throws -> CapturedRecording
     func cancel() async
+    func recordKeyboardHint(_ label: String)
 }
 
 protocol RecordingServicing: Sendable {
@@ -146,7 +148,9 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
     private var encoder: RecordingFrameEncoding?
     private var outputURL: URL?
     private var overlayRenderer: RecordingOverlayRenderer?
+    private var overlayEventStore: RecordingOverlayEventStore?
     private var overlayEventMonitors: [Any] = []
+    private var keyboardEventTap: RecordingKeyboardEventTap?
     private var liveOverlayController: RecordingLiveOverlayController!
     private var startedAt = Date()
     private var isPaused = false
@@ -169,6 +173,7 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
         if overlayConfiguration.isEnabled {
             let eventStore = RecordingOverlayEventStore()
             overlayEventStore = eventStore
+            self.overlayEventStore = eventStore
             overlayRenderer = RecordingOverlayRenderer(eventStore: eventStore, pixelSize: pixelSize)
             liveOverlayWindowNumber = await MainActor.run {
                 liveOverlayController.show(
@@ -181,6 +186,7 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
             }
         } else {
             overlayEventStore = nil
+            self.overlayEventStore = nil
             overlayRenderer = nil
             liveOverlayWindowNumber = nil
         }
@@ -243,6 +249,7 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
                 liveOverlayController.close()
             }
             overlayRenderer = nil
+            self.overlayEventStore = nil
             throw error
         }
     }
@@ -277,6 +284,7 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
         let finalizedURL = try await encoder.finish()
         let byteSize = (try? FileManager.default.attributesOfItem(atPath: finalizedURL.path)[.size] as? NSNumber)?.intValue ?? 0
         setState(.finished)
+        overlayEventStore = nil
         return CapturedRecording(
             id: UUID(),
             fileURL: finalizedURL,
@@ -294,7 +302,19 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
             liveOverlayController.close()
         }
         try? await stream?.stopCapture()
+        overlayEventStore = nil
         setState(.finished)
+    }
+
+    func recordKeyboardHint(_ label: String) {
+        guard request.options.showsKeyboardHints else {
+            return
+        }
+
+        overlayEventStore?.recordTransientKey(
+            label: label,
+            time: ProcessInfo.processInfo.systemUptime
+        )
     }
 
     private func setState(_ state: RecordingSessionState) {
@@ -365,32 +385,77 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
         }
 
         if configuration.recordsKeyboardHints {
-            let keyHandler: (NSEvent) -> Void = { [weak eventStore] event in
-                eventStore?.recordKey(
+            let keyboardEventTap = RecordingKeyboardEventTap(eventStore: eventStore)
+            if keyboardEventTap.start() {
+                self.keyboardEventTap = keyboardEventTap
+                return
+            }
+
+            let flagsHandler: (NSEvent) -> Void = { [weak eventStore] event in
+                eventStore?.updateKeyboardModifierFlags(event.modifierFlags, time: event.timestamp)
+            }
+            let keyDownHandler: (NSEvent) -> Void = { [weak eventStore] event in
+                eventStore?.recordKeyDown(
+                    keyCode: event.keyCode,
                     label: RecordingOverlayKeyFormatter.label(
                         charactersIgnoringModifiers: event.charactersIgnoringModifiers,
-                        modifierFlags: event.modifierFlags
+                        keyCode: event.keyCode,
+                        modifierFlags: []
                     ),
+                    modifierFlags: event.modifierFlags,
                     time: event.timestamp
                 )
             }
-            if let globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: keyHandler) {
-                overlayEventMonitors.append(globalKeyMonitor)
+            let keyUpHandler: (NSEvent) -> Void = { [weak eventStore] event in
+                eventStore?.recordKeyUp(
+                    keyCode: event.keyCode,
+                    modifierFlags: event.modifierFlags,
+                    time: event.timestamp
+                )
             }
-            if let localKeyMonitor = NSEvent.addLocalMonitorForEvents(
-                matching: .keyDown,
+            if let globalFlagsMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged, handler: flagsHandler) {
+                overlayEventMonitors.append(globalFlagsMonitor)
+            }
+            if let globalKeyDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: keyDownHandler) {
+                overlayEventMonitors.append(globalKeyDownMonitor)
+            }
+            if let globalKeyUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyUp, handler: keyUpHandler) {
+                overlayEventMonitors.append(globalKeyUpMonitor)
+            }
+            if let localFlagsMonitor = NSEvent.addLocalMonitorForEvents(
+                matching: .flagsChanged,
                 handler: { event in
-                    keyHandler(event)
+                    flagsHandler(event)
                     return event
                 }
             ) {
-                overlayEventMonitors.append(localKeyMonitor)
+                overlayEventMonitors.append(localFlagsMonitor)
+            }
+            if let localKeyDownMonitor = NSEvent.addLocalMonitorForEvents(
+                matching: .keyDown,
+                handler: { event in
+                    keyDownHandler(event)
+                    return event
+                }
+            ) {
+                overlayEventMonitors.append(localKeyDownMonitor)
+            }
+            if let localKeyUpMonitor = NSEvent.addLocalMonitorForEvents(
+                matching: .keyUp,
+                handler: { event in
+                    keyUpHandler(event)
+                    return event
+                }
+            ) {
+                overlayEventMonitors.append(localKeyUpMonitor)
             }
         }
     }
 
     @MainActor
     private func removeOverlayEventMonitors() {
+        keyboardEventTap?.stop()
+        keyboardEventTap = nil
         for monitor in overlayEventMonitors {
             NSEvent.removeMonitor(monitor)
         }
@@ -401,6 +466,190 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
 private extension Int {
     var roundedDownToEven: Int {
         self - (self % 2)
+    }
+}
+
+final class RecordingKeyboardEventTap: @unchecked Sendable {
+    private weak var eventStore: RecordingOverlayEventStore?
+    private var eventTap: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
+    private var notificationObservers: [NSObjectProtocol] = []
+
+    init(eventStore: RecordingOverlayEventStore) {
+        self.eventStore = eventStore
+    }
+
+    deinit {
+        stop()
+    }
+
+    func start() -> Bool {
+        stop()
+        promptForAccessibilityIfNeeded()
+
+        let mask =
+            (1 << CGEventType.keyDown.rawValue)
+            | (1 << CGEventType.keyUp.rawValue)
+            | (1 << CGEventType.flagsChanged.rawValue)
+        let userInfo = Unmanaged.passUnretained(self).toOpaque()
+        guard let eventTap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .listenOnly,
+            eventsOfInterest: CGEventMask(mask),
+            callback: Self.handleEvent,
+            userInfo: userInfo
+        ) else {
+            NSLog("Frame 录屏键盘提示无法创建 CGEvent tap；可能需要在系统设置中允许 Accessibility/输入监听权限。")
+            return false
+        }
+
+        guard let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0) else {
+            CFMachPortInvalidate(eventTap)
+            return false
+        }
+
+        self.eventTap = eventTap
+        self.runLoopSource = runLoopSource
+        CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+        CGEvent.tapEnable(tap: eventTap, enable: true)
+        installRecoveryObservers()
+        return true
+    }
+
+    func stop() {
+        removeRecoveryObservers()
+        if let eventTap {
+            CGEvent.tapEnable(tap: eventTap, enable: false)
+            CFMachPortInvalidate(eventTap)
+        }
+        if let runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+        }
+        runLoopSource = nil
+        eventTap = nil
+    }
+
+    private func handle(type: CGEventType, event: CGEvent) {
+        guard let eventStore else {
+            return
+        }
+
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let eventTap {
+                CGEvent.tapEnable(tap: eventTap, enable: true)
+            }
+            return
+        }
+
+        let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+        let modifierFlags = Self.modifierFlags(from: event.flags)
+        let time = event.timestamp > 0
+            ? TimeInterval(event.timestamp) / 1_000_000_000
+            : ProcessInfo.processInfo.systemUptime
+
+        switch type {
+        case .flagsChanged:
+            if keyCode == 57 {
+                eventStore.recordTransientKey(label: "⇪", time: time)
+            } else if RecordingOverlayKeyFormatter.isModifierKeyCode(keyCode) {
+                eventStore.updateKeyboardModifierFlags(modifierFlags, time: time)
+            }
+        case .keyDown:
+            eventStore.recordKeyDown(
+                keyCode: keyCode,
+                label: RecordingOverlayKeyFormatter.label(
+                    charactersIgnoringModifiers: nil,
+                    keyCode: keyCode,
+                    modifierFlags: []
+                ),
+                modifierFlags: modifierFlags,
+                time: time
+            )
+        case .keyUp:
+            eventStore.recordKeyUp(keyCode: keyCode, modifierFlags: modifierFlags, time: time)
+        default:
+            break
+        }
+    }
+
+    static func modifierFlags(from flags: CGEventFlags) -> NSEvent.ModifierFlags {
+        var modifierFlags: NSEvent.ModifierFlags = []
+        if flags.contains(.maskCommand) {
+            modifierFlags.insert(.command)
+        }
+        if flags.contains(.maskShift) {
+            modifierFlags.insert(.shift)
+        }
+        if flags.contains(.maskAlternate) {
+            modifierFlags.insert(.option)
+        }
+        if flags.contains(.maskControl) {
+            modifierFlags.insert(.control)
+        }
+        if flags.contains(.maskAlphaShift) {
+            modifierFlags.insert(.capsLock)
+        }
+        if flags.contains(.maskSecondaryFn) {
+            modifierFlags.insert(.function)
+        }
+        return modifierFlags
+    }
+
+    private func installRecoveryObservers() {
+        removeRecoveryObservers()
+        let workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.reenableAfterSystemTransition()
+        }
+        let applicationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.reenableAfterSystemTransition()
+        }
+        notificationObservers = [workspaceObserver, applicationObserver]
+    }
+
+    private func removeRecoveryObservers() {
+        for observer in notificationObservers {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            NotificationCenter.default.removeObserver(observer)
+        }
+        notificationObservers.removeAll()
+    }
+
+    private func reenableAfterSystemTransition() {
+        guard let eventTap else {
+            return
+        }
+
+        if CFMachPortIsValid(eventTap) {
+            CGEvent.tapEnable(tap: eventTap, enable: true)
+        } else {
+            _ = start()
+        }
+    }
+
+    private func promptForAccessibilityIfNeeded() {
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+    }
+
+    private static let handleEvent: CGEventTapCallBack = { _, type, event, userInfo in
+        guard let userInfo else {
+            return Unmanaged.passUnretained(event)
+        }
+
+        let owner = Unmanaged<RecordingKeyboardEventTap>
+            .fromOpaque(userInfo)
+            .takeUnretainedValue()
+        owner.handle(type: type, event: event)
+        return Unmanaged.passUnretained(event)
     }
 }
 

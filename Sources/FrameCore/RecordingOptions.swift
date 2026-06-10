@@ -18,17 +18,20 @@ public enum RecordingAudioSource: String, CaseIterable, Sendable {
 public struct RecordingOptions: Equatable, Sendable {
     public let format: RecordingFormat
     public let showsCursor: Bool
+    public let showsMouseClickHighlights: Bool
     public let showsKeyboardHints: Bool
     public let audioSource: RecordingAudioSource
 
     public init(
         format: RecordingFormat,
         showsCursor: Bool,
+        showsMouseClickHighlights: Bool = true,
         showsKeyboardHints: Bool,
         audioSource: RecordingAudioSource
     ) {
         self.format = format
         self.showsCursor = showsCursor
+        self.showsMouseClickHighlights = showsMouseClickHighlights
         self.showsKeyboardHints = showsKeyboardHints
         self.audioSource = audioSource
     }
@@ -36,6 +39,7 @@ public struct RecordingOptions: Equatable, Sendable {
     public static let defaults = RecordingOptions(
         format: .mp4,
         showsCursor: true,
+        showsMouseClickHighlights: true,
         showsKeyboardHints: true,
         audioSource: .none
     )

@@ -63,6 +63,10 @@ final class RecordingBoundaryOverlayController {
         boundaryView?.preparationState
     }
 
+    func preparationIndicatorFrameForTesting() -> CGRect? {
+        boundaryView?.preparationIndicatorFrameForTesting()
+    }
+
     func ignoresMouseEventsForTesting() -> Bool? {
         panel?.ignoresMouseEvents
     }
@@ -92,9 +96,67 @@ enum RecordingPreparationState: Equatable {
     case loading
 }
 
+private final class RecordingPreparationSpinnerView: NSView {
+    private var timer: Timer?
+    private var phase: CGFloat = 0
+
+    override var isOpaque: Bool {
+        false
+    }
+
+    func startAnimating() {
+        guard timer == nil else {
+            return
+        }
+
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
+
+                phase = (phase + 0.075).truncatingRemainder(dividingBy: 1)
+                needsDisplay = true
+            }
+        }
+        self.timer = timer
+        RunLoop.main.add(timer, forMode: .common)
+        needsDisplay = true
+    }
+
+    func stopAnimating() {
+        timer?.invalidate()
+        timer = nil
+        phase = 0
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let radius = min(bounds.width, bounds.height) * 0.26
+        let lineWidth: CGFloat = 2.3
+        let startAngle = 360 * phase
+        let endAngle = startAngle + 250
+        let path = NSBezierPath()
+        path.appendArc(
+            withCenter: center,
+            radius: radius,
+            startAngle: startAngle,
+            endAngle: endAngle,
+            clockwise: false
+        )
+        path.lineWidth = lineWidth
+        path.lineCapStyle = .round
+        NSColor.white.withAlphaComponent(0.9).setStroke()
+        path.stroke()
+    }
+}
+
 private final class RecordingBoundaryView: NSView {
     private let selectionRect: CGRect
-    private let preparationIndicator = NSProgressIndicator()
+    private let preparationIndicator = RecordingPreparationSpinnerView()
     var preparationState: RecordingPreparationState? {
         didSet {
             updatePreparationIndicator()
@@ -132,21 +194,18 @@ private final class RecordingBoundaryView: NSView {
 
     private func configurePreparationIndicator() {
         preparationIndicator.isHidden = true
-        preparationIndicator.style = .spinning
-        preparationIndicator.controlSize = .regular
-        preparationIndicator.isIndeterminate = true
         preparationIndicator.translatesAutoresizingMaskIntoConstraints = true
         preparationIndicator.wantsLayer = true
-        preparationIndicator.layer?.cornerRadius = 20
+        preparationIndicator.layer?.cornerRadius = 15
         preparationIndicator.layer?.cornerCurve = .continuous
-        preparationIndicator.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
+        preparationIndicator.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.42).cgColor
         preparationIndicator.layer?.borderWidth = 0.5
-        preparationIndicator.layer?.borderColor = NSColor.white.withAlphaComponent(0.38).cgColor
+        preparationIndicator.layer?.borderColor = NSColor.white.withAlphaComponent(0.22).cgColor
         addSubview(preparationIndicator)
     }
 
     private func preparationIndicatorFrame() -> CGRect {
-        let side: CGFloat = 44
+        let side: CGFloat = 30
         let center = CGPoint(x: selectionRect.midX, y: selectionRect.midY)
         let x = min(max(center.x - side / 2, bounds.minX + 12), bounds.maxX - side - 12)
         let y = min(max(center.y - side / 2, bounds.minY + 12), bounds.maxY - side - 12)
@@ -157,10 +216,14 @@ private final class RecordingBoundaryView: NSView {
         let isLoading = preparationState == .loading
         preparationIndicator.isHidden = !isLoading
         if isLoading {
-            preparationIndicator.startAnimation(nil)
+            preparationIndicator.startAnimating()
         } else {
-            preparationIndicator.stopAnimation(nil)
+            preparationIndicator.stopAnimating()
         }
+    }
+
+    func preparationIndicatorFrameForTesting() -> CGRect {
+        preparationIndicator.frame
     }
 
     private func drawDimmedBackdrop(excluding selectionRect: CGRect) {

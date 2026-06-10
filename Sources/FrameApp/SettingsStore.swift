@@ -11,6 +11,7 @@ enum SettingsStore {
     static let captureHistorySizeLimitKey = "captureHistorySizeLimit"
     static let recordingFormatKey = "recordingFormat"
     static let recordingShowsCursorKey = "recordingShowsCursor"
+    static let recordingShowsMouseClickHighlightsKey = "recordingShowsMouseClickHighlights"
     static let recordingShowsKeyboardHintsKey = "recordingShowsKeyboardHints"
     static let recordingAudioSourceKey = "recordingAudioSource"
 
@@ -122,13 +123,18 @@ enum SettingsStore {
         let showsCursor = defaults.object(forKey: recordingShowsCursorKey) == nil
             ? defaultOptions.showsCursor
             : defaults.bool(forKey: recordingShowsCursorKey)
+        let showsMouseClickHighlights = defaults.object(forKey: recordingShowsMouseClickHighlightsKey) == nil
+            ? defaultOptions.showsMouseClickHighlights
+            : defaults.bool(forKey: recordingShowsMouseClickHighlightsKey)
+        let showsMouseHints = showsCursor || showsMouseClickHighlights
         let showsKeyboardHints = defaults.object(forKey: recordingShowsKeyboardHintsKey) == nil
             ? defaultOptions.showsKeyboardHints
             : defaults.bool(forKey: recordingShowsKeyboardHintsKey)
 
         return RecordingOptions(
             format: format,
-            showsCursor: showsCursor,
+            showsCursor: showsMouseHints,
+            showsMouseClickHighlights: showsMouseHints,
             showsKeyboardHints: showsKeyboardHints,
             audioSource: audioSource
         )
@@ -140,6 +146,7 @@ enum SettingsStore {
     ) {
         defaults.set(options.format.rawValue, forKey: recordingFormatKey)
         defaults.set(options.showsCursor, forKey: recordingShowsCursorKey)
+        defaults.set(options.showsMouseClickHighlights, forKey: recordingShowsMouseClickHighlightsKey)
         defaults.set(options.showsKeyboardHints, forKey: recordingShowsKeyboardHintsKey)
         defaults.set(options.audioSource.rawValue, forKey: recordingAudioSourceKey)
     }

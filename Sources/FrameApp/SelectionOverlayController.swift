@@ -2,13 +2,29 @@ import AppKit
 import FrameCore
 
 @MainActor
-final class SelectionOverlayController {
+protocol SelectionOverlayControlling: AnyObject {
+    var isSelecting: Bool { get }
+
+    func startSelection(
+        strings: AppStrings,
+        onStartRecording: @escaping (SelectionOverlayWindow, SelectionCapture, RecordingOptions) -> Void,
+        completion: @escaping (SelectionOverlayCompletion?) -> Void
+    )
+
+    func dismissSelectionForRecording()
+}
+
+@MainActor
+final class SelectionOverlayController: SelectionOverlayControlling {
     private var overlayWindows: [SelectionOverlayWindow] = []
     private var completion: ((SelectionOverlayCompletion?) -> Void)?
     private var keyMonitor: Any?
     private var lastSelectionHistory: SelectionHistory?
     private let windowCandidateProvider = WindowCandidateProvider()
     private let resetCursor: () -> Void
+    var isSelecting: Bool {
+        !overlayWindows.isEmpty || completion != nil
+    }
 
     init(resetCursor: @escaping () -> Void = { NSCursor.arrow.set() }) {
         self.resetCursor = resetCursor

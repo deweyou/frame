@@ -20,12 +20,10 @@ final class ActiveRecordingHUDPanelController {
     private var onRestart: () -> Void = {}
     private var onDelete: () -> Void = {}
     private var isStopping = false
-    private var isConfirmingDelete = false
     private var renderedButtonState: ButtonState?
 
     private struct ButtonState: Equatable {
         let isStopping: Bool
-        let isConfirmingDelete: Bool
     }
 
     init() {
@@ -45,7 +43,6 @@ final class ActiveRecordingHUDPanelController {
         onRestart = restart
         onDelete = delete
         isStopping = false
-        isConfirmingDelete = false
         renderedButtonState = nil
         resizePanelToContent()
         update(elapsed: elapsed, isPaused: isPaused)
@@ -148,8 +145,6 @@ final class ActiveRecordingHUDPanelController {
             restartClicked(button)
         case "删除录制":
             deleteClicked(button)
-        case "确认删除":
-            deleteClicked(button)
         default:
             return false
         }
@@ -220,7 +215,7 @@ final class ActiveRecordingHUDPanelController {
     }
 
     private func installButtonsIfNeeded() {
-        let nextButtonState = ButtonState(isStopping: isStopping, isConfirmingDelete: isConfirmingDelete)
+        let nextButtonState = ButtonState(isStopping: isStopping)
         guard renderedButtonState != nextButtonState else {
             return
         }
@@ -243,11 +238,11 @@ final class ActiveRecordingHUDPanelController {
             makeButton(title: "重新开始", symbolName: "arrow.clockwise", action: #selector(restartClicked))
         )
         let deleteButton = makeButton(
-            title: isConfirmingDelete ? "确认删除" : "删除录制",
-            symbolName: isConfirmingDelete ? "trash.fill" : "trash",
+            title: "删除录制",
+            symbolName: "trash",
             action: #selector(deleteClicked)
         )
-        deleteButton.contentTintColor = isConfirmingDelete ? Self.recordingAccentColor : .labelColor
+        deleteButton.contentTintColor = .labelColor
         buttonStackView.addArrangedSubview(deleteButton)
     }
 
@@ -338,17 +333,10 @@ final class ActiveRecordingHUDPanelController {
     }
 
     @objc private func restartClicked(_ sender: NSButton) {
-        isConfirmingDelete = false
-        installButtonsIfNeeded()
         onRestart()
     }
 
     @objc private func deleteClicked(_ sender: NSButton) {
-        guard isConfirmingDelete else {
-            isConfirmingDelete = true
-            installButtonsIfNeeded()
-            return
-        }
         onDelete()
     }
 }
