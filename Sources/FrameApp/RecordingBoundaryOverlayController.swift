@@ -115,8 +115,8 @@ private final class RecordingPreparationSpinnerView: NSView {
                     return
                 }
 
-                phase = (phase + 0.075).truncatingRemainder(dividingBy: 1)
-                needsDisplay = true
+                self.phase = (self.phase + 0.075).truncatingRemainder(dividingBy: 1)
+                self.needsDisplay = true
             }
         }
         self.timer = timer
