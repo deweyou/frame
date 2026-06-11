@@ -214,6 +214,27 @@ struct AppStrings {
         }
     }
 
+    var settingsRecordingMouseHintColor: String {
+        switch language {
+        case .zhHans: "鼠标提示颜色"
+        case .en: "Mouse hint color"
+        }
+    }
+
+    var settingsRecordingMouseHintCustomColor: String {
+        switch language {
+        case .zhHans: "自定义"
+        case .en: "Custom"
+        }
+    }
+
+    var settingsRecordingMouseHintResetColor: String {
+        switch language {
+        case .zhHans: "重置"
+        case .en: "Reset"
+        }
+    }
+
     var settingsCaptureHistory: String {
         switch language {
         case .zhHans: "本地历史"

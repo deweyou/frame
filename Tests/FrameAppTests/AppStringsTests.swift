@@ -56,6 +56,18 @@ final class AppStringsTests: XCTestCase {
         XCTAssertEqual(chinese.ocrLanguageDisplayName(.japanese), "日文")
     }
 
+    func testRecordingMouseHintColorStringsAreLocalized() {
+        let english = AppStrings(language: .en)
+        XCTAssertEqual(english.settingsRecordingMouseHintColor, "Mouse hint color")
+        XCTAssertEqual(english.settingsRecordingMouseHintCustomColor, "Custom")
+        XCTAssertEqual(english.settingsRecordingMouseHintResetColor, "Reset")
+
+        let chinese = AppStrings(language: .zhHans)
+        XCTAssertEqual(chinese.settingsRecordingMouseHintColor, "鼠标提示颜色")
+        XCTAssertEqual(chinese.settingsRecordingMouseHintCustomColor, "自定义")
+        XCTAssertEqual(chinese.settingsRecordingMouseHintResetColor, "重置")
+    }
+
     func testOCRScrubSelectionStringsAreLocalized() {
         let english = AppStrings(language: .en)
         XCTAssertEqual(english.ocrSelectAll, "Select All")

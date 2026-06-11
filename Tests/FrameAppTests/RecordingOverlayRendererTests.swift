@@ -1,4 +1,5 @@
 import CoreMedia
+import FrameCore
 import XCTest
 @testable import FrameApp
 
@@ -130,6 +131,22 @@ final class RecordingOverlayRendererTests: XCTestCase {
         let rendered = try XCTUnwrap(renderer.render(pixelBuffer: source, at: CMTime(seconds: 1.1, preferredTimescale: 600)))
 
         XCTAssertNotEqual(pixel(at: CGPoint(x: 40, y: 40), in: rendered), pixel(at: CGPoint(x: 40, y: 40), in: source))
+    }
+
+    func testRendererUsesConfiguredMouseHintColorForClickOverlay() throws {
+        let source = try makePixelBuffer(width: 80, height: 80, fill: (30, 30, 30, 255))
+        let store = RecordingOverlayEventStore()
+        store.recordClick(at: CGPoint(x: 40, y: 40), time: 1)
+        let renderer = RecordingOverlayRenderer(
+            eventStore: store,
+            pixelSize: CGSize(width: 80, height: 80),
+            mouseHintColor: RecordingMouseHintColor(red: 0, green: 0.2, blue: 1, alpha: 1)
+        )
+
+        let rendered = try XCTUnwrap(renderer.render(pixelBuffer: source, at: CMTime(seconds: 1, preferredTimescale: 600)))
+        let renderedPixel = pixel(at: CGPoint(x: 44, y: 40), in: rendered)
+
+        XCTAssertGreaterThan(renderedPixel[0], renderedPixel[2])
     }
 
     func testRendererDrawsKeyboardHintFromBackgroundQueue() throws {

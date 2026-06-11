@@ -1,4 +1,5 @@
 import AppKit
+import FrameCore
 
 @MainActor
 final class RecordingLiveOverlayController {
@@ -10,7 +11,8 @@ final class RecordingLiveOverlayController {
         screenFrame: CGRect,
         selectionRect: CGRect,
         pixelSize: CGSize,
-        eventStore: RecordingOverlayEventStore
+        eventStore: RecordingOverlayEventStore,
+        mouseHintColor: RecordingMouseHintColor = .default
     ) {
         close()
 
@@ -38,7 +40,8 @@ final class RecordingLiveOverlayController {
             frame: CGRect(origin: .zero, size: normalizedScreenFrame.size),
             selectionRect: localSelectionRect,
             pixelSize: pixelSize,
-            eventStore: eventStore
+            eventStore: eventStore,
+            mouseHintColor: mouseHintColor
         )
         panel.contentView = overlayView
         panel.orderFrontRegardless()
@@ -102,6 +105,7 @@ private final class RecordingLiveOverlayView: NSView {
     private let selectionRect: CGRect
     private let pixelSize: CGSize
     private let eventStore: RecordingOverlayEventStore
+    private let mouseHintColor: RecordingMouseHintColor
 
     override var isOpaque: Bool {
         false
@@ -111,11 +115,13 @@ private final class RecordingLiveOverlayView: NSView {
         frame frameRect: NSRect,
         selectionRect: CGRect,
         pixelSize: CGSize,
-        eventStore: RecordingOverlayEventStore
+        eventStore: RecordingOverlayEventStore,
+        mouseHintColor: RecordingMouseHintColor
     ) {
         self.selectionRect = selectionRect
         self.pixelSize = pixelSize
         self.eventStore = eventStore
+        self.mouseHintColor = mouseHintColor
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
@@ -154,7 +160,7 @@ private final class RecordingLiveOverlayView: NSView {
             height: radius * 2
         )
 
-        NSColor.systemRed.withAlphaComponent(0.18 * alpha).setFill()
+        mouseHintColor.nsColor.withAlphaComponent(0.18 * alpha).setFill()
         NSBezierPath(ovalIn: rect).fill()
 
         let outerPath = NSBezierPath(ovalIn: rect)
@@ -164,7 +170,7 @@ private final class RecordingLiveOverlayView: NSView {
 
         let innerPath = NSBezierPath(ovalIn: rect.insetBy(dx: 4, dy: 4))
         innerPath.lineWidth = 1.5
-        NSColor.systemRed.withAlphaComponent(0.78 * alpha).setStroke()
+        mouseHintColor.nsColor.withAlphaComponent(0.78 * alpha).setStroke()
         innerPath.stroke()
     }
 

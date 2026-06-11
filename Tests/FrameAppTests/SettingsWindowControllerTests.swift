@@ -45,6 +45,18 @@ final class SettingsWindowControllerTests: XCTestCase {
         XCTAssertTrue(OCRLanguageOption.defaultIdentifiers.contains("ko-KR"))
     }
 
+    func testRecordingMouseHintColorPresetsExposeDefaultAndCustomChoices() {
+        XCTAssertEqual(RecordingMouseHintColorPreset.defaultPreset, .red)
+        XCTAssertEqual(RecordingMouseHintColorPreset.standardPresets.map(\.id), [
+            "red",
+            "yellow",
+            "blue",
+            "green",
+            "white",
+            "black",
+        ])
+    }
+
     func testSettingsWindowPlacementCentersInsideActiveVisibleFrame() {
         let visibleFrame = CGRect(x: 1440, y: 80, width: 1200, height: 800)
         let frame = SettingsWindowLayout.centeredFrame(

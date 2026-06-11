@@ -146,6 +146,27 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(SettingsStore.recordingOptions(defaults: defaults), RecordingOptions.defaults)
     }
 
+    func testRecordingOptionsPersistMouseHintColor() {
+        let options = RecordingOptions(
+            format: .mp4,
+            showsCursor: true,
+            showsMouseClickHighlights: true,
+            showsKeyboardHints: true,
+            audioSource: .none,
+            mouseHintColor: RecordingMouseHintColor(red: 0.1, green: 0.5, blue: 0.9, alpha: 1)
+        )
+
+        SettingsStore.setRecordingOptions(options, defaults: defaults)
+
+        XCTAssertEqual(SettingsStore.recordingOptions(defaults: defaults), options)
+    }
+
+    func testRecordingOptionsFallBackToDefaultMouseHintColorWhenPersistedColorIsInvalid() {
+        defaults.set("not-a-color", forKey: SettingsStore.recordingMouseHintColorKey)
+
+        XCTAssertEqual(SettingsStore.recordingOptions(defaults: defaults), RecordingOptions.defaults)
+    }
+
     func testRecordingOptionsPersistSelectedValues() {
         let options = RecordingOptions(
             format: .gif,

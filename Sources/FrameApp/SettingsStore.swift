@@ -15,6 +15,7 @@ enum SettingsStore {
     static let recordingShowsMouseClickHighlightsKey = "recordingShowsMouseClickHighlights"
     static let recordingShowsKeyboardHintsKey = "recordingShowsKeyboardHints"
     static let recordingAudioSourceKey = "recordingAudioSource"
+    static let recordingMouseHintColorKey = "recordingMouseHintColor"
 
     static func screenshotShortcut(defaults: UserDefaults = .standard) -> ScreenshotShortcut {
         ScreenshotShortcut.persistedValue(for: defaults.string(forKey: screenshotShortcutKey))
@@ -145,13 +146,17 @@ enum SettingsStore {
         let showsKeyboardHints = defaults.object(forKey: recordingShowsKeyboardHintsKey) == nil
             ? defaultOptions.showsKeyboardHints
             : defaults.bool(forKey: recordingShowsKeyboardHintsKey)
+        let mouseHintColor = RecordingMouseHintColor(
+            storageValue: defaults.string(forKey: recordingMouseHintColorKey)
+        ) ?? defaultOptions.mouseHintColor
 
         return RecordingOptions(
             format: format,
             showsCursor: showsMouseHints,
             showsMouseClickHighlights: showsMouseHints,
             showsKeyboardHints: showsKeyboardHints,
-            audioSource: audioSource
+            audioSource: audioSource,
+            mouseHintColor: mouseHintColor
         )
     }
 
@@ -164,5 +169,31 @@ enum SettingsStore {
         defaults.set(options.showsMouseClickHighlights, forKey: recordingShowsMouseClickHighlightsKey)
         defaults.set(options.showsKeyboardHints, forKey: recordingShowsKeyboardHintsKey)
         defaults.set(options.audioSource.rawValue, forKey: recordingAudioSourceKey)
+        defaults.set(options.mouseHintColor.storageValue, forKey: recordingMouseHintColorKey)
+    }
+}
+
+private extension RecordingMouseHintColor {
+    init?(storageValue: String?) {
+        guard let storageValue,
+              storageValue.count == 8,
+              let value = UInt32(storageValue, radix: 16) else {
+            return nil
+        }
+
+        self.init(
+            red: Double((value >> 24) & 0xFF) / 255,
+            green: Double((value >> 16) & 0xFF) / 255,
+            blue: Double((value >> 8) & 0xFF) / 255,
+            alpha: Double(value & 0xFF) / 255
+        )
+    }
+
+    var storageValue: String {
+        let red = UInt8((self.red * 255).rounded())
+        let green = UInt8((self.green * 255).rounded())
+        let blue = UInt8((self.blue * 255).rounded())
+        let alpha = UInt8((self.alpha * 255).rounded())
+        return String(format: "%02X%02X%02X%02X", red, green, blue, alpha)
     }
 }

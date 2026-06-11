@@ -7,10 +7,12 @@ import FrameCore
 struct RecordingOverlayConfiguration: Equatable {
     let recordsMouseClicks: Bool
     let recordsKeyboardHints: Bool
+    let mouseHintColor: RecordingMouseHintColor
 
     init(options: RecordingOptions) {
         recordsMouseClicks = options.showsMouseClickHighlights
         recordsKeyboardHints = options.showsKeyboardHints
+        mouseHintColor = options.mouseHintColor
     }
 
     var isEnabled: Bool {
@@ -459,11 +461,17 @@ enum RecordingOverlayKeyFormatter {
 final class RecordingOverlayRenderer {
     private let eventStore: RecordingOverlayEventStore
     private let pixelSize: CGSize
+    private let mouseHintColor: RecordingMouseHintColor
     private let ciContext = CIContext()
 
-    init(eventStore: RecordingOverlayEventStore, pixelSize: CGSize) {
+    init(
+        eventStore: RecordingOverlayEventStore,
+        pixelSize: CGSize,
+        mouseHintColor: RecordingMouseHintColor = .default
+    ) {
         self.eventStore = eventStore
         self.pixelSize = pixelSize
+        self.mouseHintColor = mouseHintColor
     }
 
     func render(pixelBuffer: CVPixelBuffer, at presentationTime: CMTime) -> CVPixelBuffer? {
@@ -548,12 +556,12 @@ final class RecordingOverlayRenderer {
             height: radius * 2
         )
 
-        context.setFillColor(NSColor.systemRed.withAlphaComponent(0.18 * alpha).cgColor)
+        context.setFillColor(mouseHintColor.nsColor.withAlphaComponent(0.18 * alpha).cgColor)
         context.fillEllipse(in: rect)
         context.setStrokeColor(NSColor.white.withAlphaComponent(0.92 * alpha).cgColor)
         context.setLineWidth(3)
         context.strokeEllipse(in: rect)
-        context.setStrokeColor(NSColor.systemRed.withAlphaComponent(0.78 * alpha).cgColor)
+        context.setStrokeColor(mouseHintColor.nsColor.withAlphaComponent(0.78 * alpha).cgColor)
         context.setLineWidth(1.5)
         context.strokeEllipse(in: rect.insetBy(dx: 4, dy: 4))
     }
@@ -610,5 +618,16 @@ final class RecordingOverlayRenderer {
         )
         CTLineDraw(line, context)
         context.restoreGState()
+    }
+}
+
+extension RecordingMouseHintColor {
+    var nsColor: NSColor {
+        NSColor(
+            srgbRed: CGFloat(red),
+            green: CGFloat(green),
+            blue: CGFloat(blue),
+            alpha: CGFloat(alpha)
+        )
     }
 }
