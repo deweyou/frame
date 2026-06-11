@@ -29,6 +29,22 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(SettingsStore.appLanguage(defaults: defaults), .en)
     }
 
+    func testWindowScreenshotDecorationStyleDefaultsToSoftBackdrop() {
+        XCTAssertEqual(SettingsStore.windowScreenshotDecorationStyle(defaults: defaults), .softBackdrop)
+    }
+
+    func testWindowScreenshotDecorationStylePersistsExplicitChoice() {
+        SettingsStore.setWindowScreenshotDecorationStyle(.canvasGlow, defaults: defaults)
+
+        XCTAssertEqual(SettingsStore.windowScreenshotDecorationStyle(defaults: defaults), .canvasGlow)
+    }
+
+    func testWindowScreenshotDecorationStyleFallsBackWhenPersistedValueIsInvalid() {
+        defaults.set("bad-style", forKey: SettingsStore.windowScreenshotDecorationStyleKey)
+
+        XCTAssertEqual(SettingsStore.windowScreenshotDecorationStyle(defaults: defaults), .softBackdrop)
+    }
+
     func testOCRLanguagesDefaultToChineseEnglishJapaneseAndKorean() {
         XCTAssertEqual(
             SettingsStore.ocrRecognitionLanguages(defaults: defaults),

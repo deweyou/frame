@@ -149,40 +149,42 @@ Agents should use this stable-sign-and-replace flow whenever the user asks to ru
 5. Open `Frame -> 设置...` / `Frame -> Settings...`, then open it again from another display and confirm it centers on the current display.
 6. Change the language between Follow System, 中文, and English. Confirm the menu, settings window labels, alerts opened after the change, Quick Access tooltips, and capture placeholder use the selected language.
 7. In Settings, choose a custom screenshot save folder, quit and reopen Frame, and confirm the path persists.
-8. Reset the screenshot save folder and confirm it returns to Desktop.
-9. Use the menu capture item or the configured keyboard shortcut.
-10. On a fresh app session with no previous selection, confirm the active display shows a centered placeholder instead of a `0 x 0` HUD.
-11. Drag to create, move, or resize the region.
-12. Press Enter to capture.
-13. Confirm the `180x120` preview appears at the active screen's bottom-left corner with equal left and bottom padding.
-14. With multiple displays, switch to another app on a different display and confirm visible previews move to that display's bottom-left corner.
-15. Take multiple screenshots and confirm previews stack upward from the bottom-left corner.
-16. Confirm the Quick Access preview cannot be moved by dragging its background.
-17. Drag the preview image into a rich-text TextEdit document or Notes note and confirm the target receives image content.
-18. Hover the preview and confirm icon-only save, copy, workspace, pin, and close actions appear.
-19. Confirm copy places an image on the pasteboard.
-20. Confirm save writes `Frame yyyy-MM-dd HH.mm.ss.png` to the configured screenshot folder, or Desktop after reset.
-21. Confirm the workspace action opens a movable, resizable preview workspace.
-22. Resize the workspace and confirm the image preview area preserves the captured image aspect ratio without empty fill.
-23. Confirm switching focus to another app does not close the preview workspace.
-24. Click the same Quick Access workspace action again and confirm it activates the existing preview workspace instead of opening a duplicate.
-25. Confirm workspace Save is visible but disabled, while Copy and Download are enabled.
-26. Confirm workspace Copy closes the workspace and the originating Quick Access preview on success.
-27. Confirm workspace Download writes `Frame yyyy-MM-dd HH.mm.ss.png` to the configured screenshot folder, then closes the workspace and originating Quick Access preview on success.
-28. Confirm Escape closes the preview workspace.
-29. Confirm pin closes the originating Quick Access card and opens a persistent image-only pinned window.
-30. Confirm the pinned window has no toolbar or visible output buttons, keeps the image edge-to-edge, stays open after focus changes, and closes with the native red traffic-light close button.
-31. Right-click the pinned window and confirm Copy and Download work without closing it.
-32. Right-click the pinned window and confirm Edit opens or activates the preview/edit workspace without closing the pinned window.
-33. Use the screenshot shortcut again, draw a region, click the recording HUD button, and confirm the HUD switches into recording setup without closing the overlay.
-34. Record a short MP4 with cursor enabled. Confirm start shows a brief preparation/loading state instead of a countdown, then switches to elapsed-time recording controls; stop finalizes the file, restart discards the current take and records the same area again, and delete requires confirmation before discarding without Quick Access.
-35. Confirm the menu bar icon becomes a red recording dot while recording and its Stop Recording menu item stops the same active session.
-36. Confirm the completed recording appears in a bottom-left Quick Access card with Download, Copy, Preview, disabled Edit, and Close.
-37. Confirm Preview opens a playable video window and Edit remains disabled.
-38. Confirm Copy places the recording file URL on the pasteboard and Download writes `Frame yyyy-MM-dd HH.mm.ss.mp4` to the configured screenshot folder.
-39. Repeat with GIF selected and confirm `Frame yyyy-MM-dd HH.mm.ss.gif` output is produced.
-40. Select an entire single display as the recording region and confirm the recording HUD remains usable but is absent from the output.
-41. Confirm local capture history lists recordings separately, opens playable recording files, copies file URLs, saves files, and deletes cached recording records.
+8. In Settings, change Window screenshot style between Soft Backdrop, Canvas Glow, and Transparent Shadow. Confirm the labels localize and the selected value persists after reopening Settings.
+9. Reset the screenshot save folder and confirm it returns to Desktop.
+10. Use the menu capture item or the configured keyboard shortcut.
+11. On a fresh app session with no previous selection, confirm the active display shows a centered placeholder instead of a `0 x 0` HUD.
+12. Drag to create, move, or resize the region.
+13. Press Enter to capture.
+14. Confirm the `180x120` preview appears at the active screen's bottom-left corner with equal left and bottom padding.
+15. With multiple displays, switch to another app on a different display and confirm visible previews move to that display's bottom-left corner.
+16. Take multiple screenshots and confirm previews stack upward from the bottom-left corner.
+17. Confirm the Quick Access preview cannot be moved by dragging its background.
+18. Drag the preview image into a rich-text TextEdit document or Notes note and confirm the target receives image content.
+19. Hover the preview and confirm icon-only save, copy, workspace, pin, and close actions appear.
+20. Confirm copy places an image on the pasteboard.
+21. Confirm save writes `Frame yyyy-MM-dd HH.mm.ss.png` to the configured screenshot folder, or Desktop after reset.
+22. Double-click an eligible app window, capture it, and confirm the output uses the selected window screenshot style while region screenshots remain undecorated.
+23. Confirm the workspace action opens a movable, resizable preview workspace.
+24. Resize the workspace and confirm the image preview area preserves the captured image aspect ratio without empty fill.
+25. Confirm switching focus to another app does not close the preview workspace.
+26. Click the same Quick Access workspace action again and confirm it activates the existing preview workspace instead of opening a duplicate.
+27. Confirm workspace Save is visible but disabled, while Copy and Download are enabled.
+28. Confirm workspace Copy closes the workspace and the originating Quick Access preview on success.
+29. Confirm workspace Download writes `Frame yyyy-MM-dd HH.mm.ss.png` to the configured screenshot folder, then closes the workspace and originating Quick Access preview on success.
+30. Confirm Escape closes the preview workspace.
+31. Confirm pin closes the originating Quick Access card and opens a persistent image-only pinned window.
+32. Confirm the pinned window has no toolbar or visible output buttons, keeps the image edge-to-edge, stays open after focus changes, and closes with the native red traffic-light close button.
+33. Right-click the pinned window and confirm Copy and Download work without closing it.
+34. Right-click the pinned window and confirm Edit opens or activates the preview/edit workspace without closing the pinned window.
+35. Use the screenshot shortcut again, draw a region, click the recording HUD button, and confirm the HUD switches into recording setup without closing the overlay.
+36. Record a short MP4 with cursor enabled. Confirm start shows a brief preparation/loading state instead of a countdown, then switches to elapsed-time recording controls; stop finalizes the file, restart discards the current take and records the same area again, and delete requires confirmation before discarding without Quick Access.
+37. Confirm the menu bar icon becomes a red recording dot while recording and its Stop Recording menu item stops the same active session.
+38. Confirm the completed recording appears in a bottom-left Quick Access card with Download, Copy, Preview, disabled Edit, and Close.
+39. Confirm Preview opens a playable video window and Edit remains disabled.
+40. Confirm Copy places the recording file URL on the pasteboard and Download writes `Frame yyyy-MM-dd HH.mm.ss.mp4` to the configured screenshot folder.
+41. Repeat with GIF selected and confirm `Frame yyyy-MM-dd HH.mm.ss.gif` output is produced.
+42. Select an entire single display as the recording region and confirm the recording HUD remains usable but is absent from the output.
+43. Confirm local capture history lists recordings separately, opens playable recording files, copies file URLs, saves files, and deletes cached recording records.
 
 Keep using the same `FRAME_CODESIGN_IDENTITY` and the same `~/Applications/Frame.app` path while iterating. Changing either one can make macOS ask for Screen Recording permission again.
 
@@ -211,4 +213,4 @@ tccutil reset ScreenCapture dev.dewey.frame
 Then reopen the exact app bundle you want to authorize.
 
 ---
-*Last updated: 2026-06-03 | Reason: add local selection recording smoke checks*
+*Last updated: 2026-06-11 | Reason: add window screenshot style smoke checks*
