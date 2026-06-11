@@ -369,6 +369,7 @@ private struct GeneralSettingsView: View {
     @State private var selectedLanguage = SettingsStore.appLanguage()
     @State private var selectedOCRLanguageIdentifiers = Set(SettingsStore.ocrRecognitionLanguages())
     @State private var screenshotDirectoryPath = (try? SettingsStore.screenshotDirectory().path) ?? ""
+    @State private var selectedWindowScreenshotDecorationStyle = SettingsStore.windowScreenshotDecorationStyle()
     @State private var isCaptureHistoryEnabled = SettingsStore.isCaptureHistoryEnabled()
     @State private var selectedCaptureHistoryRetention = SettingsStore.captureHistoryRetention()
     @State private var selectedCaptureHistorySizeLimit = SettingsStore.captureHistorySizeLimit()
@@ -396,6 +397,20 @@ private struct GeneralSettingsView: View {
                         Button(strings.settingsChooseFolder, action: chooseScreenshotDirectory)
                         Button(strings.settingsResetFolder, action: resetScreenshotDirectory)
                     }
+                }
+
+                Picker(
+                    strings.settingsWindowScreenshotDecorationStyle,
+                    selection: $selectedWindowScreenshotDecorationStyle
+                ) {
+                    ForEach(WindowScreenshotDecorationStyle.allCases) { style in
+                        Text(style.displayName(strings: strings))
+                            .tag(style)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: selectedWindowScreenshotDecorationStyle) { _, style in
+                    SettingsStore.setWindowScreenshotDecorationStyle(style)
                 }
 
                 Picker(strings.settingsLanguage, selection: $selectedLanguage) {

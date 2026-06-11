@@ -5,6 +5,7 @@ enum SettingsStore {
     static let screenshotShortcutKey = "screenshotShortcut"
     static let appLanguageKey = "appLanguage"
     static let screenshotDirectoryKey = "screenshotDirectory"
+    static let windowScreenshotDecorationStyleKey = "windowScreenshotDecorationStyle"
     static let ocrRecognitionLanguagesKey = "ocrRecognitionLanguages"
     static let captureHistoryEnabledKey = "captureHistoryEnabled"
     static let captureHistoryRetentionKey = "captureHistoryRetention"
@@ -76,6 +77,20 @@ enum SettingsStore {
 
     static func resetScreenshotDirectory(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: screenshotDirectoryKey)
+    }
+
+    static func windowScreenshotDecorationStyle(
+        defaults: UserDefaults = .standard
+    ) -> WindowScreenshotDecorationStyle {
+        WindowScreenshotDecorationStyle(rawValue: defaults.string(forKey: windowScreenshotDecorationStyleKey) ?? "")
+            ?? .softBackdrop
+    }
+
+    static func setWindowScreenshotDecorationStyle(
+        _ style: WindowScreenshotDecorationStyle,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(style.rawValue, forKey: windowScreenshotDecorationStyleKey)
     }
 
     static func isCaptureHistoryEnabled(defaults: UserDefaults = .standard) -> Bool {

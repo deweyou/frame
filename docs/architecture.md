@@ -42,15 +42,15 @@ background-aware contrast, and direct-manipulation capture behavior.
 1. `FrameApplication` starts `NSApplication` with accessory activation policy.
 2. `AppDelegate` creates the menu bar item, hotkey controller, overlay controller, capture and recording services, active-screen resolver, preview controllers, and output writers. It rejects new capture shortcut entries while selection, recording countdown, active recording, paused recording, or recording finalization is already in progress.
 3. `StatusItemController` exposes menu commands for screenshot, capture history, settings, and quit. While recording, it switches to a red recording icon and adds a stop-recording action.
-4. `SettingsWindowController` hosts the SwiftUI settings window, including screenshot shortcut selection, screenshot save location, local history controls, language selection, Screen Recording permission checks, and about/version details.
-5. `SettingsStore` persists user-facing app settings in `UserDefaults`: shortcut, screenshot save directory, local history preferences, recording options, OCR languages, and language preference.
+4. `SettingsWindowController` hosts the SwiftUI settings window, including screenshot shortcut selection, screenshot save location, window screenshot style selection, local history controls, language selection, Screen Recording permission checks, and about/version details.
+5. `SettingsStore` persists user-facing app settings in `UserDefaults`: shortcut, screenshot save directory, window screenshot style, local history preferences, recording options, OCR languages, and language preference.
 6. `AppStrings` centralizes user-facing copy for Simplified Chinese and English. The language setting can follow the system language or force either supported language.
 7. `HotKeyController` registers the selected screenshot shortcut through Carbon and routes it to the screenshot flow.
 8. `ScreenRecordingPermission` checks and requests macOS Screen Recording access.
 9. `SelectionOverlayController` creates one overlay per connected `NSScreen`, owns window candidate lookup, stores the last confirmed selection rectangle, and passes localized placeholder copy into overlay windows.
 10. `SelectionOverlayWindow` shows a single active editable selection across displays, supports drag create/move/edge-resize/corner-resize interactions, can switch to an eligible double-clicked application window as a marked window selection, clears selection on empty double-clicks, and returns a global Cocoa screen rectangle after keyboard confirmation. Without a current selection, the active overlay shows a centered localized placeholder instead of a `0 x 0` HUD. Its fixed-width HUD includes numeric width/height editing, current-ratio locking, preset ratios, anchored ratio resizing, and temporary Shift ratio locking without changing the HUD width. The same HUD can switch into recording setup and active recording modes without closing the overlay.
 11. `WindowCandidateProvider` adapts CoreGraphics window-list metadata into eligible ordinary application window candidates while excluding Frame's own windows and obvious non-application surfaces.
-12. `CaptureService` converts the selected Cocoa rectangle into a Quartz capture rectangle and returns PNG data plus `NSImage`.
+12. `CaptureService` converts the selected Cocoa rectangle into a Quartz capture rectangle and returns PNG data plus `NSImage`. Window captures pass through `WindowScreenshotDecorator` before output.
 13. `RecordingService` owns ScreenCaptureKit capture for one selected display region, hides Frame-owned HUD windows from output, honors the unified mouse hint setting for cursor visibility plus click highlights, records held-key keyboard hints through `RecordingOverlayEventStore` plus `RecordingOverlayRenderer`, writes MP4 or GIF through the encoder boundary, and exposes pause, resume, stop, and cancel through `RecordingSessionControlling`. Recording keyboard hints prefer a listen-only `CGEvent` tap so ordinary background key-down/key-up events such as letters, numbers, space, and fn can be tracked; this path depends on macOS Accessibility/Input Monitoring approval and falls back to `NSEvent` monitors when the event tap cannot be created.
 14. `ActiveScreenResolver` resolves the active window rectangle, falling back to the mouse screen or main screen.
 15. `QuickAccessPanelController` presents fixed-position screenshot and recording previews at the active screen's bottom-left corner, stacks mixed media cards upward, exposes localized icon-only hover actions, acts as the drag source for screenshot image content, and routes recording cards to download, copy, preview, disabled edit, and close actions.
@@ -74,13 +74,14 @@ background-aware contrast, and direct-manipulation capture behavior.
 - selection rectangle normalization and validation
 - deterministic selection sizing, ratio fitting, and center-preserving rectangle adjustment
 - selection capture metadata for region selections and window selections with window IDs
+- window screenshot decoration style
 - workspace close policy and selected editing tool state
 
 AppKit-specific code stays in `FrameApp`. Keep permission, capture, recording, pasteboard, panels, settings, localization, window metadata, and window behavior behind narrow adapters so future ScreenCaptureKit migration or UI changes are local.
 
 ## Current Tradeoffs
 
-- `CaptureService` keeps capture platform calls isolated. Region captures still use `CGWindowListCreateImage` rectangular on-screen pixels. Window captures prefer ScreenCaptureKit single-window capture with shadow framing disabled, crop transparent or shadow-only margins, and fall back to CoreGraphics with bounds framing ignored before using a region fallback.
+- `CaptureService` keeps capture platform calls isolated. Region captures still use `CGWindowListCreateImage` rectangular on-screen pixels. Window captures prefer ScreenCaptureKit single-window capture with shadow framing disabled, crop transparent or shadow-only margins, decorate the clean window image with the selected `Soft Backdrop`, `Canvas Glow`, or `Transparent Shadow` style, and fall back to CoreGraphics with bounds framing ignored before using a region fallback.
 - `RecordingService` is intentionally limited to one display per recording session. A full-screen recording is modeled as selecting the full screen on one display, not as a simultaneous multi-display recording.
 - Selection overlay windows, recording HUDs, recording boundary overlays, and transient Frame panels opt out of system capture sharing so Frame controls are visible to the user but absent from screenshot or recording output. Mouse click highlights and held-key keyboard hints are output enhancements and are composited into recording frames instead of relying on capturing Frame control windows.
 - Local development should use a stable self-signed Code Signing identity through `FRAME_CODESIGN_IDENTITY` to reduce TCC permission churn.
@@ -90,4 +91,4 @@ AppKit-specific code stays in `FrameApp`. Keep permission, capture, recording, p
 - Audio recording is reserved in the recording options model but not implemented yet.
 
 ---
-*Last updated: 2026-06-11 | Reason: document recording input hints, capture re-entry guard, and tooltip contrast*
+*Last updated: 2026-06-11 | Reason: document window screenshot decoration styles*

@@ -12,6 +12,19 @@ struct CapturedScreenshot {
 
 @MainActor
 final class CaptureService {
+    private let windowScreenshotDecorator: WindowScreenshotDecorator
+    private let windowScreenshotDecorationStyle: () -> WindowScreenshotDecorationStyle
+
+    init(
+        windowScreenshotDecorator: WindowScreenshotDecorator = WindowScreenshotDecorator(),
+        windowScreenshotDecorationStyle: @escaping () -> WindowScreenshotDecorationStyle = {
+            SettingsStore.windowScreenshotDecorationStyle()
+        }
+    ) {
+        self.windowScreenshotDecorator = windowScreenshotDecorator
+        self.windowScreenshotDecorationStyle = windowScreenshotDecorationStyle
+    }
+
     func capture(selection: SelectionCapture) async throws -> CapturedScreenshot {
         switch selection.kind {
         case .region:
@@ -104,6 +117,16 @@ final class CaptureService {
     }
 
     private func screenshot(from cgImage: CGImage, rect: CGRect, scale: CGFloat) throws -> CapturedScreenshot {
+        let style = windowScreenshotDecorationStyle()
+        return try windowScreenshotDecorator.decoratedScreenshot(
+            from: cgImage,
+            sourceRect: rect,
+            scale: scale,
+            style: style
+        )
+    }
+
+    private func rawScreenshot(from cgImage: CGImage, rect: CGRect, scale: CGFloat) throws -> CapturedScreenshot {
         let bitmapRepresentation = NSBitmapImageRep(cgImage: cgImage)
         guard let pngData = bitmapRepresentation.representation(
             using: .png,

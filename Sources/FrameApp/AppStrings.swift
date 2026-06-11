@@ -159,6 +159,33 @@ struct AppStrings {
         }
     }
 
+    var settingsWindowScreenshotDecorationStyle: String {
+        switch language {
+        case .zhHans: "窗口截图样式"
+        case .en: "Window screenshot style"
+        }
+    }
+
+    func windowScreenshotDecorationStyleName(_ style: WindowScreenshotDecorationStyle) -> String {
+        switch style {
+        case .softBackdrop:
+            switch language {
+            case .zhHans: "柔和背景"
+            case .en: "Soft Backdrop"
+            }
+        case .canvasGlow:
+            switch language {
+            case .zhHans: "画布光影"
+            case .en: "Canvas Glow"
+            }
+        case .transparentShadow:
+            switch language {
+            case .zhHans: "透明投影"
+            case .en: "Transparent Shadow"
+            }
+        }
+    }
+
     var settingsChooseFolder: String {
         switch language {
         case .zhHans: "选择..."
