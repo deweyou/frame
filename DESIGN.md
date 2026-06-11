@@ -67,6 +67,9 @@ system tool, not a branded dashboard.
 - The screenshot HUD may switch into recording setup without closing the
   selection overlay. Setup controls stay compact and cover start recording,
   MP4/GIF format, cursor visibility, and keyboard hint visibility.
+- Mouse hint color is a recording output preference in Settings. Keep the
+  recording setup HUD focused on showing or hiding mouse hints, while Settings
+  owns color presets and custom color selection.
 - Keyboard hint visibility is retained as a setup option, but recording start
   must not show a static placeholder hint. Reintroduce a keyboard hint overlay
   only when it reflects real key activity.

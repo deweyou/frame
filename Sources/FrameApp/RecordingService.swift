@@ -174,13 +174,18 @@ final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling
             let eventStore = RecordingOverlayEventStore()
             overlayEventStore = eventStore
             self.overlayEventStore = eventStore
-            overlayRenderer = RecordingOverlayRenderer(eventStore: eventStore, pixelSize: pixelSize)
+            overlayRenderer = RecordingOverlayRenderer(
+                eventStore: eventStore,
+                pixelSize: pixelSize,
+                mouseHintColor: overlayConfiguration.mouseHintColor
+            )
             liveOverlayWindowNumber = await MainActor.run {
                 liveOverlayController.show(
                     screenFrame: resolvedSelection.screenFrame,
                     selectionRect: resolvedSelection.selectionRect,
                     pixelSize: pixelSize,
-                    eventStore: eventStore
+                    eventStore: eventStore,
+                    mouseHintColor: overlayConfiguration.mouseHintColor
                 )
                 return liveOverlayController.windowNumber
             }

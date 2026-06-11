@@ -373,6 +373,7 @@ private struct GeneralSettingsView: View {
     @State private var isCaptureHistoryEnabled = SettingsStore.isCaptureHistoryEnabled()
     @State private var selectedCaptureHistoryRetention = SettingsStore.captureHistoryRetention()
     @State private var selectedCaptureHistorySizeLimit = SettingsStore.captureHistorySizeLimit()
+    @State private var selectedRecordingMouseHintColor = SettingsStore.recordingOptions().mouseHintColor
 
     var body: some View {
         SettingsPane(title: strings.settingsGeneral) {
@@ -411,6 +412,14 @@ private struct GeneralSettingsView: View {
                 .pickerStyle(.menu)
                 .onChange(of: selectedWindowScreenshotDecorationStyle) { _, style in
                     SettingsStore.setWindowScreenshotDecorationStyle(style)
+                }
+
+                LabeledContent(strings.settingsRecordingMouseHintColor) {
+                    RecordingMouseHintColorControl(
+                        strings: strings,
+                        selectedColor: $selectedRecordingMouseHintColor,
+                        onChange: updateRecordingMouseHintColor
+                    )
                 }
 
                 Picker(strings.settingsLanguage, selection: $selectedLanguage) {
@@ -526,9 +535,123 @@ private struct GeneralSettingsView: View {
         selectedOCRLanguageIdentifiers = Set(validatedIdentifiers)
     }
 
+    private func updateRecordingMouseHintColor(_ color: RecordingMouseHintColor) {
+        selectedRecordingMouseHintColor = color
+        let options = SettingsStore.recordingOptions()
+        SettingsStore.setRecordingOptions(
+            RecordingOptions(
+                format: options.format,
+                showsCursor: options.showsCursor,
+                showsMouseClickHighlights: options.showsMouseClickHighlights,
+                showsKeyboardHints: options.showsKeyboardHints,
+                audioSource: options.audioSource,
+                mouseHintColor: color
+            )
+        )
+    }
+
     private func checkPermission() {
         onCheckPermission()
         hasScreenRecordingAccess = ScreenRecordingPermission.hasAccess
+    }
+}
+
+enum RecordingMouseHintColorPreset: String, CaseIterable, Identifiable {
+    case red
+    case yellow
+    case blue
+    case green
+    case white
+    case black
+
+    var id: String {
+        rawValue
+    }
+
+    static let defaultPreset = RecordingMouseHintColorPreset.red
+    static let standardPresets: [RecordingMouseHintColorPreset] = [.red, .yellow, .blue, .green, .white, .black]
+
+    var color: RecordingMouseHintColor {
+        switch self {
+        case .red:
+            .red
+        case .yellow:
+            RecordingMouseHintColor(red: 1, green: 0.8, blue: 0.16)
+        case .blue:
+            RecordingMouseHintColor(red: 0.13, green: 0.45, blue: 1)
+        case .green:
+            RecordingMouseHintColor(red: 0.22, green: 0.78, blue: 0.35)
+        case .white:
+            RecordingMouseHintColor(red: 1, green: 1, blue: 1)
+        case .black:
+            RecordingMouseHintColor(red: 0, green: 0, blue: 0)
+        }
+    }
+}
+
+private struct RecordingMouseHintColorControl: View {
+    let strings: AppStrings
+    @Binding var selectedColor: RecordingMouseHintColor
+    let onChange: (RecordingMouseHintColor) -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ForEach(RecordingMouseHintColorPreset.standardPresets) { preset in
+                Button {
+                    onChange(preset.color)
+                } label: {
+                    RecordingMouseHintColorSwatch(
+                        color: preset.color,
+                        isSelected: selectedColor.isApproximatelyEqual(to: preset.color)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(preset.id)
+            }
+
+            ColorPicker(
+                strings.settingsRecordingMouseHintCustomColor,
+                selection: Binding(
+                    get: {
+                        Color(nsColor: selectedColor.nsColor)
+                    },
+                    set: { color in
+                        onChange(RecordingMouseHintColor(nsColor: NSColor(color)))
+                    }
+                ),
+                supportsOpacity: false
+            )
+            .labelsHidden()
+            .frame(width: 34)
+            .accessibilityLabel(strings.settingsRecordingMouseHintCustomColor)
+
+            Button(strings.settingsRecordingMouseHintResetColor) {
+                onChange(RecordingMouseHintColorPreset.defaultPreset.color)
+            }
+        }
+    }
+}
+
+private struct RecordingMouseHintColorSwatch: View {
+    let color: RecordingMouseHintColor
+    let isSelected: Bool
+
+    var body: some View {
+        Circle()
+            .fill(Color(nsColor: color.nsColor))
+            .overlay {
+                Circle()
+                    .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+            }
+            .overlay {
+                if isSelected {
+                    Circle()
+                        .stroke(Color(nsColor: .labelColor), lineWidth: 2)
+                        .padding(3)
+                }
+            }
+            .frame(width: 22, height: 22)
+            .contentShape(Circle())
     }
 }
 
@@ -582,4 +705,23 @@ private struct SettingsPane<Content: View>: View {
 private extension NSUserInterfaceItemIdentifier {
     static let settingsSidebarColumn = NSUserInterfaceItemIdentifier("settingsSidebarColumn")
     static let settingsSidebarCell = NSUserInterfaceItemIdentifier("settingsSidebarCell")
+}
+
+private extension RecordingMouseHintColor {
+    init(nsColor: NSColor) {
+        let color = nsColor.usingColorSpace(.sRGB) ?? nsColor
+        self.init(
+            red: Double(color.redComponent),
+            green: Double(color.greenComponent),
+            blue: Double(color.blueComponent),
+            alpha: 1
+        )
+    }
+
+    func isApproximatelyEqual(to color: RecordingMouseHintColor) -> Bool {
+        abs(red - color.red) < 0.001
+            && abs(green - color.green) < 0.001
+            && abs(blue - color.blue) < 0.001
+            && abs(alpha - color.alpha) < 0.001
+    }
 }
