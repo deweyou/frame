@@ -20,6 +20,7 @@ enum CaptureHistoryFilter: Int, CaseIterable {
 @MainActor
 final class CaptureHistoryWindowController: NSObject {
     private let store: CaptureHistoryStore
+    private let thumbnailProvider: RecordingThumbnailProvider
     private let restore: (CaptureHistoryRecord) -> Void
     private let copy: (CaptureHistoryRecord) -> Void
     private let save: (CaptureHistoryRecord) -> Void
@@ -37,12 +38,14 @@ final class CaptureHistoryWindowController: NSObject {
 
     init(
         store: CaptureHistoryStore,
+        thumbnailProvider: RecordingThumbnailProvider = RecordingThumbnailProvider(),
         restore: @escaping (CaptureHistoryRecord) -> Void = { _ in },
         copy: @escaping (CaptureHistoryRecord) -> Void = { _ in },
         save: @escaping (CaptureHistoryRecord) -> Void = { _ in },
         delete: @escaping (CaptureHistoryRecord) -> Void = { _ in }
     ) {
         self.store = store
+        self.thumbnailProvider = thumbnailProvider
         self.restore = restore
         self.copy = copy
         self.save = save
@@ -150,6 +153,10 @@ final class CaptureHistoryWindowController: NSObject {
 
         tileView.layoutSubtreeIfNeeded()
         return tileView.previewFrame()
+    }
+
+    func previewImageSize(for record: CaptureHistoryRecord) -> CGSize? {
+        tileViewsByRecordID[record.id]?.previewImageSizeForTesting()
     }
 
     func tileShadowOpacity(for record: CaptureHistoryRecord) -> Float? {
@@ -285,6 +292,11 @@ final class CaptureHistoryWindowController: NSObject {
            let data = try? store.data(for: record),
            let image = NSImage(data: data) {
             return image
+        }
+
+        if record.kind == .recording,
+           let thumbnail = thumbnailProvider.thumbnail(for: store.fileURL(for: record)) {
+            return thumbnail
         }
 
         return NSImage(systemSymbolName: "video", accessibilityDescription: kindTitle(for: record.kind)) ?? NSImage()
@@ -699,6 +711,10 @@ private final class CaptureHistoryTileView: NSView {
         return previewShadowView.frame
     }
 
+    func previewImageSizeForTesting() -> CGSize {
+        imageView.imageSizeForTesting
+    }
+
     init(record: CaptureHistoryRecord, image: NSImage, metadata: String, strings: AppStrings) {
         self.record = record
         imageView = CaptureHistoryPreviewImageView(image: image)
@@ -911,6 +927,10 @@ private final class CaptureHistoryTileView: NSView {
 
 private final class CaptureHistoryPreviewImageView: NSView {
     private let image: NSImage
+
+    var imageSizeForTesting: CGSize {
+        image.size
+    }
 
     init(image: NSImage) {
         self.image = image

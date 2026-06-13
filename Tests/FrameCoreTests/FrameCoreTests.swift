@@ -27,6 +27,14 @@ final class ZFrameCoreTests: XCTestCase {
         XCTAssertEqual(ScreenshotShortcut.default.keyboardShortcut.displayName, "Command+Shift+A")
     }
 
+    func testRecordingShortcutDefaultsToCommandShiftR() {
+        XCTAssertEqual(ScreenshotShortcut.defaultRecording.key, .letter("R"))
+        XCTAssertEqual(ScreenshotShortcut.defaultRecording.modifiers, [.command, .shift])
+        XCTAssertEqual(ScreenshotShortcut.defaultRecording.displayName, "⌘⇧R")
+        XCTAssertEqual(ScreenshotShortcut.defaultRecording.storageValue, "cmd+shift+r")
+        XCTAssertEqual(ScreenshotShortcut.defaultRecording.keyboardShortcut.displayName, "Command+Shift+R")
+    }
+
     func testScreenshotShortcutMigratesLegacyPresetStorage() {
         XCTAssertEqual(
             ScreenshotShortcut.persistedValue(for: "commandShiftA"),
@@ -87,6 +95,28 @@ final class ZFrameCoreTests: XCTestCase {
         XCTAssertEqual(
             ScreenshotShortcut.validate(key: .letter("R"), modifiers: [.command, .shift]),
             .invalid(.reservedShortcut)
+        )
+    }
+
+    func testShortcutValidationRejectsDuplicateShortcutWhenProvided() {
+        XCTAssertEqual(
+            ScreenshotShortcut.validate(
+                key: .letter("A"),
+                modifiers: [.command, .shift],
+                duplicateShortcut: .default
+            ),
+            .invalid(.duplicateShortcut)
+        )
+    }
+
+    func testRecordingShortcutPersistenceAllowsCommandShiftR() {
+        XCTAssertEqual(
+            ScreenshotShortcut.persistedValue(
+                for: "cmd+shift+r",
+                defaultShortcut: .defaultRecording,
+                reservedShortcuts: []
+            ),
+            .defaultRecording
         )
     }
 

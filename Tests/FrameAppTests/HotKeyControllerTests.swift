@@ -22,4 +22,22 @@ final class HotKeyControllerTests: XCTestCase {
         XCTAssertEqual(parameters.keyCode, kVK_ANSI_7)
         XCTAssertEqual(parameters.modifierFlags, UInt32(controlKey | shiftKey))
     }
+
+    func testRegistrationParametersMapDefaultRecordingShortcutToCarbonValues() {
+        let parameters = HotKeyController.registrationParameters(for: .defaultRecording)
+
+        XCTAssertEqual(parameters.keyCode, kVK_ANSI_R)
+        XCTAssertEqual(parameters.modifierFlags, UInt32(cmdKey | shiftKey))
+    }
+
+    func testHotKeyKindRoutesDistinctScreenshotAndRecordingIDs() {
+        XCTAssertEqual(
+            HotKeyController.hotKeyKindForTesting(signature: HotKeyController.hotKeySignatureForTesting, id: 1),
+            .screenshot
+        )
+        XCTAssertEqual(
+            HotKeyController.hotKeyKindForTesting(signature: HotKeyController.hotKeySignatureForTesting, id: 2),
+            .recording
+        )
+    }
 }

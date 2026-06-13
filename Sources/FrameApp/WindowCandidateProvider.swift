@@ -48,7 +48,7 @@ struct WindowCandidateProvider {
 
     private func candidate(from windowInfo: [String: Any]) -> WindowCandidate? {
         guard let ownerProcessID = windowInfo[kCGWindowOwnerPID as String] as? pid_t,
-              ownerProcessID != currentProcessID,
+              isSelectableWindow(ownerProcessID: ownerProcessID, windowInfo: windowInfo),
               let layer = (windowInfo[kCGWindowLayer as String] as? NSNumber)?.intValue,
               layer == 0,
               let windowID = (windowInfo[kCGWindowNumber as String] as? NSNumber)?.uint32Value,
@@ -64,6 +64,26 @@ struct WindowCandidateProvider {
 
         return WindowCandidate(id: windowID, ownerProcessID: ownerProcessID, bounds: rect)
     }
+
+    private func isSelectableWindow(ownerProcessID: pid_t, windowInfo: [String: Any]) -> Bool {
+        guard ownerProcessID == currentProcessID else {
+            return true
+        }
+
+        guard let windowName = windowInfo[kCGWindowName as String] as? String else {
+            return false
+        }
+
+        return Self.selectableCurrentProcessWindowNames.contains(windowName)
+    }
+
+    private static let selectableCurrentProcessWindowNames: Set<String> = [
+        "Settings",
+        "设置",
+        "Capture History",
+        "捕获历史",
+        "截图历史",
+    ]
 
     static func cocoaRect(forWindowInfo windowInfo: [String: Any]) -> CGRect? {
         guard let bounds = windowInfo[kCGWindowBounds as String] as? [String: Any],

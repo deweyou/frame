@@ -7,11 +7,17 @@ protocol SelectionOverlayControlling: AnyObject {
 
     func startSelection(
         strings: AppStrings,
+        initialMode: SelectionOverlayInitialMode,
         onStartRecording: @escaping (SelectionOverlayWindow, SelectionCapture, RecordingOptions) -> Void,
         completion: @escaping (SelectionOverlayCompletion?) -> Void
     )
 
     func dismissSelectionForRecording()
+}
+
+enum SelectionOverlayInitialMode: Equatable {
+    case screenshot
+    case recordingSetup
 }
 
 @MainActor
@@ -32,6 +38,7 @@ final class SelectionOverlayController: SelectionOverlayControlling {
 
     func startSelection(
         strings: AppStrings = AppStrings.current(),
+        initialMode: SelectionOverlayInitialMode = .screenshot,
         onStartRecording: @escaping (SelectionOverlayWindow, SelectionCapture, RecordingOptions) -> Void = { _, _, _ in },
         completion: @escaping (SelectionOverlayCompletion?) -> Void
     ) {
@@ -58,6 +65,7 @@ final class SelectionOverlayController: SelectionOverlayControlling {
             let window = SelectionOverlayWindow(
                 screen: screen,
                 initialGlobalRect: initialRect,
+                initialMode: initialMode,
                 showsCenteredHUDWhenEmpty: screen === activeScreen,
                 placeholderText: strings.capturePlaceholder,
                 ocrActionText: strings.quickAccessOCR,

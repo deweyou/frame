@@ -39,6 +39,10 @@ final class HUDSizeControl: NSView, NSTextFieldDelegate {
         activeEditingDimension != nil
     }
 
+    func textForTesting() -> String {
+        "\(widthField.stringValue) x \(heightField.stringValue)"
+    }
+
     func update(
         width: Int,
         height: Int,

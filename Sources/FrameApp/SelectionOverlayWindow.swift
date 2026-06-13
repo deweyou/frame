@@ -10,6 +10,7 @@ final class SelectionOverlayWindow {
     init(
         screen: NSScreen,
         initialGlobalRect: CGRect?,
+        initialMode: SelectionOverlayInitialMode = .screenshot,
         showsCenteredHUDWhenEmpty: Bool,
         placeholderText: String,
         ocrActionText: String,
@@ -22,6 +23,7 @@ final class SelectionOverlayWindow {
         overlayView = SelectionOverlayView(
             screen: screen,
             initialGlobalRect: initialGlobalRect,
+            initialMode: initialMode,
             showsCenteredHUDWhenEmpty: showsCenteredHUDWhenEmpty,
             placeholderText: placeholderText,
             ocrActionText: ocrActionText,
@@ -88,6 +90,10 @@ final class SelectionOverlayWindow {
 
     func hudButtonImageDescriptionsForTesting() -> [String] {
         overlayView.hudButtonImageDescriptionsForTesting()
+    }
+
+    func hudButtonVisibleTitlesForTesting() -> [String] {
+        overlayView.hudButtonVisibleTitlesForTesting()
     }
 
     func hudButtonSlashStatesForTesting() -> [String: Bool] {
@@ -164,6 +170,30 @@ final class SelectionOverlayWindow {
 
     func countdownTextFrameForTesting() -> CGRect? {
         overlayView.countdownTextFrameForTesting()
+    }
+
+    func countdownColorsForTesting() -> (foreground: NSColor, background: NSColor)? {
+        overlayView.countdownColorsForTesting()
+    }
+
+    func countdownBorderAlphaForTesting() -> CGFloat {
+        overlayView.countdownBorderAlphaForTesting()
+    }
+
+    func placeholderIsVisibleForTesting() -> Bool {
+        overlayView.placeholderIsVisibleForTesting()
+    }
+
+    func sizeHUDIsHiddenForTesting() -> Bool {
+        overlayView.sizeHUDIsHiddenForTesting()
+    }
+
+    func sizeHUDTextForTesting() -> String? {
+        overlayView.sizeHUDTextForTesting()
+    }
+
+    func ignoresMouseEventsForTesting() -> Bool {
+        window.ignoresMouseEvents
     }
 
     func tooltipLayoutForTesting(text: String) -> (size: CGSize, textFrame: CGRect) {
@@ -267,6 +297,7 @@ private final class SelectionOverlayView: NSView {
     init(
         screen: NSScreen,
         initialGlobalRect: CGRect?,
+        initialMode: SelectionOverlayInitialMode,
         showsCenteredHUDWhenEmpty: Bool,
         placeholderText: String,
         ocrActionText: String,
@@ -292,6 +323,9 @@ private final class SelectionOverlayView: NSView {
         selectionRect = localRect(fromGlobalRect: initialGlobalRect)
         configureHUD()
         configurePlaceholder()
+        if initialMode == .recordingSetup {
+            enterRecordingSetupMode()
+        }
         updateMetrics()
     }
 
@@ -794,9 +828,15 @@ private final class SelectionOverlayView: NSView {
     private func makeRecordingFormatButton() -> HUDIconButton {
         let label = currentRecordingOptions.format == .mp4 ? "MP4" : "GIF"
         let button = HUDIconButton(
-            symbolName: currentRecordingOptions.format == .mp4 ? "film" : "photo.stack",
+            symbolName: currentRecordingOptions.format == .mp4 ? "film" : "gif",
             accessibilityDescription: label
         )
+        button.preferredHUDWidth = 48
+        button.isFormatToggle = true
+        button.image = nil
+        button.imagePosition = .noImage
+        button.title = label
+        button.attributedTitle = formatButtonTitle(label, color: hudTheme.foregroundColor)
         button.target = self
         button.action = #selector(recordingFormatButtonClicked)
         button.onHoverChange = { [weak self, weak button] isHovering in
@@ -940,6 +980,9 @@ private final class SelectionOverlayView: NSView {
             button.contentTintColor = tintColor
             button.slashColor = tintColor
             button.hoverColor = theme.hoverColor
+            if button.isFormatToggle {
+                button.attributedTitle = formatButtonTitle(button.title, color: tintColor)
+            }
         }
         updateRecordingElapsedColor()
         tooltipView.applyTheme(theme)
@@ -948,8 +991,6 @@ private final class SelectionOverlayView: NSView {
                 width: Int(displayedLocalRect.width.rounded()),
                 height: Int(displayedLocalRect.height.rounded())
             )
-        } else {
-            updateSizeControl(width: 0, height: 0)
         }
     }
 
@@ -958,6 +999,16 @@ private final class SelectionOverlayView: NSView {
             return .systemRed
         }
         return theme.foregroundColor
+    }
+
+    private func formatButtonTitle(_ label: String, color: NSColor) -> NSAttributedString {
+        NSAttributedString(
+            string: label,
+            attributes: [
+                .foregroundColor: color,
+                .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .bold),
+            ]
+        )
     }
 
     private func updateRecordingElapsedColor() {
@@ -1072,6 +1123,7 @@ private final class SelectionOverlayView: NSView {
         isDelayCountdownActive = false
         delaySnapshotSelection = nil
         countdownView.isHidden = true
+        window?.ignoresMouseEvents = false
         onComplete(completion)
     }
 
@@ -1124,6 +1176,10 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
+        enterRecordingSetupMode()
+    }
+
+    private func enterRecordingSetupMode() {
         recordingHUDMode = .setup
         sizeControl.isHidden = false
         recordingElapsedLabel.isHidden = true
@@ -1250,6 +1306,7 @@ private final class SelectionOverlayView: NSView {
     private func beginDelayCountdown(for selection: SelectionCapture) {
         delaySnapshotSelection = selection
         isDelayCountdownActive = true
+        window?.ignoresMouseEvents = true
         dragOperation = nil
         pendingTooltipTask?.cancel()
         tooltipView.isHidden = true
@@ -1297,8 +1354,7 @@ private final class SelectionOverlayView: NSView {
     private func showCountdown(secondsRemaining: Int) {
         countdownView.secondsRemaining = secondsRemaining
         let size = CountdownView.preferredSize(for: secondsRemaining)
-        let anchorRect = delaySnapshotSelection?.rect ?? displayedLocalRect ?? hudStackView.frame
-        let center = CGPoint(x: anchorRect.midX, y: anchorRect.midY)
+        let center = CGPoint(x: bounds.midX, y: bounds.minY + bounds.height * 0.04)
         let x = min(max(center.x - size.width / 2, bounds.minX + 8), bounds.maxX - size.width - 8)
         let y = min(max(center.y - size.height / 2, bounds.minY + 8), bounds.maxY - size.height - 8)
         countdownView.frame = CGRect(origin: CGPoint(x: x, y: y), size: size)
@@ -1340,7 +1396,6 @@ private final class SelectionOverlayView: NSView {
             modeView.isHidden = true
             sizeView.isHidden = true
             placeholderView.isHidden = !showsCenteredHUDWhenEmpty
-            updateSizeControl(width: 0, height: 0)
             positionHUD()
             positionPlaceholder()
             scheduleHUDThemeUpdate()
@@ -1465,6 +1520,13 @@ private final class SelectionOverlayView: NSView {
             .map(\.symbolName)
     }
 
+    func hudButtonVisibleTitlesForTesting() -> [String] {
+        modeView.subviews
+            .compactMap { $0 as? HUDIconButton }
+            .map(\.title)
+            .filter { !$0.isEmpty }
+    }
+
     func hudButtonSlashStatesForTesting() -> [String: Bool] {
         Dictionary(
             uniqueKeysWithValues: modeView.subviews
@@ -1583,6 +1645,34 @@ private final class SelectionOverlayView: NSView {
         }
 
         return countdownView.textFrame
+    }
+
+    func countdownColorsForTesting() -> (foreground: NSColor, background: NSColor)? {
+        guard !countdownView.isHidden else {
+            return nil
+        }
+
+        return countdownView.colorsForTesting()
+    }
+
+    func countdownBorderAlphaForTesting() -> CGFloat {
+        countdownView.borderAlphaForTesting()
+    }
+
+    func placeholderIsVisibleForTesting() -> Bool {
+        !placeholderView.isHidden
+    }
+
+    func sizeHUDIsHiddenForTesting() -> Bool {
+        sizeView.isHidden
+    }
+
+    func sizeHUDTextForTesting() -> String? {
+        guard !sizeView.isHidden else {
+            return nil
+        }
+
+        return sizeControl.textForTesting()
     }
 
     func tooltipLayoutForTesting(text: String) -> (size: CGSize, textFrame: CGRect) {
@@ -2329,6 +2419,7 @@ private final class HUDIconButton: NSButton {
             updatePrimaryAppearance()
         }
     }
+    var isFormatToggle = false
     private let hoverLayer = CALayer()
     private let primaryLayer = CALayer()
     private let slashLayer = CAShapeLayer()
@@ -2487,6 +2578,8 @@ private final class CountdownView: NSView {
     private static let minimumSize = CGSize(width: 72, height: 58)
     private static let horizontalPadding: CGFloat = 28
     private static let verticalPadding: CGFloat = 12
+    private static let foregroundColor = NSColor.white
+    private static let backgroundColor = NSColor(calibratedRed: 0.62, green: 0.02, blue: 0.04, alpha: 0.58)
 
     let font = NSFont.monospacedDigitSystemFont(ofSize: 36, weight: .bold)
 
@@ -2521,11 +2614,8 @@ private final class CountdownView: NSView {
             xRadius: Self.cornerRadius,
             yRadius: Self.cornerRadius
         )
-        NSColor.black.withAlphaComponent(0.58).setFill()
+        Self.backgroundColor.setFill()
         path.fill()
-        NSColor.white.withAlphaComponent(0.28).setStroke()
-        path.lineWidth = 1
-        path.stroke()
 
         "\(secondsRemaining)".draw(
             with: textFrame,
@@ -2548,8 +2638,16 @@ private final class CountdownView: NSView {
     private static func textAttributes(font: NSFont? = nil) -> [NSAttributedString.Key: Any] {
         [
             .font: font ?? NSFont.monospacedDigitSystemFont(ofSize: 36, weight: .bold),
-            .foregroundColor: NSColor.white,
+            .foregroundColor: foregroundColor,
         ]
+    }
+
+    func colorsForTesting() -> (foreground: NSColor, background: NSColor) {
+        (Self.foregroundColor, Self.backgroundColor)
+    }
+
+    func borderAlphaForTesting() -> CGFloat {
+        0
     }
 }
 

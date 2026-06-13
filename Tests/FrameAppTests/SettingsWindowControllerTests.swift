@@ -72,6 +72,7 @@ final class SettingsWindowControllerTests: XCTestCase {
 
     func testScreenshotShortcutSettingsUseInlineRecorder() {
         XCTAssertTrue(SettingsGeneralMetrics.containsScreenshotShortcut)
+        XCTAssertTrue(SettingsGeneralMetrics.containsRecordingShortcut)
         XCTAssertFalse(SettingsScreenshotMetrics.containsShortcut)
         XCTAssertTrue(SettingsShortcutRecorderMetrics.usesInlineRecorder)
         XCTAssertEqual(SettingsShortcutRecorderMetrics.width, 118, accuracy: 0.5)
@@ -205,6 +206,15 @@ final class SettingsWindowControllerTests: XCTestCase {
 
         XCTAssertEqual(button.title, "⌘A")
         XCTAssertEqual(failures, [nil, .insufficientModifiers])
+    }
+
+    func testShortcutRecorderCanReportDuplicateShortcut() {
+        let strings = AppStrings(language: .en)
+
+        XCTAssertEqual(
+            strings.settingsShortcutRecorderError(.duplicateShortcut),
+            "Already used by another Frame shortcut"
+        )
     }
 
     func testShortcutRecorderKeepsPressedCombinationAfterViewUpdate() {

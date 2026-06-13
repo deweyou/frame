@@ -71,7 +71,7 @@ struct AppStrings {
 
     var menuCaptureHistory: String {
         switch language {
-        case .zhHans: "截图历史"
+        case .zhHans: "捕获历史"
         case .en: "Capture History"
         }
     }
@@ -153,6 +153,13 @@ struct AppStrings {
         }
     }
 
+    var settingsRecordingShortcut: String {
+        switch language {
+        case .zhHans: "录屏快捷键"
+        case .en: "Recording shortcut"
+        }
+    }
+
     var settingsShortcutRecorderPrompt: String {
         switch language {
         case .zhHans: "按下快捷键"
@@ -181,6 +188,13 @@ struct AppStrings {
         }
     }
 
+    var settingsShortcutRecorderDuplicateShortcut: String {
+        switch language {
+        case .zhHans: "这个快捷键已被 Frame 的另一个操作使用"
+        case .en: "Already used by another Frame shortcut"
+        }
+    }
+
     func settingsShortcutRecorderError(_ failure: ScreenshotShortcutValidationFailure) -> String {
         switch failure {
         case .insufficientModifiers:
@@ -189,6 +203,8 @@ struct AppStrings {
             settingsShortcutRecorderUnsupportedKey
         case .reservedShortcut:
             settingsShortcutRecorderReservedShortcut
+        case .duplicateShortcut:
+            settingsShortcutRecorderDuplicateShortcut
         }
     }
 
@@ -319,7 +335,7 @@ struct AppStrings {
 
     var settingsCaptureHistoryEnabled: String {
         switch language {
-        case .zhHans: "保存最近截图"
+        case .zhHans: "保存最近捕获"
         case .en: "Keep recent captures"
         }
     }
@@ -480,7 +496,7 @@ struct AppStrings {
 
     var captureHistoryTitle: String {
         switch language {
-        case .zhHans: "截图历史"
+        case .zhHans: "捕获历史"
         case .en: "Capture History"
         }
     }

@@ -212,6 +212,31 @@ final class SelectionOverlayCompletionTests: XCTestCase {
     }
 
     @MainActor
+    func testRecordingFormatToggleShowsSelectedFormatAsVisibleText() throws {
+        SettingsStore.setRecordingOptions(.defaults)
+        defer {
+            SettingsStore.setRecordingOptions(.defaults)
+        }
+
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        let window = try makeOverlayWindowForTesting(
+            initialGlobalRect: CGRect(
+                x: screen.frame.minX + 20,
+                y: screen.frame.minY + 20,
+                width: 240,
+                height: 160
+            )
+        )
+
+        XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "录屏"))
+        XCTAssertTrue(window.hudButtonVisibleTitlesForTesting().contains("MP4"))
+        XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "MP4"))
+
+        XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("GIF"))
+        XCTAssertTrue(window.hudButtonVisibleTitlesForTesting().contains("GIF"))
+    }
+
+    @MainActor
     func testActiveRecordingHandlersAreInvokedFromHUD() throws {
         let window = try makeOverlayWindowForTesting()
         var didStop = false
@@ -344,11 +369,11 @@ final class SelectionOverlayCompletionTests: XCTestCase {
     }
 
     @MainActor
-    func testDelayCountdownAppearsCenteredAndProminentInsideSelection() throws {
+    func testDelayCountdownAppearsBottomCenterAndProminentDuringPassiveCountdown() throws {
         let screen = try XCTUnwrap(NSScreen.screens.first)
         let selectionRect = CGRect(
-            x: screen.frame.minX + 80,
-            y: screen.frame.minY + 90,
+            x: screen.frame.maxX - 320,
+            y: screen.frame.maxY - 300,
             width: 240,
             height: 180
         )
@@ -360,16 +385,41 @@ final class SelectionOverlayCompletionTests: XCTestCase {
         XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "延迟截图"))
 
         let countdownFrame = try XCTUnwrap(window.countdownFrameForTesting())
-        let activeSelection = try XCTUnwrap(window.activeSelectionForTesting())
-        XCTAssertEqual(countdownFrame.midX, activeSelection.rect.midX, accuracy: 1)
-        XCTAssertEqual(countdownFrame.midY, activeSelection.rect.midY, accuracy: 1)
+        let localScreenBounds = CGRect(origin: .zero, size: screen.frame.size)
+        let desiredCountdownCenterY = localScreenBounds.minY + localScreenBounds.height * 0.04
+        let expectedCountdownCenterY = min(
+            max(desiredCountdownCenterY, localScreenBounds.minY + 8 + countdownFrame.height / 2),
+            localScreenBounds.maxY - 8 - countdownFrame.height / 2
+        )
+        XCTAssertEqual(countdownFrame.midX, localScreenBounds.midX, accuracy: 1)
+        XCTAssertEqual(countdownFrame.midY, expectedCountdownCenterY, accuracy: 1)
+        XCTAssertLessThan(countdownFrame.midY, localScreenBounds.midY)
         XCTAssertGreaterThanOrEqual(countdownFrame.width, 72)
         XCTAssertGreaterThanOrEqual(countdownFrame.height, 58)
         XCTAssertGreaterThanOrEqual(try XCTUnwrap(window.countdownFontSizeForTesting()), 34)
+        XCTAssertEqual(window.ignoresMouseEventsForTesting(), true)
+
+        let colors = try XCTUnwrap(window.countdownColorsForTesting())
+        XCTAssertGreaterThan(colors.background.relativeRedForTesting, 0.55)
+        XCTAssertLessThan(colors.background.relativeRedForTesting, 0.75)
+        XCTAssertLessThan(colors.background.relativeGreenForTesting, 0.12)
+        XCTAssertLessThan(colors.background.relativeBlueForTesting, 0.12)
+        XCTAssertLessThanOrEqual(colors.background.relativeAlphaForTesting, 0.62)
+        XCTAssertEqual(window.countdownBorderAlphaForTesting(), 0, accuracy: 0.01)
 
         let textFrame = try XCTUnwrap(window.countdownTextFrameForTesting())
         XCTAssertEqual(textFrame.midX, countdownFrame.width / 2, accuracy: 0.5)
         XCTAssertEqual(textFrame.midY, countdownFrame.height / 2, accuracy: 0.5)
+    }
+
+    @MainActor
+    func testRecordingSetupWithoutSelectionHidesZeroSizeHUD() throws {
+        let window = try makeOverlayWindowForTesting(initialMode: .recordingSetup)
+
+        XCTAssertFalse(window.hasSelection)
+        XCTAssertTrue(window.placeholderIsVisibleForTesting())
+        XCTAssertTrue(window.sizeHUDIsHiddenForTesting())
+        XCTAssertEqual(window.sizeHUDTextForTesting(), nil)
     }
 
     @MainActor
@@ -389,6 +439,7 @@ final class SelectionOverlayCompletionTests: XCTestCase {
     @MainActor
     private func makeOverlayWindowForTesting(
         initialGlobalRect: CGRect? = nil,
+        initialMode: SelectionOverlayInitialMode = .screenshot,
         delayCountdownNanoseconds: UInt64 = 5_000_000_000,
         onComplete: @escaping (SelectionOverlayCompletion?) -> Void = { _ in },
         onStartRecording: @escaping (SelectionCapture, RecordingOptions) -> Void = { _, _ in }
@@ -398,6 +449,7 @@ final class SelectionOverlayCompletionTests: XCTestCase {
         return SelectionOverlayWindow(
             screen: screen,
             initialGlobalRect: initialGlobalRect,
+            initialMode: initialMode,
             showsCenteredHUDWhenEmpty: true,
             placeholderText: "Drag to select an area",
             ocrActionText: "Recognize Text",
@@ -421,5 +473,21 @@ private extension NSColor {
         return 0.2126 * color.redComponent
             + 0.7152 * color.greenComponent
             + 0.0722 * color.blueComponent
+    }
+
+    var relativeRedForTesting: CGFloat {
+        (usingColorSpace(.deviceRGB) ?? self).redComponent
+    }
+
+    var relativeGreenForTesting: CGFloat {
+        (usingColorSpace(.deviceRGB) ?? self).greenComponent
+    }
+
+    var relativeBlueForTesting: CGFloat {
+        (usingColorSpace(.deviceRGB) ?? self).blueComponent
+    }
+
+    var relativeAlphaForTesting: CGFloat {
+        (usingColorSpace(.deviceRGB) ?? self).alphaComponent
     }
 }

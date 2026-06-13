@@ -78,14 +78,12 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         XCTAssertIdentical(previewView.hitTest(closePoint), closeButton)
 
         let imageView = try XCTUnwrap(findPreviewImageView(in: previewView))
-        let expectedPreviewSize = CapturePreviewMetrics.previewSize(
-            forDesktopSize: (NSScreen.main ?? NSScreen.screens.first)?.frame.size
-        )
-        XCTAssertEqual(imageView.frame.width, 200, accuracy: 0.5)
+        let expectedPreviewSize = CapturePreviewMetrics.quickAccessCardSize
+        XCTAssertEqual(imageView.frame.width, expectedPreviewSize.width, accuracy: 0.5)
         XCTAssertEqual(imageView.frame.height, expectedPreviewSize.height, accuracy: 0.5)
         XCTAssertEqual(
             imageView.frame.height / imageView.frame.width,
-            CapturePreviewMetrics.desktopAspectRatio(),
+            expectedPreviewSize.height / expectedPreviewSize.width,
             accuracy: 0.01
         )
         XCTAssertNotEqual(imageView.layer?.backgroundColor, NSColor.clear.cgColor)
@@ -182,7 +180,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         }
     }
 
-    func testQuickAccessPreviewUsesDesktopAspectRatio() throws {
+    func testQuickAccessPreviewUsesSharedCardSize() throws {
         _ = NSApplication.shared
         let panel = try showPreview(
             screenshot: CapturedScreenshot(
@@ -201,14 +199,12 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         previewView.layoutSubtreeIfNeeded()
 
         let imageView = try XCTUnwrap(findPreviewImageView(in: previewView))
-        let expectedPreviewSize = CapturePreviewMetrics.previewSize(
-            forDesktopSize: (NSScreen.main ?? NSScreen.screens.first)?.frame.size
-        )
-        XCTAssertEqual(imageView.frame.width, 200, accuracy: 0.5)
+        let expectedPreviewSize = CapturePreviewMetrics.quickAccessCardSize
+        XCTAssertEqual(imageView.frame.width, expectedPreviewSize.width, accuracy: 0.5)
         XCTAssertEqual(imageView.frame.height, expectedPreviewSize.height, accuracy: 0.5)
         XCTAssertEqual(
             imageView.frame.height / imageView.frame.width,
-            CapturePreviewMetrics.desktopAspectRatio(),
+            expectedPreviewSize.height / expectedPreviewSize.width,
             accuracy: 0.01
         )
     }
@@ -506,7 +502,7 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         XCTAssertTrue(previewPanels.allSatisfy { !$0.ignoresMouseEvents })
     }
 
-    func testQuickAccessClosesExistingPreviewsWhenRecordingStarts() throws {
+    func testQuickAccessTemporarilyHidesExistingPreviewsWhenRecordingStarts() throws {
         _ = NSApplication.shared
         let screenshot = CapturedScreenshot(
             pngData: try makePNGData(),
@@ -538,7 +534,9 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         controller.closePreviewsForRecordingStart()
         controller.restoreTemporarilyHiddenPreviews()
 
-        XCTAssertEqual(previewPanels.filter(\.isVisible).count, 0)
+        XCTAssertEqual(previewPanels.filter(\.isVisible).count, 1)
+        XCTAssertTrue(previewPanels.allSatisfy { $0.alphaValue == 1 })
+        XCTAssertTrue(previewPanels.allSatisfy { !$0.ignoresMouseEvents })
         XCTAssertEqual(closeCount, 0)
     }
 

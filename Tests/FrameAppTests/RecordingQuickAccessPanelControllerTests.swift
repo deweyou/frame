@@ -249,9 +249,179 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         }
         XCTAssertEqual(panels.count, 2)
         let sortedPanels = panels.sorted { $0.frame.minY < $1.frame.minY }
-        XCTAssertEqual(sortedPanels.first?.frame.size, CapturePreviewMetrics.previewSize(forDesktopSize: NSScreen.main?.frame.size))
+        XCTAssertEqual(sortedPanels.first?.frame.size, CapturePreviewMetrics.quickAccessCardSize)
         XCTAssertEqual(sortedPanels.last?.frame.size, QuickAccessPanelController.recordingPreviewSize(forSourceSize: recording.pixelSize))
         XCTAssertGreaterThan(sortedPanels[1].frame.minY, sortedPanels[0].frame.maxY)
+    }
+
+    func testScreenshotAndRecordingQuickAccessCardsUseSameSize() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        let screenshot = CapturedScreenshot(
+            pngData: try makePNGData(),
+            image: NSImage(size: NSSize(width: 1600, height: 900)),
+            rect: CGRect(x: 0, y: 0, width: 1600, height: 900)
+        )
+        let recording = CapturedRecording(
+            id: UUID(),
+            fileURL: URL(fileURLWithPath: "/tmp/test.mp4"),
+            format: .mp4,
+            rect: CGRect(x: 0, y: 0, width: 1282, height: 504),
+            pixelSize: CGSize(width: 1282, height: 504),
+            byteSize: 10,
+            duration: 24
+        )
+
+        controller.show(
+            for: screenshot,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .en),
+            copy: { true },
+            save: { true },
+            recognizeText: { true },
+            openWorkspace: { true },
+            pin: { true },
+            close: {}
+        )
+        controller.show(
+            for: recording,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .en),
+            download: { true },
+            copy: { true },
+            preview: { true },
+            close: {}
+        )
+
+        let panels = newPreviewPanels(excluding: windowsBeforeShow)
+        defer {
+            panels.forEach { $0.close() }
+        }
+
+        let expectedSize = CapturePreviewMetrics.quickAccessCardSize
+        XCTAssertFalse(panels.isEmpty)
+        XCTAssertTrue(panels.allSatisfy { $0.frame.size == expectedSize })
+    }
+
+    func testHoveringQuickAccessCardShowsRightSidePreviewAfterDelay() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = QuickAccessPanelController(hoverPreviewDelay: 0.01)
+        retainedPreviewControllers.append(controller)
+        let screenshot = CapturedScreenshot(
+            pngData: try makePNGData(),
+            image: NSImage(size: NSSize(width: 1600, height: 900)),
+            rect: CGRect(x: 0, y: 0, width: 1600, height: 900)
+        )
+
+        controller.show(
+            for: screenshot,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .en),
+            copy: { true },
+            save: { true },
+            recognizeText: { true },
+            openWorkspace: { true },
+            pin: { true },
+            close: {}
+        )
+
+        let panel = try XCTUnwrap(newPreviewPanels(excluding: windowsBeforeShow).first)
+        defer {
+            panel.close()
+            controller.closeHoverPreviewForTesting()
+        }
+
+        controller.scheduleHoverPreviewForTesting(window: panel)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.04))
+
+        let hoverFrame = try XCTUnwrap(controller.hoverPreviewFrameForTesting())
+        XCTAssertGreaterThan(hoverFrame.minX, panel.frame.maxX)
+        XCTAssertGreaterThan(hoverFrame.width, panel.frame.width)
+        XCTAssertGreaterThan(hoverFrame.height, panel.frame.height)
+    }
+
+    func testDefaultHoverPreviewDelayIsTwoSeconds() {
+        XCTAssertEqual(QuickAccessPanelController.defaultHoverPreviewDelayForTesting, 2)
+    }
+
+    func testHoverPreviewUsesAspectFitMediaWithoutArrow() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = QuickAccessPanelController(hoverPreviewDelay: 0.01)
+        retainedPreviewControllers.append(controller)
+        let screenshot = CapturedScreenshot(
+            pngData: try makePNGData(),
+            image: NSImage(size: NSSize(width: 1600, height: 900)),
+            rect: CGRect(x: 0, y: 0, width: 1600, height: 900)
+        )
+
+        controller.show(
+            for: screenshot,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .en),
+            copy: { true },
+            save: { true },
+            recognizeText: { true },
+            openWorkspace: { true },
+            pin: { true },
+            close: {}
+        )
+
+        let panel = try XCTUnwrap(newPreviewPanels(excluding: windowsBeforeShow).first)
+        defer {
+            panel.close()
+            controller.closeHoverPreviewForTesting()
+        }
+
+        controller.scheduleHoverPreviewForTesting(window: panel)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+
+        let metrics = try XCTUnwrap(controller.hoverPreviewBubbleMetricsForTesting())
+        XCTAssertEqual(metrics.panelFrame.width, 664, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(metrics.mediaFrame.width, 630)
+        XCTAssertEqual(metrics.mediaFrame.width / metrics.mediaFrame.height, 16.0 / 9.0, accuracy: 0.01)
+        XCTAssertEqual(metrics.mediaFrame.minX, 12, accuracy: 0.5)
+        XCTAssertEqual(metrics.mediaFrame.minY, 12, accuracy: 0.5)
+    }
+
+    func testRecordingHoverPreviewUsesMutedPlayback() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = QuickAccessPanelController(hoverPreviewDelay: 0.01)
+        retainedPreviewControllers.append(controller)
+        let recording = CapturedRecording(
+            id: UUID(),
+            fileURL: URL(fileURLWithPath: "/tmp/test.mp4"),
+            format: .mp4,
+            rect: CGRect(x: 0, y: 0, width: 1282, height: 504),
+            pixelSize: CGSize(width: 1282, height: 504),
+            byteSize: 10,
+            duration: 24
+        )
+
+        controller.show(
+            for: recording,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .en),
+            download: { true },
+            copy: { true },
+            preview: { true },
+            close: {}
+        )
+
+        let panel = try XCTUnwrap(newPreviewPanels(excluding: windowsBeforeShow).first)
+        defer {
+            panel.close()
+            controller.closeHoverPreviewForTesting()
+        }
+
+        controller.scheduleHoverPreviewForTesting(window: panel)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.04))
+
+        XCTAssertEqual(controller.hoverPreviewPlayerIsMutedForTesting(), true)
     }
 
     func testShowingRecordingRestoresTemporarilyHiddenScreenshotPreviews() throws {
