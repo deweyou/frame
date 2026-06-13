@@ -29,6 +29,34 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(SettingsStore.appLanguage(defaults: defaults), .en)
     }
 
+    func testScreenshotShortcutPersistsCustomStorageValue() {
+        let shortcut = ScreenshotShortcut(key: .number("7"), modifiers: [.command, .option])
+
+        SettingsStore.setScreenshotShortcut(shortcut, defaults: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: SettingsStore.screenshotShortcutKey), "cmd+option+7")
+        XCTAssertEqual(SettingsStore.screenshotShortcut(defaults: defaults), shortcut)
+    }
+
+    func testScreenshotShortcutPersistsPresetAsCustomStorageValue() {
+        SettingsStore.setScreenshotShortcut(.commandShiftS, defaults: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: SettingsStore.screenshotShortcutKey), "cmd+shift+s")
+        XCTAssertEqual(
+            SettingsStore.screenshotShortcut(defaults: defaults),
+            ScreenshotShortcut(key: .letter("S"), modifiers: [.command, .shift])
+        )
+    }
+
+    func testScreenshotShortcutReadsLegacyPresetValue() {
+        defaults.set("commandShiftS", forKey: SettingsStore.screenshotShortcutKey)
+
+        XCTAssertEqual(
+            SettingsStore.screenshotShortcut(defaults: defaults),
+            ScreenshotShortcut(key: .letter("S"), modifiers: [.command, .shift])
+        )
+    }
+
     func testWindowScreenshotDecorationStyleDefaultsToSoftBackdrop() {
         XCTAssertEqual(SettingsStore.windowScreenshotDecorationStyle(defaults: defaults), .softBackdrop)
     }

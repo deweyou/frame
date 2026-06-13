@@ -19,17 +19,75 @@ final class ZFrameCoreTests: XCTestCase {
         XCTAssert(!KeyboardShortcut.defaultScreenshot.isReservedOnly)
     }
 
-    func testScreenshotShortcutOptionsExposeDisplayNames() {
-        XCTAssert(ScreenshotShortcut.commandShiftA.keyboardShortcut.displayName == "Command+Shift+A")
-        XCTAssert(ScreenshotShortcut.commandShiftS.keyboardShortcut.displayName == "Command+Shift+S")
-        XCTAssert(ScreenshotShortcut.commandShiftD.keyboardShortcut.displayName == "Command+Shift+D")
-        XCTAssert(ScreenshotShortcut.commandShiftF.keyboardShortcut.displayName == "Command+Shift+F")
+    func testScreenshotShortcutDefaultsToCommandShiftA() {
+        XCTAssertEqual(ScreenshotShortcut.default.key, .letter("A"))
+        XCTAssertEqual(ScreenshotShortcut.default.modifiers, [.command, .shift])
+        XCTAssertEqual(ScreenshotShortcut.default.displayName, "⌘⇧A")
+        XCTAssertEqual(ScreenshotShortcut.default.storageValue, "cmd+shift+a")
+        XCTAssertEqual(ScreenshotShortcut.default.keyboardShortcut.displayName, "Command+Shift+A")
     }
 
-    func testScreenshotShortcutPersistenceFallsBackToDefault() {
-        XCTAssert(ScreenshotShortcut.persistedValue(for: "commandShiftS") == .commandShiftS)
-        XCTAssert(ScreenshotShortcut.persistedValue(for: nil) == .commandShiftA)
-        XCTAssert(ScreenshotShortcut.persistedValue(for: "unknown") == .commandShiftA)
+    func testScreenshotShortcutMigratesLegacyPresetStorage() {
+        XCTAssertEqual(
+            ScreenshotShortcut.persistedValue(for: "commandShiftA"),
+            ScreenshotShortcut(key: .letter("A"), modifiers: [.command, .shift])
+        )
+        XCTAssertEqual(
+            ScreenshotShortcut.persistedValue(for: "commandShiftS"),
+            ScreenshotShortcut(key: .letter("S"), modifiers: [.command, .shift])
+        )
+        XCTAssertEqual(
+            ScreenshotShortcut.persistedValue(for: "commandShiftD"),
+            ScreenshotShortcut(key: .letter("D"), modifiers: [.command, .shift])
+        )
+        XCTAssertEqual(
+            ScreenshotShortcut.persistedValue(for: "commandShiftF"),
+            ScreenshotShortcut(key: .letter("F"), modifiers: [.command, .shift])
+        )
+    }
+
+    func testScreenshotShortcutPersistsAndReadsEncodedStorage() {
+        let shortcut = ScreenshotShortcut(key: .number("7"), modifiers: [.command, .option])
+
+        XCTAssertEqual(shortcut.displayName, "⌘⌥7")
+        XCTAssertEqual(shortcut.keyboardShortcut.displayName, "Command+Option+7")
+        XCTAssertEqual(shortcut.storageValue, "cmd+option+7")
+        XCTAssertEqual(ScreenshotShortcut.persistedValue(for: "cmd+option+7"), shortcut)
+    }
+
+    func testScreenshotShortcutFallsBackForUnknownStorage() {
+        XCTAssertEqual(ScreenshotShortcut.persistedValue(for: nil), .default)
+        XCTAssertEqual(ScreenshotShortcut.persistedValue(for: "unknown"), .default)
+    }
+
+    func testScreenshotShortcutAcceptsLettersAndNumbersWithTwoModifiers() {
+        XCTAssertEqual(
+            ScreenshotShortcut.validate(key: .letter("Z"), modifiers: [.command, .option]),
+            .valid(ScreenshotShortcut(key: .letter("Z"), modifiers: [.command, .option]))
+        )
+        XCTAssertEqual(
+            ScreenshotShortcut.validate(key: .number("7"), modifiers: [.control, .shift]),
+            .valid(ScreenshotShortcut(key: .number("7"), modifiers: [.control, .shift]))
+        )
+    }
+
+    func testScreenshotShortcutRejectsUnsafeCombinations() {
+        XCTAssertEqual(
+            ScreenshotShortcut.validate(key: .letter("A"), modifiers: [.command]),
+            .invalid(.insufficientModifiers)
+        )
+        XCTAssertEqual(
+            ScreenshotShortcut.validate(key: .letter("A"), modifiers: [.shift]),
+            .invalid(.insufficientModifiers)
+        )
+        XCTAssertEqual(
+            ScreenshotShortcut.validate(key: .unsupported, modifiers: [.command, .shift]),
+            .invalid(.unsupportedKey)
+        )
+        XCTAssertEqual(
+            ScreenshotShortcut.validate(key: .letter("R"), modifiers: [.command, .shift]),
+            .invalid(.reservedShortcut)
+        )
     }
 
     func testImageWorkspaceDefaultsToViewWithoutActiveTool() {

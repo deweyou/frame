@@ -112,6 +112,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onShortcutChange: { [weak self] shortcut in
                 self?.changeScreenshotShortcut(to: shortcut) ?? false
             },
+            onShortcutRecordingChange: { [weak self] isRecording in
+                self?.setScreenshotShortcutRecorderActive(isRecording)
+            },
             onCheckPermission: { [weak self] in
                 self?.onCheckPermission()
             },
@@ -125,7 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 SettingsStore.resetScreenshotDirectory()
             },
             onClearCaptureHistory: { [weak self] in
-                try? self?.captureHistoryStore.clear()
+                try self?.captureHistoryStore.clear()
             }
         )
     }
@@ -236,16 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func recordingHintLabel(for shortcut: ScreenshotShortcut) -> String {
-        switch shortcut {
-        case .commandShiftA:
-            "⌘⇧A"
-        case .commandShiftS:
-            "⌘⇧S"
-        case .commandShiftD:
-            "⌘⇧D"
-        case .commandShiftF:
-            "⌘⇧F"
-        }
+        shortcut.displayName
     }
 
     private func recognizeTextFromSelection(_ selection: SelectionCapture) async {
@@ -1044,7 +1038,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try hotKeyController.register(shortcut: shortcut)
             SettingsStore.setScreenshotShortcut(shortcut)
-            NSLog("Frame 截图快捷键已更新为 \(shortcut.keyboardShortcut.displayName)")
+            NSLog("Frame 截图快捷键已更新为 \(shortcut.displayName)")
             return true
         } catch {
             do {
@@ -1055,6 +1049,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             showHotKeyRegistrationFailedAlert(error)
             return false
+        }
+    }
+
+    private func setScreenshotShortcutRecorderActive(_ isRecording: Bool) {
+        guard let hotKeyController else {
+            return
+        }
+
+        if isRecording {
+            hotKeyController.unregister()
+            return
+        }
+
+        do {
+            try hotKeyController.register()
+        } catch {
+            showHotKeyRegistrationFailedAlert(error)
         }
     }
 

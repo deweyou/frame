@@ -1,4 +1,5 @@
 import Foundation
+import FrameCore
 
 enum AppLanguage: String, CaseIterable, Identifiable {
     case system
@@ -103,6 +104,41 @@ struct AppStrings {
         }
     }
 
+    var settingsScreenshot: String {
+        switch language {
+        case .zhHans: "截图"
+        case .en: "Screenshots"
+        }
+    }
+
+    var settingsRecording: String {
+        switch language {
+        case .zhHans: "录屏"
+        case .en: "Recording"
+        }
+    }
+
+    var settingsTextRecognition: String {
+        switch language {
+        case .zhHans: "文字识别"
+        case .en: "Text Recognition"
+        }
+    }
+
+    var settingsPermissions: String {
+        switch language {
+        case .zhHans: "权限"
+        case .en: "Permissions"
+        }
+    }
+
+    var settingsHistory: String {
+        switch language {
+        case .zhHans: "历史"
+        case .en: "History"
+        }
+    }
+
     var settingsAbout: String {
         switch language {
         case .zhHans: "关于"
@@ -114,6 +150,45 @@ struct AppStrings {
         switch language {
         case .zhHans: "截图快捷键"
         case .en: "Screenshot shortcut"
+        }
+    }
+
+    var settingsShortcutRecorderPrompt: String {
+        switch language {
+        case .zhHans: "按下快捷键"
+        case .en: "Press shortcut"
+        }
+    }
+
+    var settingsShortcutRecorderInsufficientModifiers: String {
+        switch language {
+        case .zhHans: "请按下至少两个修饰键"
+        case .en: "Use at least two modifier keys"
+        }
+    }
+
+    var settingsShortcutRecorderUnsupportedKey: String {
+        switch language {
+        case .zhHans: "只支持字母或数字"
+        case .en: "Use a letter or number key"
+        }
+    }
+
+    var settingsShortcutRecorderReservedShortcut: String {
+        switch language {
+        case .zhHans: "这个快捷键已由 Frame 保留"
+        case .en: "This shortcut is reserved by Frame"
+        }
+    }
+
+    func settingsShortcutRecorderError(_ failure: ScreenshotShortcutValidationFailure) -> String {
+        switch failure {
+        case .insufficientModifiers:
+            settingsShortcutRecorderInsufficientModifiers
+        case .unsupportedKey:
+            settingsShortcutRecorderUnsupportedKey
+        case .reservedShortcut:
+            settingsShortcutRecorderReservedShortcut
         }
     }
 
@@ -154,8 +229,15 @@ struct AppStrings {
 
     var settingsSaveLocation: String {
         switch language {
-        case .zhHans: "截图保存位置"
-        case .en: "Screenshot save location"
+        case .zhHans: "保存位置"
+        case .en: "Save location"
+        }
+    }
+
+    var settingsRestoreDefaultFolder: String {
+        switch language {
+        case .zhHans: "恢复默认"
+        case .en: "Restore Default"
         }
     }
 
@@ -193,13 +275,6 @@ struct AppStrings {
         }
     }
 
-    var settingsResetFolder: String {
-        switch language {
-        case .zhHans: "重置"
-        case .en: "Reset"
-        }
-    }
-
     var settingsLanguage: String {
         switch language {
         case .zhHans: "语言"
@@ -214,24 +289,24 @@ struct AppStrings {
         }
     }
 
+    var settingsChooseOCRLanguages: String {
+        switch language {
+        case .zhHans: "选择语言..."
+        case .en: "Select Languages..."
+        }
+    }
+
+    func settingsOCRLanguagesSelected(count: Int, total: Int) -> String {
+        switch language {
+        case .zhHans: "\(count) / \(total) 种语言已启用"
+        case .en: "\(count) of \(total) languages enabled"
+        }
+    }
+
     var settingsRecordingMouseHintColor: String {
         switch language {
         case .zhHans: "鼠标提示颜色"
         case .en: "Mouse hint color"
-        }
-    }
-
-    var settingsRecordingMouseHintCustomColor: String {
-        switch language {
-        case .zhHans: "自定义"
-        case .en: "Custom"
-        }
-    }
-
-    var settingsRecordingMouseHintResetColor: String {
-        switch language {
-        case .zhHans: "重置"
-        case .en: "Reset"
         }
     }
 
@@ -267,6 +342,34 @@ struct AppStrings {
         switch language {
         case .zhHans: "清空历史"
         case .en: "Clear History"
+        }
+    }
+
+    var settingsCaptureHistoryClearConfirmationTitle: String {
+        switch language {
+        case .zhHans: "清空本地历史？"
+        case .en: "Clear local history?"
+        }
+    }
+
+    var settingsCaptureHistoryClearConfirmationMessage: String {
+        switch language {
+        case .zhHans: "这会移除 Frame 缓存的截图和录屏。你已另存到其他位置的文件不受影响。"
+        case .en: "This removes Frame's cached screenshots and recordings. Files you saved elsewhere are not affected."
+        }
+    }
+
+    var settingsCaptureHistoryCleared: String {
+        switch language {
+        case .zhHans: "本地历史已清空"
+        case .en: "Local history cleared"
+        }
+    }
+
+    func settingsCaptureHistoryClearFailed(errorDescription: String) -> String {
+        switch language {
+        case .zhHans: "清空失败：\(errorDescription)"
+        case .en: "Could not clear history: \(errorDescription)"
         }
     }
 
@@ -567,6 +670,20 @@ struct AppStrings {
         switch language {
         case .zhHans: "好"
         case .en: "OK"
+        }
+    }
+
+    var done: String {
+        switch language {
+        case .zhHans: "完成"
+        case .en: "Done"
+        }
+    }
+
+    var cancel: String {
+        switch language {
+        case .zhHans: "取消"
+        case .en: "Cancel"
         }
     }
 

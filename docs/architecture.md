@@ -42,8 +42,8 @@ background-aware contrast, and direct-manipulation capture behavior.
 1. `FrameApplication` starts `NSApplication` with accessory activation policy.
 2. `AppDelegate` creates the menu bar item, hotkey controller, overlay controller, capture and recording services, active-screen resolver, preview controllers, and output writers. It rejects new capture shortcut entries while selection, recording countdown, active recording, paused recording, or recording finalization is already in progress.
 3. `StatusItemController` exposes menu commands for screenshot, capture history, settings, and quit. While recording, it switches to a red recording icon and adds a stop-recording action.
-4. `SettingsWindowController` hosts the SwiftUI settings window, including screenshot shortcut selection, screenshot save location, window screenshot style selection, local history controls, language selection, Screen Recording permission checks, and about/version details.
-5. `SettingsStore` persists user-facing app settings in `UserDefaults`: shortcut, screenshot save directory, window screenshot style, local history preferences, recording options, OCR languages, and language preference.
+4. `SettingsWindowController` hosts the SwiftUI settings window, including the custom screenshot shortcut recorder, screenshot save location, window screenshot style selection, local history controls, language selection, Screen Recording permission checks, and about/version details.
+5. `SettingsStore` persists user-facing app settings in `UserDefaults`: screenshot shortcut value, screenshot save directory, window screenshot style, local history preferences, recording options, OCR languages, and language preference.
 6. `AppStrings` centralizes user-facing copy for Simplified Chinese and English. The language setting can follow the system language or force either supported language.
 7. `HotKeyController` registers the selected screenshot shortcut through Carbon and routes it to the screenshot flow.
 8. `ScreenRecordingPermission` checks and requests macOS Screen Recording access.
@@ -66,7 +66,7 @@ background-aware contrast, and direct-manipulation capture behavior.
 
 `FrameCore` contains code that should stay independent from AppKit side effects:
 
-- shortcut defaults
+- screenshot shortcut defaults, validation, display formatting, storage migration, and reserved-shortcut rules
 - screenshot filename generation
 - recording filename generation
 - recording options and elapsed-time accounting
@@ -88,7 +88,8 @@ AppKit-specific code stays in `FrameApp`. Keep permission, capture, recording, p
 - Screen Recording permission is sensitive to bundle identity, path, and signature. Keep local testing on a stable app path such as `~/Applications/Frame.app`.
 - Localization currently uses the code-level `AppStrings` boundary instead of `.strings` resources to keep SwiftPM packaging simple for v0.1. Keep callers on `AppStrings` so a future resource-backed migration stays local.
 - Local history is a recovery cache, not the user's saved-file library. Its defaults are enabled, 7-day retention, and a 2 GB capacity limit. Cleanup deletes only Frame-owned cached files under Application Support.
+- Screenshot shortcut settings validate only local key/modifier shape and Frame-reserved shortcuts. Frame does not proactively inspect system-wide macOS or third-party shortcut conflicts; Carbon registration failure rolls back to the previous working shortcut.
 - Audio recording is reserved in the recording options model but not implemented yet.
 
 ---
-*Last updated: 2026-06-11 | Reason: document window screenshot decoration styles*
+*Last updated: 2026-06-13 | Reason: document custom screenshot shortcut settings*

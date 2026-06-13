@@ -12,6 +12,43 @@ system tool, not a branded dashboard.
   tooltips.
 - Keep copy short, factual, and Chinese-first for user-facing controls.
 
+## Settings
+
+- Settings is a compact single-page preference list, not a multi-column dashboard.
+  Do not introduce a sidebar unless the number of settings grows enough that
+  scrolling becomes materially harder than category navigation.
+- Use quiet grouped rows with short section labels, fixed label columns, native
+  controls aligned to the trailing edge, and subtle separators. Avoid large
+  empty detail panes, nested cards, or decorative section chrome.
+- The default Settings window should show multiple groups at once and scroll for
+  longer preference sets such as OCR languages. Use a roughly 620 x 600 default
+  window, a 560 x 460 minimum, and about 540 px of content width so the page
+  feels like a preference pane instead of a narrow form. Preserve a resizable
+  native window with a standard centered titlebar and system traffic-light
+  controls.
+- The native window titlebar owns the centered Settings title. Do not duplicate
+  a large "Settings" / "设置" heading inside the content area.
+- Section containers need enough inner padding that row dividers never visually
+  collide with the rounded border. Keep section gaps compact, around 14 px, and
+  use subtle borders instead of heavy card outlines.
+- Settings typography uses the macOS system font throughout. Prefer hierarchy
+  through size, weight, spacing, and grouping rather than custom Chinese display
+  fonts. Section titles and row labels should stay medium-weight; avoid large
+  bold labels that make simple preferences feel oversized.
+- Screenshot shortcut editing uses a compact inline recorder in the General
+  section. Validate simple local format rules before applying, but do not
+  proactively inspect system-wide shortcut conflicts.
+- Save location settings belong in the General section and use a quiet inline
+  summary: show only a folder icon plus the abbreviated path without repeating
+  the folder name or adding a nested card background, keep folder choosing as a
+  small native action, avoid secondary Finder reveal buttons in the row, and
+  show reset only for custom locations.
+- About/version/build metadata belongs in a small secondary English footer, not
+  a primary settings section.
+- Long option collections such as OCR language toggles should stay out of the
+  main settings scroll. Use a whole-row entry with a selected-count summary that
+  opens an attached sheet for detailed editing.
+
 ## Screenshot Overlay
 
 - The selected region stays undimmed; the area outside the selection is dimmed.
@@ -69,7 +106,9 @@ system tool, not a branded dashboard.
   MP4/GIF format, cursor visibility, and keyboard hint visibility.
 - Mouse hint color is a recording output preference in Settings. Keep the
   recording setup HUD focused on showing or hiding mouse hints, while Settings
-  owns color presets and custom color selection.
+  owns a small curated preset set. In Settings, present it as a quiet preset-only
+  swatch picker with a checkmark selected state; avoid custom color wells and
+  reset actions for this preference.
 - Keyboard hint visibility is retained as a setup option, but recording start
   must not show a static placeholder hint. Reintroduce a keyboard hint overlay
   only when it reflects real key activity.
