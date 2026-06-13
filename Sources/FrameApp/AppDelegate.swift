@@ -76,9 +76,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         try? captureHistoryStore.cleanup()
 
-        let hotKeyController = HotKeyController(shortcut: SettingsStore.screenshotShortcut())
+        let hotKeyController = HotKeyController(
+            shortcut: SettingsStore.screenshotShortcut(),
+            recordingShortcut: SettingsStore.recordingShortcut()
+        )
         hotKeyController.onScreenshot = { [weak self] in
             self?.startCaptureFlow()
+        }
+        hotKeyController.onRecording = { [weak self] in
+            self?.startRecordingCaptureFlow()
         }
 
         do {
@@ -111,6 +117,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             strings: strings,
             onShortcutChange: { [weak self] shortcut in
                 self?.changeScreenshotShortcut(to: shortcut) ?? false
+            },
+            onRecordingShortcutChange: { [weak self] shortcut in
+                self?.changeRecordingShortcut(to: shortcut) ?? false
             },
             onShortcutRecordingChange: { [weak self] isRecording in
                 self?.setScreenshotShortcutRecorderActive(isRecording)
@@ -146,6 +155,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @discardableResult
     func startCaptureFlow() -> Bool {
+        startCaptureFlow(initialMode: .screenshot)
+    }
+
+    @discardableResult
+    private func startRecordingCaptureFlow() -> Bool {
+        startCaptureFlow(initialMode: .recordingSetup)
+    }
+
+    @discardableResult
+    private func startCaptureFlow(initialMode: SelectionOverlayInitialMode) -> Bool {
         guard !isCaptureFlowBusy else {
             recordScreenshotShortcutHintIfRecording()
             playInvalidActionFeedback()
@@ -163,6 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         selectionOverlayController.startSelection(
             strings: strings,
+            initialMode: initialMode,
             onStartRecording: { [weak self] overlayWindow, selection, options in
                 self?.startRecording(
                     selection: selection,
@@ -385,7 +405,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlayWindow: SelectionOverlayWindow?,
         anchor: CGRect?
     ) {
-        Task { @MainActor [weak self, weak overlayWindow] in
+        Task { @MainActor [weak self] in
             guard let self else {
                 return
             }
@@ -423,9 +443,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSLog("Frame 已开始录屏：rect=\(selection.rect.debugDescription), format=\(options.format.rawValue)")
             } catch {
                 self.quickAccessPanelController.setPreviewRestorationSuppressed(false)
-                if overlayWindow == nil {
-                    self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
-                }
+                self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
                 self.recordingBoundaryOverlayController.close()
                 self.showCaptureFailedAlert(error)
             }
@@ -620,6 +638,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @discardableResult
     func startCaptureFlowForTesting() -> Bool {
         startCaptureFlow()
+    }
+
+    @discardableResult
+    func startRecordingCaptureFlowForTesting() -> Bool {
+        startRecordingCaptureFlow()
     }
 
     func finishActiveRecordingForTesting() {
@@ -1034,9 +1057,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let previousShortcut = hotKeyController.shortcut
+        let recordingShortcut = hotKeyController.recordingShortcut
 
         do {
-            try hotKeyController.register(shortcut: shortcut)
+            try hotKeyController.register(shortcut: shortcut, recordingShortcut: recordingShortcut)
             SettingsStore.setScreenshotShortcut(shortcut)
             NSLog("Frame 截图快捷键已更新为 \(shortcut.displayName)")
             return true
@@ -1045,6 +1069,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try hotKeyController.register(shortcut: previousShortcut)
             } catch {
                 NSLog("Frame 恢复原快捷键失败: \(error.localizedDescription)")
+            }
+
+            showHotKeyRegistrationFailedAlert(error)
+            return false
+        }
+    }
+
+    private func changeRecordingShortcut(to shortcut: ScreenshotShortcut) -> Bool {
+        guard let hotKeyController else {
+            SettingsStore.setRecordingShortcut(shortcut)
+            return true
+        }
+
+        let screenshotShortcut = hotKeyController.shortcut
+        let previousShortcut = hotKeyController.recordingShortcut
+
+        do {
+            try hotKeyController.register(shortcut: screenshotShortcut, recordingShortcut: shortcut)
+            SettingsStore.setRecordingShortcut(shortcut)
+            NSLog("Frame 录屏快捷键已更新为 \(shortcut.displayName)")
+            return true
+        } catch {
+            do {
+                try hotKeyController.register(shortcut: screenshotShortcut, recordingShortcut: previousShortcut)
+            } catch {
+                NSLog("Frame 恢复原录屏快捷键失败: \(error.localizedDescription)")
             }
 
             showHotKeyRegistrationFailedAlert(error)

@@ -35,9 +35,10 @@ system tool, not a branded dashboard.
   through size, weight, spacing, and grouping rather than custom Chinese display
   fonts. Section titles and row labels should stay medium-weight; avoid large
   bold labels that make simple preferences feel oversized.
-- Screenshot shortcut editing uses a compact inline recorder in the General
-  section. Validate simple local format rules before applying, but do not
-  proactively inspect system-wide shortcut conflicts.
+- Screenshot and recording shortcut editing use compact inline recorders in the
+  General section. Validate simple local format rules and prevent duplicate
+  Frame capture shortcuts before applying, but do not proactively inspect
+  system-wide shortcut conflicts.
 - Save location settings belong in the General section and use a quiet inline
   summary: show only a folder icon plus the abbreviated path without repeating
   the folder name or adding a nested card background, keep folder choosing as a
@@ -95,15 +96,20 @@ system tool, not a branded dashboard.
   enough space.
 - Adapt HUD content contrast to the background below it. Use light content on
   dark backgrounds and dark content on light backgrounds.
+- Delay screenshot countdowns are passive: after the user starts the countdown,
+  keep a prominent semi-transparent red countdown near the current screen's
+  bottom center while letting underlying apps receive mouse interaction. Avoid a
+  white outline around the countdown.
 
 ## Recording HUD
 
-- Recording HUD states inherit the screenshot HUD chrome: native glass,
-  icon-only buttons, stable sizing, delayed tooltips, and background-aware
-  contrast.
+- Recording HUD states inherit the screenshot HUD chrome: native glass, compact
+  buttons, stable sizing, delayed tooltips, and background-aware contrast.
 - The screenshot HUD may switch into recording setup without closing the
   selection overlay. Setup controls stay compact and cover start recording,
-  MP4/GIF format, cursor visibility, and keyboard hint visibility.
+  MP4/GIF format, cursor visibility, and keyboard hint visibility. The MP4/GIF
+  format toggle shows the selected format as visible short text so GIF is not
+  mistaken for MP4.
 - Mouse hint color is a recording output preference in Settings. Keep the
   recording setup HUD focused on showing or hiding mouse hints, while Settings
   owns a small curated preset set. In Settings, present it as a quiet preset-only
@@ -138,9 +144,10 @@ system tool, not a branded dashboard.
 - Glass containers use HUD material, a fine translucent border, and capsule
   geometry when the control row is short. For fixed-height toolbars, the left
   and right ends should read as large rounded caps rather than square panels.
-- Icon buttons are icon-only. Their default state is quiet; hover shows a
+- Icon buttons are icon-only except for compact state toggles such as the
+  MP4/GIF recording format control. Their default state is quiet; hover shows a
   circular background behind the icon instead of changing the whole toolbar or
-  adding text.
+  adding explanatory text.
 - Actions that are visible before their behavior is implemented stay disabled:
   no pointer cursor, no hover fill, and disabled tint.
 - Selected tools keep the same circular affordance, using a subtle accent tint
@@ -193,13 +200,22 @@ system tool, not a branded dashboard.
   separate disabled action reserved for future edited-image persistence.
 - It should stay lightweight and dismissible, without blocking normal system
   usage.
+- Starting a recording temporarily hides existing Quick Access cards; it must
+  restore them after recording completes or fails, then stack the new recording
+  card with the existing previews instead of clearing the stack.
 - Screenshots and recordings share one Quick Access stack and one visual
   language. Recording cards expose Download, Copy, Preview, disabled Edit, and
   Close. Preview opens a playable video window; Edit remains pending. Use the
   first decodable recording frame as the thumbnail, with a lightweight video
-  placeholder as the fallback. Preserve the recording's pixel aspect ratio while
-  sharing the screenshot Quick Access width baseline. Keep the rendered content
-  size asserted so the preview cannot collapse into a thin strip.
+  placeholder as the fallback. Screenshots and recordings should render in the
+  same fixed card size, preserving media aspect ratio inside that footprint.
+  Keep the rendered content size asserted so the preview cannot collapse into a
+  thin strip.
+- Hovering a Quick Access card for two seconds opens a transient rounded
+  right-side popover without an arrow. Image and recording previews render larger
+  using the original media aspect ratio and aspect-fit scaling so the full image
+  or video is visible; recording previews play muted and close with the hover
+  state.
 
 ## Capture History
 
@@ -213,5 +229,8 @@ system tool, not a branded dashboard.
   rather than adding a separate toolbar band.
 - History tiles follow the Quick Access visual language: rounded image preview,
   fine translucent border, compact metadata, and icon-only hover HUD actions.
+- Recording history tiles should use the first decodable recording frame as the
+  preview image and fall back to a lightweight video placeholder only when
+  decoding fails.
 - Keep history actions hidden until the tile is hovered. Metadata should remain
   one compact line below the preview and must not reintroduce table columns.

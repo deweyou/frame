@@ -7,11 +7,19 @@ final class RecordingBoundaryOverlayController {
     private var displayedSelectionRect: CGRect?
 
     func show(rect: CGRect, preparationState: RecordingPreparationState? = nil) {
-        close()
-
         let normalizedRect = rect.integral
         let screenFrame = preferredScreenFrame(containing: normalizedRect).integral
         let localSelectionRect = normalizedRect.offsetBy(dx: -screenFrame.minX, dy: -screenFrame.minY)
+        if let panel,
+           panel.frame.integral == screenFrame,
+           displayedSelectionRect == localSelectionRect {
+            boundaryView?.preparationState = preparationState
+            panel.orderFrontRegardless()
+            return
+        }
+
+        close()
+
         let panel = NSPanel(
             contentRect: screenFrame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -73,6 +81,10 @@ final class RecordingBoundaryOverlayController {
 
     func sharingTypeForTesting() -> NSWindow.SharingType? {
         panel?.sharingType
+    }
+
+    func panelIdentifierForTesting() -> ObjectIdentifier? {
+        panel.map(ObjectIdentifier.init)
     }
 
     private func preferredScreenFrame(containing rect: CGRect) -> CGRect {

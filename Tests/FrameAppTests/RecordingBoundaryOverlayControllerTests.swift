@@ -32,4 +32,27 @@ final class RecordingBoundaryOverlayControllerTests: XCTestCase {
         XCTAssertEqual(controller.ignoresMouseEventsForTesting(), true)
         XCTAssertEqual(controller.sharingTypeForTesting(), NSWindow.SharingType.none)
     }
+
+    func testShowingSameRecordingBoundaryUpdatesExistingPanelInPlace() throws {
+        let controller = RecordingBoundaryOverlayController()
+        defer {
+            controller.close()
+        }
+
+        let screenFrame = try XCTUnwrap(NSScreen.main?.frame)
+        let rect = CGRect(
+            x: screenFrame.minX + 40,
+            y: screenFrame.minY + 60,
+            width: 320,
+            height: 180
+        )
+
+        controller.show(rect: rect, preparationState: .loading)
+        let firstPanelID = try XCTUnwrap(controller.panelIdentifierForTesting())
+
+        controller.show(rect: rect, preparationState: nil)
+
+        XCTAssertEqual(controller.panelIdentifierForTesting(), firstPanelID)
+        XCTAssertNil(controller.preparationStateForTesting())
+    }
 }

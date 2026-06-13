@@ -3,6 +3,7 @@ import AppKit
 enum CapturePreviewMetrics {
     static let previewWidth: CGFloat = 200
     static let fallbackAspectRatio: CGFloat = 132 / 200
+    static let quickAccessCardSize = previewSize(forDesktopSize: nil)
 
     @MainActor
     static func desktopAspectRatio() -> CGFloat {

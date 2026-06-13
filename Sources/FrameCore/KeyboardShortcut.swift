@@ -93,6 +93,7 @@ public enum ScreenshotShortcutValidationFailure: Equatable, Sendable {
     case unsupportedKey
     case insufficientModifiers
     case reservedShortcut
+    case duplicateShortcut
 }
 
 public enum ScreenshotShortcutValidationResult: Equatable, Sendable {
@@ -133,6 +134,7 @@ public struct ScreenshotShortcut: Equatable, Hashable, Identifiable, Sendable {
     }
 
     public static let `default` = ScreenshotShortcut(key: .letter("A"), modifiers: [.command, .shift])
+    public static let defaultRecording = ScreenshotShortcut(key: .letter("R"), modifiers: [.command, .shift])
     public static let commandShiftA = ScreenshotShortcut(key: .letter("A"), modifiers: [.command, .shift])
     public static let commandShiftS = ScreenshotShortcut(key: .letter("S"), modifiers: [.command, .shift])
     public static let commandShiftD = ScreenshotShortcut(key: .letter("D"), modifiers: [.command, .shift])
@@ -144,21 +146,27 @@ public struct ScreenshotShortcut: Equatable, Hashable, Identifiable, Sendable {
         .commandShiftF,
     ]
 
-    public static func persistedValue(for rawValue: String?) -> ScreenshotShortcut {
+    public static func persistedValue(
+        for rawValue: String?,
+        defaultShortcut: ScreenshotShortcut = .default,
+        reservedShortcuts: Set<ScreenshotShortcut> = [.defaultRecording]
+    ) -> ScreenshotShortcut {
         guard let rawValue else {
-            return .default
+            return defaultShortcut
         }
 
         if let legacyShortcut = legacyPresetStorage[rawValue] {
             return legacyShortcut
         }
 
-        return shortcut(storageValue: rawValue) ?? .default
+        return shortcut(storageValue: rawValue, reservedShortcuts: reservedShortcuts) ?? defaultShortcut
     }
 
     public static func validate(
         key: ScreenshotShortcutKey,
-        modifiers: Set<ScreenshotShortcutModifier>
+        modifiers: Set<ScreenshotShortcutModifier>,
+        reservedShortcuts: Set<ScreenshotShortcut> = [.defaultRecording],
+        duplicateShortcut: ScreenshotShortcut? = nil
     ) -> ScreenshotShortcutValidationResult {
         let shortcut = ScreenshotShortcut(key: key, modifiers: modifiers)
         guard shortcut.key.isSupported else {
@@ -169,14 +177,21 @@ public struct ScreenshotShortcut: Equatable, Hashable, Identifiable, Sendable {
             return .invalid(.insufficientModifiers)
         }
 
-        guard !shortcut.isReserved else {
+        if shortcut == duplicateShortcut {
+            return .invalid(.duplicateShortcut)
+        }
+
+        guard !reservedShortcuts.contains(shortcut) else {
             return .invalid(.reservedShortcut)
         }
 
         return .valid(shortcut)
     }
 
-    private static func shortcut(storageValue: String) -> ScreenshotShortcut? {
+    private static func shortcut(
+        storageValue: String,
+        reservedShortcuts: Set<ScreenshotShortcut>
+    ) -> ScreenshotShortcut? {
         let components = storageValue
             .split(separator: "+")
             .map { String($0).lowercased() }
@@ -195,7 +210,7 @@ public struct ScreenshotShortcut: Equatable, Hashable, Identifiable, Sendable {
             modifiers.insert(modifier)
         }
 
-        switch validate(key: key, modifiers: modifiers) {
+        switch validate(key: key, modifiers: modifiers, reservedShortcuts: reservedShortcuts) {
         case let .valid(shortcut):
             return shortcut
         case .invalid:
@@ -209,10 +224,6 @@ public struct ScreenshotShortcut: Equatable, Hashable, Identifiable, Sendable {
 
     private var hasEnoughModifiers: Bool {
         modifiers.count >= 2 && !modifiers.isDisjoint(with: [.command, .option, .control])
-    }
-
-    private var isReserved: Bool {
-        key == .letter("R") && modifiers == [.command, .shift]
     }
 
     private var legacyRawValue: String? {

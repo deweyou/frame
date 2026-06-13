@@ -1,21 +1,30 @@
 import AppKit
+import AVKit
 
 @MainActor
 final class QuickAccessPanelController: NSObject {
     static let previewWindowTitle = "Frame Quick Access Preview"
+    static let hoverPreviewWindowTitle = "Frame Quick Access Hover Preview"
+    static let defaultHoverPreviewDelayForTesting: TimeInterval = 2
 
     private typealias ConfirmableAction = () -> Bool
     private typealias CloseAction = () -> Void
 
     private let thumbnailProvider: RecordingThumbnailProvider
+    private let hoverPreviewDelay: TimeInterval
+    private let hoverPreviewController = QuickAccessHoverPreviewController()
     private var previewItems: [QuickAccessPreviewItem] = []
     private var activeScreenObserver: NSObjectProtocol?
     private var followActiveScreenTimer: Timer?
     private var currentPreviewScreenID: CGDirectDisplayID?
     private var isPreviewRestorationSuppressed = false
 
-    init(thumbnailProvider: RecordingThumbnailProvider = RecordingThumbnailProvider()) {
+    init(
+        thumbnailProvider: RecordingThumbnailProvider = RecordingThumbnailProvider(),
+        hoverPreviewDelay: TimeInterval = QuickAccessPanelController.defaultHoverPreviewDelayForTesting
+    ) {
         self.thumbnailProvider = thumbnailProvider
+        self.hoverPreviewDelay = hoverPreviewDelay
     }
 
     func show(
@@ -48,6 +57,7 @@ final class QuickAccessPanelController: NSObject {
                 downloadRecording: nil,
                 copyRecording: nil,
                 previewRecording: nil,
+                hoverPreviewMedia: .image(captured.image),
                 close: close
             )
         )
@@ -100,6 +110,7 @@ final class QuickAccessPanelController: NSObject {
                 downloadRecording: download,
                 copyRecording: copy,
                 previewRecording: preview,
+                hoverPreviewMedia: .recording(recording),
                 close: close
             )
         )
@@ -187,7 +198,7 @@ final class QuickAccessPanelController: NSObject {
     }
 
     func closePreviewsForRecordingStart() {
-        closeAllPreviews(notify: false)
+        temporarilyHidePreviews()
         closeOrphanPreviewPanels()
     }
 
@@ -262,8 +273,13 @@ final class QuickAccessPanelController: NSObject {
     private func makeContentView(for screenshot: CapturedScreenshot, strings: AppStrings) -> QuickAccessContent {
         let contentView = ScreenshotPreviewView()
         contentView.wantsLayer = true
-        contentView.onHoverChanged = { [weak contentView] isHovered in
+        contentView.onHoverChanged = { [weak self, weak contentView] isHovered in
             contentView?.setActionsVisible(isHovered)
+            if isHovered {
+                self?.scheduleHoverPreview(for: contentView?.window)
+            } else {
+                self?.cancelHoverPreview(for: contentView?.window)
+            }
         }
 
         let imageView = AspectFillImageView(image: screenshot.image)
@@ -418,8 +434,13 @@ final class QuickAccessPanelController: NSObject {
         contentView.preferredContentSize = previewSize
         contentView.wantsLayer = true
         contentView.onPreviewRequested = preview
-        contentView.onHoverChanged = { [weak contentView] isHovered in
+        contentView.onHoverChanged = { [weak self, weak contentView] isHovered in
             contentView?.setActionsVisible(isHovered)
+            if isHovered {
+                self?.scheduleHoverPreview(for: contentView?.window)
+            } else {
+                self?.cancelHoverPreview(for: contentView?.window)
+            }
         }
 
         let thumbnail = thumbnailProvider.thumbnail(for: recording.fileURL)
@@ -609,19 +630,69 @@ final class QuickAccessPanelController: NSObject {
     private let previewSpacing: CGFloat = 12
 
     private var previewSize: CGSize {
-        CapturePreviewMetrics.previewSize(forDesktopSize: (NSScreen.main ?? NSScreen.screens.first)?.frame.size)
+        CapturePreviewMetrics.quickAccessCardSize
     }
 
     nonisolated static func recordingPreviewSize(
         forSourceSize sourceSize: CGSize,
         maximumSize maxSize: CGSize = CGSize(width: CapturePreviewMetrics.previewWidth, height: 160)
     ) -> CGSize {
-        CapturePreviewMetrics.previewSize(forDesktopSize: nil)
+        CapturePreviewMetrics.quickAccessCardSize
     }
 
     private func formattedDuration(_ duration: TimeInterval) -> String {
         let seconds = max(0, Int(duration.rounded(.down)))
         return String(format: "%02d:%02d", seconds / 60, seconds % 60)
+    }
+
+    func scheduleHoverPreviewForTesting(window: NSWindow) {
+        scheduleHoverPreview(for: window)
+    }
+
+    func closeHoverPreviewForTesting() {
+        hoverPreviewController.close()
+    }
+
+    func hoverPreviewFrameForTesting() -> CGRect? {
+        hoverPreviewController.frameForTesting()
+    }
+
+    func hoverPreviewPlayerIsMutedForTesting() -> Bool? {
+        hoverPreviewController.playerIsMutedForTesting()
+    }
+
+    func hoverPreviewBubbleMetricsForTesting() -> QuickAccessHoverPreviewMetricsForTesting? {
+        hoverPreviewController.bubbleMetricsForTesting()
+    }
+
+    private func scheduleHoverPreview(for window: NSWindow?) {
+        guard let item = previewItem(for: window) else {
+            return
+        }
+
+        item.hoverPreviewWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self, weak item] in
+            guard let self,
+                  let item,
+                  self.previewItems.contains(where: { $0 === item }) else {
+                return
+            }
+
+            self.hoverPreviewController.show(media: item.hoverPreviewMedia, near: item.panel.frame)
+        }
+        item.hoverPreviewWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + hoverPreviewDelay, execute: workItem)
+    }
+
+    private func cancelHoverPreview(for window: NSWindow?) {
+        guard let item = previewItem(for: window) else {
+            hoverPreviewController.close()
+            return
+        }
+
+        item.hoverPreviewWorkItem?.cancel()
+        item.hoverPreviewWorkItem = nil
+        hoverPreviewController.close()
     }
 
     private func startFollowingActiveScreen() {
@@ -814,6 +885,8 @@ final class QuickAccessPanelController: NSObject {
 
     private func closePreview(_ item: QuickAccessPreviewItem, notify: Bool) {
         item.statusResetWorkItem?.cancel()
+        item.hoverPreviewWorkItem?.cancel()
+        hoverPreviewController.close()
         item.panel.close()
         previewItems.removeAll { $0 === item }
         repositionPreviewStack(preferredAnchor: ActiveScreenResolver.preferredQuickAccessFollowAnchor(), force: true)
@@ -827,21 +900,32 @@ final class QuickAccessPanelController: NSObject {
         let closingItems = previewItems
         for item in closingItems {
             item.statusResetWorkItem?.cancel()
+            item.hoverPreviewWorkItem?.cancel()
             item.panel.close()
             if notify {
                 item.close()
             }
         }
         previewItems.removeAll()
+        hoverPreviewController.close()
         stopFollowingActiveScreenIfNeeded()
     }
 
     private func closeOrphanPreviewPanels() {
         for window in NSApp.windows where window.title == Self.previewWindowTitle {
+            guard !previewItems.contains(where: { $0.panel === window }) else {
+                continue
+            }
+
             window.orderOut(nil)
             window.close()
         }
     }
+}
+
+struct QuickAccessHoverPreviewMetricsForTesting {
+    let panelFrame: CGRect
+    let mediaFrame: CGRect
 }
 
 enum QuickAccessOCRStatus: Equatable {
@@ -855,6 +939,11 @@ private struct QuickAccessContent {
     let ocrButton: NSButton
     let ocrProgressIndicator: NSProgressIndicator
     let statusLabel: NSTextField
+}
+
+private enum QuickAccessHoverPreviewMedia {
+    case image(NSImage)
+    case recording(CapturedRecording)
 }
 
 private final class QuickAccessPreviewItem {
@@ -872,9 +961,11 @@ private final class QuickAccessPreviewItem {
     let downloadRecording: (() -> Bool)?
     let copyRecording: (() -> Bool)?
     let previewRecording: (() -> Bool)?
+    let hoverPreviewMedia: QuickAccessHoverPreviewMedia
     let close: () -> Void
     var isTemporarilyHidden = false
     var statusResetWorkItem: DispatchWorkItem?
+    var hoverPreviewWorkItem: DispatchWorkItem?
 
     init(
         screenshotID: UUID?,
@@ -891,6 +982,7 @@ private final class QuickAccessPreviewItem {
         downloadRecording: (() -> Bool)?,
         copyRecording: (() -> Bool)?,
         previewRecording: (() -> Bool)?,
+        hoverPreviewMedia: QuickAccessHoverPreviewMedia,
         close: @escaping () -> Void
     ) {
         self.screenshotID = screenshotID
@@ -907,7 +999,184 @@ private final class QuickAccessPreviewItem {
         self.downloadRecording = downloadRecording
         self.copyRecording = copyRecording
         self.previewRecording = previewRecording
+        self.hoverPreviewMedia = hoverPreviewMedia
         self.close = close
+    }
+}
+
+@MainActor
+private final class QuickAccessHoverPreviewController {
+    private var panel: NSPanel?
+    private var player: AVPlayer?
+    private var mediaFrame: CGRect?
+    private let maximumMediaSize = CGSize(width: 640, height: 420)
+    private let contentInset: CGFloat = 12
+    private let spacing: CGFloat = 12
+
+    func show(media: QuickAccessHoverPreviewMedia, near anchorFrame: CGRect) {
+        close()
+
+        let mediaSize = aspectFitSize(
+            sourceSize: sourceSize(for: media),
+            maximumSize: maximumMediaSize
+        )
+        let panelSize = CGSize(
+            width: contentInset * 2 + mediaSize.width,
+            height: contentInset * 2 + mediaSize.height
+        )
+        let mediaFrame = CGRect(
+            x: contentInset,
+            y: contentInset,
+            width: mediaSize.width,
+            height: mediaSize.height
+        )
+        let panel = NSPanel(
+            contentRect: CGRect(origin: .zero, size: panelSize),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = QuickAccessPanelController.hoverPreviewWindowTitle
+        panel.isReleasedWhenClosed = false
+        panel.hidesOnDeactivate = false
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.isOpaque = false
+        panel.ignoresMouseEvents = false
+
+        let rootView = NSView(frame: CGRect(origin: .zero, size: panelSize))
+        rootView.wantsLayer = true
+        rootView.autoresizingMask = [.width, .height]
+
+        let container = NSVisualEffectView(frame: CGRect(
+            x: 0,
+            y: 0,
+            width: panelSize.width,
+            height: panelSize.height
+        ))
+        container.material = .hudWindow
+        container.blendingMode = .withinWindow
+        container.state = .active
+        container.wantsLayer = true
+        container.layer?.cornerRadius = 12
+        container.layer?.cornerCurve = .continuous
+        container.layer?.masksToBounds = true
+        container.layer?.borderWidth = 0.5
+        container.layer?.borderColor = NSColor.white.withAlphaComponent(0.32).cgColor
+
+        let mediaView = makeMediaView(for: media)
+        mediaView.frame = mediaFrame
+        mediaView.autoresizingMask = []
+        rootView.addSubview(container)
+        rootView.addSubview(mediaView)
+        panel.contentView = rootView
+        panel.setFrameOrigin(origin(near: anchorFrame, panelSize: panelSize))
+        panel.orderFrontRegardless()
+
+        self.panel = panel
+        self.mediaFrame = mediaFrame
+    }
+
+    func close() {
+        player?.pause()
+        player = nil
+        mediaFrame = nil
+        panel?.orderOut(nil)
+        panel?.close()
+        panel = nil
+    }
+
+    func frameForTesting() -> CGRect? {
+        panel?.frame
+    }
+
+    func playerIsMutedForTesting() -> Bool? {
+        player?.isMuted
+    }
+
+    func bubbleMetricsForTesting() -> QuickAccessHoverPreviewMetricsForTesting? {
+        guard let panel,
+              let mediaFrame else {
+            return nil
+        }
+
+        return QuickAccessHoverPreviewMetricsForTesting(
+            panelFrame: panel.frame,
+            mediaFrame: mediaFrame
+        )
+    }
+
+    private func makeMediaView(for media: QuickAccessHoverPreviewMedia) -> NSView {
+        switch media {
+        case let .image(image):
+            let imageView = AspectFitImageView(image: image)
+            imageView.wantsLayer = true
+            imageView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            return imageView
+        case let .recording(recording):
+            switch recording.format {
+            case .gif:
+                let imageView = NSImageView()
+                imageView.image = NSImage(contentsOf: recording.fileURL)
+                imageView.imageScaling = .scaleProportionallyUpOrDown
+                imageView.animates = true
+                imageView.wantsLayer = true
+                imageView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+                return imageView
+            case .mp4:
+                let player = AVPlayer(url: recording.fileURL)
+                player.isMuted = true
+                player.actionAtItemEnd = .none
+                let playerView = AVPlayerView()
+                playerView.controlsStyle = .none
+                playerView.videoGravity = .resizeAspect
+                playerView.player = player
+                self.player = player
+                player.play()
+                return playerView
+            }
+        }
+    }
+
+    private func sourceSize(for media: QuickAccessHoverPreviewMedia) -> CGSize {
+        switch media {
+        case let .image(image):
+            return image.size == .zero ? maximumMediaSize : image.size
+        case let .recording(recording):
+            if recording.pixelSize.width > 0, recording.pixelSize.height > 0 {
+                return recording.pixelSize
+            }
+
+            return recording.rect.size == .zero ? maximumMediaSize : recording.rect.size
+        }
+    }
+
+    private func aspectFitSize(sourceSize: CGSize, maximumSize: CGSize) -> CGSize {
+        guard sourceSize.width > 0,
+              sourceSize.height > 0,
+              maximumSize.width > 0,
+              maximumSize.height > 0 else {
+            return maximumSize
+        }
+
+        let scale = min(maximumSize.width / sourceSize.width, maximumSize.height / sourceSize.height)
+        return CGSize(width: floor(sourceSize.width * scale), height: floor(sourceSize.height * scale))
+    }
+
+    private func origin(near anchorFrame: CGRect, panelSize: CGSize) -> CGPoint {
+        let fallbackVisibleFrame = NSScreen.main?.visibleFrame ?? NSScreen.screens.first?.visibleFrame ?? anchorFrame
+        let targetScreen = NSScreen.screens.first { $0.visibleFrame.intersects(anchorFrame) }
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        let visibleFrame = targetScreen?.visibleFrame ?? fallbackVisibleFrame
+        let preferredX = anchorFrame.maxX + spacing
+        let fallbackX = anchorFrame.minX - panelSize.width - spacing
+        let x = preferredX + panelSize.width <= visibleFrame.maxX - spacing ? preferredX : fallbackX
+        let centeredY = anchorFrame.midY - panelSize.height / 2
+        let y = min(max(centeredY, visibleFrame.minY + spacing), visibleFrame.maxY - panelSize.height - spacing)
+        return CGPoint(x: x, y: y)
     }
 }
 
@@ -1427,6 +1696,40 @@ private final class AspectFillImageView: NSView {
             in: bounds
         )
 
+        image.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
+    }
+}
+
+private final class AspectFitImageView: NSView {
+    private let image: NSImage
+
+    init(image: NSImage) {
+        self.image = image
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        guard image.size.width > 0, image.size.height > 0, bounds.width > 0, bounds.height > 0 else {
+            return
+        }
+
+        let scale = min(bounds.width / image.size.width, bounds.height / image.size.height)
+        let drawSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let drawRect = CGRect(
+            x: bounds.midX - drawSize.width / 2,
+            y: bounds.midY - drawSize.height / 2,
+            width: drawSize.width,
+            height: drawSize.height
+        )
         image.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
     }
 }

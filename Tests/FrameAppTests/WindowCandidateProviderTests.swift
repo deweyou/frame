@@ -95,12 +95,73 @@ final class WindowCandidateProviderTests: XCTestCase {
         XCTAssertEqual(rect, CGRect(x: -2055, y: 1243, width: 3008, height: 1692))
     }
 
+    func testCurrentProcessSettingsWindowIsEligibleForWindowSelection() {
+        let quartzBounds = CGRect(x: 10, y: 20, width: 300, height: 200)
+        let expectedCocoaBounds = WindowCandidateProvider.cocoaRect(fromQuartzWindowRect: quartzBounds)
+        let provider = WindowCandidateProvider(
+            currentProcessID: 100,
+            windowInfoProvider: { _, _ in
+                [Self.windowInfo(
+                    windowID: 42,
+                    ownerProcessID: 100,
+                    bounds: quartzBounds,
+                    name: "Settings"
+                )]
+            }
+        )
+
+        let candidate = provider.candidate(at: CGPoint(x: expectedCocoaBounds.midX, y: expectedCocoaBounds.midY))
+
+        XCTAssertEqual(candidate?.id, 42)
+    }
+
+    func testCurrentProcessCaptureHistoryWindowIsEligibleForWindowSelection() {
+        let quartzBounds = CGRect(x: 10, y: 20, width: 300, height: 200)
+        let expectedCocoaBounds = WindowCandidateProvider.cocoaRect(fromQuartzWindowRect: quartzBounds)
+        let provider = WindowCandidateProvider(
+            currentProcessID: 100,
+            windowInfoProvider: { _, _ in
+                [Self.windowInfo(
+                    windowID: 43,
+                    ownerProcessID: 100,
+                    bounds: quartzBounds,
+                    name: "捕获历史"
+                )]
+            }
+        )
+
+        let candidate = provider.candidate(at: CGPoint(x: expectedCocoaBounds.midX, y: expectedCocoaBounds.midY))
+
+        XCTAssertEqual(candidate?.id, 43)
+    }
+
+    func testCurrentProcessTransientQuickAccessWindowIsNotEligibleForWindowSelection() {
+        let quartzBounds = CGRect(x: 10, y: 20, width: 300, height: 200)
+        let expectedCocoaBounds = WindowCandidateProvider.cocoaRect(fromQuartzWindowRect: quartzBounds)
+        let provider = WindowCandidateProvider(
+            currentProcessID: 100,
+            windowInfoProvider: { _, _ in
+                [Self.windowInfo(
+                    windowID: 44,
+                    ownerProcessID: 100,
+                    bounds: quartzBounds,
+                    name: QuickAccessPanelController.previewWindowTitle
+                )]
+            }
+        )
+
+        let candidate = provider.candidate(at: CGPoint(x: expectedCocoaBounds.midX, y: expectedCocoaBounds.midY))
+
+        XCTAssertNil(candidate)
+    }
+
     private static func windowInfo(
         windowID: UInt32,
         ownerProcessID: pid_t,
-        bounds: CGRect
+        bounds: CGRect,
+        name: String? = nil
     ) -> [String: Any] {
-        [
+        var info: [String: Any] = [
             kCGWindowOwnerPID as String: ownerProcessID,
             kCGWindowLayer as String: 0,
             kCGWindowNumber as String: windowID,
@@ -113,5 +174,9 @@ final class WindowCandidateProviderTests: XCTestCase {
                 "Height": bounds.height,
             ],
         ]
+        if let name {
+            info[kCGWindowName as String] = name
+        }
+        return info
     }
 }

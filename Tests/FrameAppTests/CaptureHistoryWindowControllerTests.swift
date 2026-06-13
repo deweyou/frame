@@ -1,4 +1,6 @@
 import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 import XCTest
 @testable import FrameApp
 
@@ -102,7 +104,7 @@ final class CaptureHistoryWindowControllerTests: XCTestCase {
         }
 
         let contentView = try XCTUnwrap(NSApp.windows.first {
-            $0.title == "截图历史" && $0.isVisible
+            $0.title == "捕获历史" && $0.isVisible
         }?.contentView)
         contentView.layoutSubtreeIfNeeded()
 
@@ -297,15 +299,39 @@ final class CaptureHistoryWindowControllerTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testRecordingTileUsesFirstFrameThumbnailWhenAvailable() throws {
+        let gifData = try makeOneFrameGIFData()
+        let record = try addRecord(
+            kind: .recording,
+            date: Date(timeIntervalSince1970: 100),
+            data: gifData,
+            filenameExtension: "gif",
+            imageSize: CGSize(width: 2, height: 2),
+            rect: CGRect(x: 0, y: 0, width: 2, height: 2)
+        )
+        let controller = CaptureHistoryWindowController(store: store)
+
+        controller.show(strings: AppStrings(language: .en))
+        defer {
+            controller.close()
+        }
+
+        XCTAssertEqual(controller.previewImageSize(for: record), CGSize(width: 2, height: 2))
+    }
+
     private func addRecord(
         kind: CaptureHistoryKind,
         date: Date,
+        data: Data? = nil,
+        filenameExtension: String? = nil,
         imageSize: CGSize = CGSize(width: 10, height: 8),
         rect: CGRect = CGRect(x: 0, y: 0, width: 10, height: 8)
     ) throws -> CaptureHistoryRecord {
         try XCTUnwrap(try store.addCapture(
             kind: kind,
-            data: Data([UInt8(date.timeIntervalSince1970.truncatingRemainder(dividingBy: 255))]),
+            data: data ?? Data([UInt8(date.timeIntervalSince1970.truncatingRemainder(dividingBy: 255))]),
+            filenameExtension: filenameExtension,
             imageSize: imageSize,
             rect: rect,
             date: date,
@@ -355,5 +381,44 @@ final class CaptureHistoryWindowControllerTests: XCTestCase {
         }
 
         return nil
+    }
+
+    private func makeOneFrameGIFData() throws -> Data {
+        try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+        let url = rootDirectory.appendingPathComponent("one-frame-\(UUID().uuidString).gif")
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let pixels: [UInt8] = [
+            255, 0, 0, 255,
+            0, 255, 0, 255,
+            0, 0, 255, 255,
+            255, 255, 255, 255,
+        ]
+        let data = Data(pixels)
+        guard let provider = CGDataProvider(data: data as CFData),
+              let image = CGImage(
+                width: 2,
+                height: 2,
+                bitsPerComponent: 8,
+                bitsPerPixel: 32,
+                bytesPerRow: 8,
+                space: colorSpace,
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: false,
+                intent: .defaultIntent
+              ),
+              let destination = CGImageDestinationCreateWithURL(
+                url as CFURL,
+                UTType.gif.identifier as CFString,
+                1,
+                nil
+              ) else {
+            return Data()
+        }
+
+        CGImageDestinationAddImage(destination, image, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        return try Data(contentsOf: url)
     }
 }

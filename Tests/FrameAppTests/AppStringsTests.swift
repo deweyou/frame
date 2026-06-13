@@ -15,6 +15,9 @@ final class AppStringsTests: XCTestCase {
         XCTAssertEqual(strings.settingsSaveLocation, "Save location")
         XCTAssertEqual(strings.settingsRestoreDefaultFolder, "Restore Default")
         XCTAssertEqual(strings.settingsCaptureHistory, "Local history")
+        XCTAssertEqual(strings.settingsCaptureHistoryEnabled, "Keep recent captures")
+        XCTAssertEqual(strings.settingsRecordingShortcut, "Recording shortcut")
+        XCTAssertEqual(strings.settingsShortcutRecorderDuplicateShortcut, "Already used by another Frame shortcut")
         XCTAssertEqual(strings.settingsWindowScreenshotDecorationStyle, "Window screenshot style")
         XCTAssertEqual(strings.settingsCaptureHistoryClearConfirmationTitle, "Clear local history?")
         XCTAssertEqual(
@@ -36,7 +39,7 @@ final class AppStringsTests: XCTestCase {
         let strings = AppStrings(language: .zhHans)
 
         XCTAssertEqual(strings.menuCapture, "截图")
-        XCTAssertEqual(strings.menuCaptureHistory, "截图历史")
+        XCTAssertEqual(strings.menuCaptureHistory, "捕获历史")
         XCTAssertEqual(strings.settingsTitle, "设置")
         XCTAssertEqual(strings.settingsScreenshot, "截图")
         XCTAssertEqual(strings.settingsRecording, "录屏")
@@ -45,6 +48,9 @@ final class AppStringsTests: XCTestCase {
         XCTAssertEqual(strings.settingsSaveLocation, "保存位置")
         XCTAssertEqual(strings.settingsRestoreDefaultFolder, "恢复默认")
         XCTAssertEqual(strings.settingsCaptureHistory, "本地历史")
+        XCTAssertEqual(strings.settingsCaptureHistoryEnabled, "保存最近捕获")
+        XCTAssertEqual(strings.settingsRecordingShortcut, "录屏快捷键")
+        XCTAssertEqual(strings.settingsShortcutRecorderDuplicateShortcut, "这个快捷键已被 Frame 的另一个操作使用")
         XCTAssertEqual(strings.settingsWindowScreenshotDecorationStyle, "窗口截图样式")
         XCTAssertEqual(strings.settingsCaptureHistoryClearConfirmationTitle, "清空本地历史？")
         XCTAssertEqual(
@@ -57,7 +63,7 @@ final class AppStringsTests: XCTestCase {
         XCTAssertEqual(strings.windowScreenshotDecorationStyleName(.transparentShadow), "透明投影")
         XCTAssertEqual(strings.capturePlaceholder, "拖拽以选择截图区域")
         XCTAssertEqual(strings.quickAccessSave, "保存")
-        XCTAssertEqual(strings.captureHistoryTitle, "截图历史")
+        XCTAssertEqual(strings.captureHistoryTitle, "捕获历史")
         XCTAssertEqual(strings.captureHistoryEmpty, "暂无本地历史")
         XCTAssertEqual(strings.captureHistoryRestore, "恢复")
     }

@@ -57,6 +57,19 @@ final class SettingsStoreTests: XCTestCase {
         )
     }
 
+    func testRecordingShortcutDefaultsToCommandShiftR() {
+        XCTAssertEqual(SettingsStore.recordingShortcut(defaults: defaults), .defaultRecording)
+    }
+
+    func testRecordingShortcutPersistsCustomStorageValue() {
+        let shortcut = ScreenshotShortcut(key: .number("8"), modifiers: [.command, .control])
+
+        SettingsStore.setRecordingShortcut(shortcut, defaults: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: SettingsStore.recordingShortcutKey), "cmd+control+8")
+        XCTAssertEqual(SettingsStore.recordingShortcut(defaults: defaults), shortcut)
+    }
+
     func testWindowScreenshotDecorationStyleDefaultsToSoftBackdrop() {
         XCTAssertEqual(SettingsStore.windowScreenshotDecorationStyle(defaults: defaults), .softBackdrop)
     }

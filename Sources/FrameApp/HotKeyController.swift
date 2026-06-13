@@ -8,19 +8,36 @@ final class HotKeyController {
         let modifierFlags: UInt32
     }
 
-    var onScreenshot: (@MainActor () -> Void)?
-
-    private(set) var shortcut: ScreenshotShortcut
-    private var hotKeyRef: EventHotKeyRef?
-    private var eventHandlerRef: EventHandlerRef?
-
-    init(shortcut: ScreenshotShortcut = .default) {
-        self.shortcut = shortcut
+    enum HotKeyKind: Equatable {
+        case screenshot
+        case recording
     }
 
-    func register(shortcut: ScreenshotShortcut? = nil) throws {
+    static let hotKeySignatureForTesting = hotKeySignature
+
+    var onScreenshot: (@MainActor () -> Void)?
+    var onRecording: (@MainActor () -> Void)?
+
+    private(set) var shortcut: ScreenshotShortcut
+    private(set) var recordingShortcut: ScreenshotShortcut
+    private var hotKeyRefs: [UInt32: EventHotKeyRef] = [:]
+    private var eventHandlerRef: EventHandlerRef?
+
+    init(
+        shortcut: ScreenshotShortcut = .default,
+        recordingShortcut: ScreenshotShortcut = .defaultRecording
+    ) {
+        self.shortcut = shortcut
+        self.recordingShortcut = recordingShortcut
+    }
+
+    func register(
+        shortcut: ScreenshotShortcut? = nil,
+        recordingShortcut: ScreenshotShortcut? = nil
+    ) throws {
         unregister()
         let shortcut = shortcut ?? self.shortcut
+        let recordingShortcut = recordingShortcut ?? self.recordingShortcut
 
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
@@ -40,11 +57,49 @@ final class HotKeyController {
             throw HotKeyRegistrationError.installEventHandlerFailed(installStatus)
         }
 
-        let hotKeyID = EventHotKeyID(
-            signature: screenshotHotKeySignature,
+        try registerHotKey(
+            shortcut: shortcut,
             id: screenshotHotKeyID
         )
+        try registerHotKey(
+            shortcut: recordingShortcut,
+            id: recordingHotKeyID
+        )
+
+        self.shortcut = shortcut
+        self.recordingShortcut = recordingShortcut
+    }
+
+    static func registrationParameters(for shortcut: ScreenshotShortcut) -> RegistrationParameters {
+        RegistrationParameters(
+            keyCode: shortcut.carbonKeyCode,
+            modifierFlags: shortcut.carbonModifierFlags
+        )
+    }
+
+    static func hotKeyKindForTesting(signature: OSType, id: UInt32) -> HotKeyKind? {
+        hotKeyKind(signature: signature, id: id)
+    }
+
+    func unregister() {
+        for hotKeyRef in hotKeyRefs.values {
+            UnregisterEventHotKey(hotKeyRef)
+        }
+        hotKeyRefs = [:]
+
+        if let eventHandlerRef {
+            RemoveEventHandler(eventHandlerRef)
+            self.eventHandlerRef = nil
+        }
+    }
+
+    private func registerHotKey(shortcut: ScreenshotShortcut, id: UInt32) throws {
+        let hotKeyID = EventHotKeyID(
+            signature: hotKeySignature,
+            id: id
+        )
         let parameters = Self.registrationParameters(for: shortcut)
+        var hotKeyRef: EventHotKeyRef?
 
         let registerStatus = RegisterEventHotKey(
             UInt32(parameters.keyCode),
@@ -55,33 +110,13 @@ final class HotKeyController {
             &hotKeyRef
         )
 
-        guard registerStatus == noErr else {
+        guard registerStatus == noErr, let hotKeyRef else {
             unregister()
             throw HotKeyRegistrationError.registerHotKeyFailed(registerStatus, shortcut)
         }
 
-        self.shortcut = shortcut
+        hotKeyRefs[id] = hotKeyRef
     }
-
-    static func registrationParameters(for shortcut: ScreenshotShortcut) -> RegistrationParameters {
-        RegistrationParameters(
-            keyCode: shortcut.carbonKeyCode,
-            modifierFlags: shortcut.carbonModifierFlags
-        )
-    }
-
-    func unregister() {
-        if let hotKeyRef {
-            UnregisterEventHotKey(hotKeyRef)
-            self.hotKeyRef = nil
-        }
-
-        if let eventHandlerRef {
-            RemoveEventHandler(eventHandlerRef)
-            self.eventHandlerRef = nil
-        }
-    }
-
 }
 
 private extension ScreenshotShortcut {
@@ -196,8 +231,24 @@ enum HotKeyRegistrationError: Error, LocalizedError {
     }
 }
 
-private let screenshotHotKeySignature = OSType(0x46524D41)
+private let hotKeySignature = OSType(0x46524D41)
 private let screenshotHotKeyID: UInt32 = 1
+private let recordingHotKeyID: UInt32 = 2
+
+private func hotKeyKind(signature: OSType, id: UInt32) -> HotKeyController.HotKeyKind? {
+    guard signature == hotKeySignature else {
+        return nil
+    }
+
+    switch id {
+    case screenshotHotKeyID:
+        return .screenshot
+    case recordingHotKeyID:
+        return .recording
+    default:
+        return nil
+    }
+}
 
 private let hotKeyHandler: EventHandlerUPP = { _, event, userData in
     guard let userData else {
@@ -216,8 +267,7 @@ private let hotKeyHandler: EventHandlerUPP = { _, event, userData in
     )
 
     guard parameterStatus == noErr,
-          hotKeyID.signature == screenshotHotKeySignature,
-          hotKeyID.id == screenshotHotKeyID else {
+          let kind = hotKeyKind(signature: hotKeyID.signature, id: hotKeyID.id) else {
         return noErr
     }
 
@@ -225,7 +275,12 @@ private let hotKeyHandler: EventHandlerUPP = { _, event, userData in
     Task { @MainActor in
         let userData = UnsafeMutableRawPointer(bitPattern: controllerPointer)!
         let controller = Unmanaged<HotKeyController>.fromOpaque(userData).takeUnretainedValue()
-        controller.onScreenshot?()
+        switch kind {
+        case .screenshot:
+            controller.onScreenshot?()
+        case .recording:
+            controller.onRecording?()
+        }
     }
 
     return noErr

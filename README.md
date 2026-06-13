@@ -11,11 +11,14 @@ It is intentionally small. Frame is not a full screenshot workspace, a cloud lib
 Screenshots are often a tiny step inside a larger workflow: explaining an idea, reporting a bug, saving a visual state, or sending context to someone else. Frame keeps that step out of the way:
 
 - Lives in the menu bar without a main window.
-- Starts region capture with `Command+Shift+A` by default, configurable in Settings.
+- Starts region capture with `Command+Shift+A` and recording setup with
+  `Command+Shift+R` by default; both are configurable in Settings.
 - Works across multiple displays.
-- Shows a small Quick Access preview after screenshots and recordings.
+- Shows a small Quick Access preview after screenshots and recordings, with a
+  larger hover preview after a short pause.
 - Lets you copy, save, or close from hover actions.
-- Keeps a local Capture History so recent captures can be recovered.
+- Keeps a local Capture History so recent screenshots and recordings can be
+  recovered.
 
 ## What Frame Does
 
@@ -24,9 +27,15 @@ Screenshots are often a tiny step inside a larger workflow: explaining an idea, 
 - PNG output: saved files use the `Frame yyyy-MM-dd HH.mm.ss.png` filename format.
 - Clipboard copy: copy the captured image for pasting into chat, docs, or other apps.
 - Save location: save PNG files to the configured screenshot folder, defaulting to Desktop.
-- Selection recording: switch the selection HUD into recording mode, choose MP4 or GIF, show or hide mouse cursor and click highlights together, customize mouse hint color in Settings, record held-key hints, and stop, restart, or delete from the recording HUD or red menu bar recording item.
+- Selection recording: use the recording shortcut or switch the selection HUD
+  into recording mode, choose MP4 or GIF, show or hide mouse cursor and click
+  highlights together, customize mouse hint color in Settings, record held-key
+  hints, and stop, restart, or delete from the recording HUD or red menu bar
+  recording item.
 - Recording output: copy the recorded file, download it to the configured save folder, or open a playable preview. Edit is visible but pending.
-- Local capture history: recover recent captures from the menu bar. History is enabled by default, keeps captures for 7 days, and uses a 2 GB local cache limit.
+- Local capture history: recover recent captures from the menu bar, including
+  recording thumbnails when a first frame can be decoded. History is enabled by
+  default, keeps captures for 7 days, and uses a 2 GB local cache limit.
 - Multi-display selection: show capture overlays across connected displays and account for Retina scale and screen coordinates.
 - Window screenshot styles: choose Soft Backdrop, Canvas Glow, or Transparent Shadow for window captures.
 - Permission guidance: explain missing Screen Recording permission and open the relevant system settings.

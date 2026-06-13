@@ -88,6 +88,22 @@ final class AppDelegateRecordingTests: XCTestCase {
         XCTAssertEqual(session.recordedKeyboardHints, ["⌘⇧A"])
     }
 
+    func testRecordingShortcutStartsSelectionInRecordingSetupMode() {
+        _ = NSApplication.shared
+        let selectionOverlay = SpySelectionOverlayController()
+        let delegate = AppDelegate(
+            selectionOverlayController: selectionOverlay,
+            hasScreenRecordingAccess: { true },
+            showMissingScreenRecordingPermission: {},
+            playInvalidActionFeedback: {}
+        )
+
+        XCTAssertTrue(delegate.startRecordingCaptureFlowForTesting())
+
+        XCTAssertEqual(selectionOverlay.startSelectionCallCount, 1)
+        XCTAssertEqual(selectionOverlay.lastInitialMode, .recordingSetup)
+    }
+
     func testRecordingStartDoesNotShowStaticKeyboardHintOverlay() async throws {
         _ = NSApplication.shared
         let recordingService = SpyRecordingService()
@@ -230,6 +246,7 @@ final class AppDelegateRecordingTests: XCTestCase {
 @MainActor
 private final class SpySelectionOverlayController: SelectionOverlayControlling {
     private(set) var startSelectionCallCount = 0
+    private(set) var lastInitialMode: SelectionOverlayInitialMode?
     private var activeCompletion: ((SelectionOverlayCompletion?) -> Void)?
 
     var isSelecting: Bool {
@@ -238,10 +255,12 @@ private final class SpySelectionOverlayController: SelectionOverlayControlling {
 
     func startSelection(
         strings: AppStrings,
+        initialMode: SelectionOverlayInitialMode,
         onStartRecording: @escaping (SelectionOverlayWindow, SelectionCapture, RecordingOptions) -> Void,
         completion: @escaping (SelectionOverlayCompletion?) -> Void
     ) {
         startSelectionCallCount += 1
+        lastInitialMode = initialMode
         activeCompletion = completion
     }
 

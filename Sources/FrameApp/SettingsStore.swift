@@ -3,6 +3,7 @@ import FrameCore
 
 enum SettingsStore {
     static let screenshotShortcutKey = "screenshotShortcut"
+    static let recordingShortcutKey = "recordingShortcut"
     static let appLanguageKey = "appLanguage"
     static let screenshotDirectoryKey = "screenshotDirectory"
     static let windowScreenshotDecorationStyleKey = "windowScreenshotDecorationStyle"
@@ -26,6 +27,21 @@ enum SettingsStore {
         defaults: UserDefaults = .standard
     ) {
         defaults.set(shortcut.storageValue, forKey: screenshotShortcutKey)
+    }
+
+    static func recordingShortcut(defaults: UserDefaults = .standard) -> ScreenshotShortcut {
+        ScreenshotShortcut.persistedValue(
+            for: defaults.string(forKey: recordingShortcutKey),
+            defaultShortcut: .defaultRecording,
+            reservedShortcuts: []
+        )
+    }
+
+    static func setRecordingShortcut(
+        _ shortcut: ScreenshotShortcut,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(shortcut.storageValue, forKey: recordingShortcutKey)
     }
 
     static func appLanguage(defaults: UserDefaults = .standard) -> AppLanguage {
