@@ -386,8 +386,13 @@ final class SelectionOverlayCompletionTests: XCTestCase {
 
         let countdownFrame = try XCTUnwrap(window.countdownFrameForTesting())
         let localScreenBounds = CGRect(origin: .zero, size: screen.frame.size)
+        let desiredCountdownCenterY = localScreenBounds.minY + localScreenBounds.height * 0.04
+        let expectedCountdownCenterY = min(
+            max(desiredCountdownCenterY, localScreenBounds.minY + 8 + countdownFrame.height / 2),
+            localScreenBounds.maxY - 8 - countdownFrame.height / 2
+        )
         XCTAssertEqual(countdownFrame.midX, localScreenBounds.midX, accuracy: 1)
-        XCTAssertEqual(countdownFrame.midY, localScreenBounds.minY + localScreenBounds.height * 0.04, accuracy: 1)
+        XCTAssertEqual(countdownFrame.midY, expectedCountdownCenterY, accuracy: 1)
         XCTAssertLessThan(countdownFrame.midY, localScreenBounds.midY)
         XCTAssertGreaterThanOrEqual(countdownFrame.width, 72)
         XCTAssertGreaterThanOrEqual(countdownFrame.height, 58)

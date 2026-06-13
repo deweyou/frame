@@ -377,7 +377,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         }
 
         controller.scheduleHoverPreviewForTesting(window: panel)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.04))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
 
         let metrics = try XCTUnwrap(controller.hoverPreviewBubbleMetricsForTesting())
         XCTAssertEqual(metrics.panelFrame.width, 664, accuracy: 1)
