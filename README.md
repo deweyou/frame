@@ -11,7 +11,7 @@ It is intentionally small. Frame is not a full screenshot workspace, a cloud lib
 Screenshots are often a tiny step inside a larger workflow: explaining an idea, reporting a bug, saving a visual state, or sending context to someone else. Frame keeps that step out of the way:
 
 - Lives in the menu bar without a main window.
-- Starts region capture with `Command+Shift+A`.
+- Starts region capture with `Command+Shift+A` by default, configurable in Settings.
 - Works across multiple displays.
 - Shows a small Quick Access preview after screenshots and recordings.
 - Lets you copy, save, or close from hover actions.

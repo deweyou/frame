@@ -25,7 +25,7 @@ enum SettingsStore {
         _ shortcut: ScreenshotShortcut,
         defaults: UserDefaults = .standard
     ) {
-        defaults.set(shortcut.rawValue, forKey: screenshotShortcutKey)
+        defaults.set(shortcut.storageValue, forKey: screenshotShortcutKey)
     }
 
     static func appLanguage(defaults: UserDefaults = .standard) -> AppLanguage {
