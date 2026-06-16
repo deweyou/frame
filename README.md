@@ -43,7 +43,10 @@ Screenshots are often a tiny step inside a larger workflow: explaining an idea, 
   highlights together, customize mouse hint color in Settings, record held-key
   hints, and stop, restart, or delete from the recording HUD or red menu bar
   recording item.
-- Recording output: copy the recorded file, download it to the configured save folder, or open a playable preview. Edit is visible but pending.
+- Recording output: copy the recorded file, download it to the configured save
+  folder, or open the video preview. MP4 recordings can be trimmed to custom
+  start/end times and exported at preset speeds up to 8x from the same preview
+  window. GIF recordings remain preview/copy/download only.
 - Local capture history: recover recent captures from the menu bar, including
   recording thumbnails when a first frame can be decoded. History is enabled by
   default, keeps captures for 7 days, and uses a 2 GB local cache limit.

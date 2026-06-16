@@ -239,13 +239,14 @@ system tool, not a branded dashboard.
   restore them after recording completes or fails, then stack the new recording
   card with the existing previews instead of clearing the stack.
 - Screenshots and recordings share one Quick Access stack and one visual
-  language. Recording cards expose Download, Copy, Preview, disabled Edit, and
-  Close. Preview opens a playable video window; Edit remains pending. Use the
-  first decodable recording frame as the thumbnail, with a lightweight video
-  placeholder as the fallback. Screenshots and recordings should render in the
-  same fixed card size, preserving media aspect ratio inside that footprint.
-  Keep the rendered content size asserted so the preview cannot collapse into a
-  thin strip.
+  language. Recording cards expose Download, Copy, Preview, Edit, and Close.
+  Edit is enabled for MP4 and disabled for GIF. Preview and Edit open the same
+  playable video window; MP4 windows show a bottom editor bar by default for
+  trim and speed. Use the first decodable recording frame as the thumbnail, with
+  a lightweight video placeholder as the fallback. Screenshots and recordings
+  should render in the same fixed card size, preserving media aspect ratio
+  inside that footprint. Keep the rendered content size asserted so the preview
+  cannot collapse into a thin strip.
 - Hovering a Quick Access card for two seconds opens a transient rounded
   right-side popover without an arrow. Image and recording previews render larger
   using the original media aspect ratio and aspect-fit scaling so the full image
