@@ -58,6 +58,7 @@ final class QuickAccessPanelController: NSObject {
                 downloadRecording: nil,
                 copyRecording: nil,
                 previewRecording: nil,
+                editRecording: nil,
                 hoverPreviewMedia: .image(captured.image),
                 close: close
             )
@@ -75,6 +76,7 @@ final class QuickAccessPanelController: NSObject {
         download: @escaping () -> Bool,
         copy: @escaping () -> Bool,
         preview: @escaping () -> Bool,
+        edit: @escaping () -> Bool,
         close: @escaping () -> Void
     ) {
         restoreTemporarilyHiddenPreviews()
@@ -112,6 +114,7 @@ final class QuickAccessPanelController: NSObject {
                 downloadRecording: download,
                 copyRecording: copy,
                 previewRecording: preview,
+                editRecording: edit,
                 hoverPreviewMedia: .recording(recording),
                 close: close
             )
@@ -529,11 +532,15 @@ final class QuickAccessPanelController: NSObject {
         let editButton = makeIconButton(
             title: strings.videoQuickAccessEdit,
             symbolName: "slider.horizontal.3",
-            action: #selector(disabledRecordingEditButtonClicked),
+            action: #selector(editRecordingButtonClicked),
             style: .toolbar
         )
-        editButton.isEnabled = false
-        editButton.contentTintColor = .disabledControlTextColor
+        if recording.format != .mp4 {
+            editButton.isEnabled = false
+            editButton.contentTintColor = .disabledControlTextColor
+            editButton.toolTip = strings.videoEditingMP4Only
+            editButton.setAccessibilityHelp(strings.videoEditingMP4Only)
+        }
         stackView.addArrangedSubview(editButton)
 
         let overlayView = NSVisualEffectView()
@@ -888,7 +895,13 @@ final class QuickAccessPanelController: NSObject {
         _ = item.previewRecording?()
     }
 
-    @objc private func disabledRecordingEditButtonClicked(_ sender: NSButton) {}
+    @objc private func editRecordingButtonClicked(_ sender: NSButton) {
+        guard let item = previewItem(for: sender.window) else {
+            return
+        }
+
+        _ = item.editRecording?()
+    }
 
     @objc private func closeButtonClicked(_ sender: NSButton) {
         guard let item = previewItem(for: sender.window) else {
@@ -986,6 +999,7 @@ private final class QuickAccessPreviewItem {
     let downloadRecording: (() -> Bool)?
     let copyRecording: (() -> Bool)?
     let previewRecording: (() -> Bool)?
+    let editRecording: (() -> Bool)?
     var hoverPreviewMedia: QuickAccessHoverPreviewMedia
     let close: () -> Void
     var isTemporarilyHidden = false
@@ -1008,6 +1022,7 @@ private final class QuickAccessPreviewItem {
         downloadRecording: (() -> Bool)?,
         copyRecording: (() -> Bool)?,
         previewRecording: (() -> Bool)?,
+        editRecording: (() -> Bool)?,
         hoverPreviewMedia: QuickAccessHoverPreviewMedia,
         close: @escaping () -> Void
     ) {
@@ -1026,6 +1041,7 @@ private final class QuickAccessPreviewItem {
         self.downloadRecording = downloadRecording
         self.copyRecording = copyRecording
         self.previewRecording = previewRecording
+        self.editRecording = editRecording
         self.hoverPreviewMedia = hoverPreviewMedia
         self.close = close
     }

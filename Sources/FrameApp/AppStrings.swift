@@ -493,6 +493,13 @@ struct AppStrings {
         }
     }
 
+    var videoEditingMP4Only: String {
+        switch language {
+        case .zhHans: "此版本仅支持编辑 MP4"
+        case .en: "MP4 editing only in this version"
+        }
+    }
+
     var quickAccessPin: String {
         switch language {
         case .zhHans: "固定到预览窗口"

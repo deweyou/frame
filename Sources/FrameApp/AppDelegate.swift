@@ -695,6 +695,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preview: { [weak self] in
                 self?.openVideoPreview(recording) ?? false
             },
+            edit: { [weak self] in
+                self?.openVideoPreview(recording) ?? false
+            },
             close: {
                 NSLog("Frame 录屏快速操作已关闭")
             }

@@ -9,7 +9,7 @@ import XCTest
 final class RecordingQuickAccessPanelControllerTests: XCTestCase {
     private var retainedPreviewControllers: [QuickAccessPanelController] = []
 
-    func testRecordingQuickAccessExposesDownloadCopyPreviewAndDisabledEdit() throws {
+    func testMP4RecordingQuickAccessExposesEnabledEdit() throws {
         _ = NSApplication.shared
         let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
         let recording = CapturedRecording(
@@ -24,6 +24,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         let controller = QuickAccessPanelController()
         retainedPreviewControllers.append(controller)
         let expectedPreviewSize = QuickAccessPanelController.recordingPreviewSize(forSourceSize: recording.pixelSize)
+        var editCallCount = 0
 
         controller.show(
             for: recording,
@@ -32,6 +33,10 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
             download: { true },
             copy: { true },
             preview: { true },
+            edit: {
+                editCallCount += 1
+                return true
+            },
             close: {}
         )
 
@@ -54,8 +59,53 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         XCTAssertNotNil(findButton(in: contentView, accessibilityLabel: "Copy"))
         XCTAssertNotNil(findButton(in: contentView, accessibilityLabel: "Preview"))
         let editButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Edit"))
-        XCTAssertFalse(editButton.isEnabled)
+        XCTAssertTrue(editButton.isEnabled)
+        editButton.performClick(nil)
+        XCTAssertEqual(editCallCount, 1)
         XCTAssertNotNil(findButton(in: contentView, accessibilityLabel: "Close"))
+    }
+
+    func testGIFRecordingQuickAccessKeepsEditDisabled() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let recording = CapturedRecording(
+            id: UUID(),
+            fileURL: URL(fileURLWithPath: "/tmp/test.gif"),
+            format: .gif,
+            rect: CGRect(x: 0, y: 0, width: 320, height: 240),
+            pixelSize: CGSize(width: 320, height: 240),
+            byteSize: 10,
+            duration: 2
+        )
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        var editCallCount = 0
+
+        controller.show(
+            for: recording,
+            preferredAnchor: CGRect(x: 0, y: 0, width: 100, height: 100),
+            strings: AppStrings(language: .en),
+            download: { true },
+            copy: { true },
+            preview: { true },
+            edit: {
+                editCallCount += 1
+                return true
+            },
+            close: {}
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer {
+            panel.close()
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let editButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Edit"))
+        XCTAssertFalse(editButton.isEnabled)
+        XCTAssertEqual(editButton.toolTip, "MP4 editing only in this version")
+        editButton.performClick(nil)
+        XCTAssertEqual(editCallCount, 0)
     }
 
     func testRecordingQuickAccessScalesPreviewToRecordingAspectRatio() {
@@ -98,6 +148,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
             download: { true },
             copy: { true },
             preview: { true },
+            edit: { true },
             close: {}
         )
 
@@ -140,6 +191,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
                 previewCallCount += 1
                 return true
             },
+            edit: { true },
             close: {}
         )
 
@@ -183,6 +235,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
                 previewCallCount += 1
                 return true
             },
+            edit: { true },
             close: {}
         )
 
@@ -238,6 +291,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
             download: { true },
             copy: { true },
             preview: { true },
+            edit: { true },
             close: {}
         )
 
@@ -292,6 +346,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
             download: { true },
             copy: { true },
             preview: { true },
+            edit: { true },
             close: {}
         )
 
@@ -440,6 +495,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
             download: { true },
             copy: { true },
             preview: { true },
+            edit: { true },
             close: {}
         )
 
@@ -499,6 +555,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
             download: { true },
             copy: { true },
             preview: { true },
+            edit: { true },
             close: {}
         )
 
