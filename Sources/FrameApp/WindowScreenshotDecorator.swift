@@ -5,6 +5,7 @@ enum WindowScreenshotDecorationStyle: String, CaseIterable, Identifiable {
     case softBackdrop
     case canvasGlow
     case transparentShadow
+    case original
 
     var id: String {
         rawValue
@@ -109,6 +110,8 @@ struct WindowScreenshotDecorator {
             )
         case .transparentShadow:
             context.clear(rect)
+        case .original:
+            return
         }
     }
 
@@ -304,7 +307,7 @@ private struct WindowScreenshotDecorationMetrics {
 
     init(style: WindowScreenshotDecorationStyle) {
         switch style {
-        case .softBackdrop:
+        case .softBackdrop, .original:
             contentScale = Self.sharedContentScale
             horizontalPaddingRatio = Self.sharedHorizontalPaddingRatio
             topPaddingRatio = Self.sharedTopPaddingRatio

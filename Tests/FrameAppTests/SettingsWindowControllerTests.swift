@@ -80,6 +80,15 @@ final class SettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(SettingsShortcutRecorderMetrics.cornerRadius, 7, accuracy: 0.5)
     }
 
+    func testScreenshotStylePickerIncludesOriginalOutputOption() {
+        XCTAssertEqual(WindowScreenshotDecorationStyle.allCases, [
+            .softBackdrop,
+            .canvasGlow,
+            .transparentShadow,
+            .original,
+        ])
+    }
+
     func testSaveLocationSettingsUseCompactSummaryRow() {
         XCTAssertTrue(SettingsGeneralMetrics.containsSaveLocation)
         XCTAssertFalse(SettingsScreenshotMetrics.containsSaveLocation)

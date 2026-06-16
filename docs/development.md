@@ -149,7 +149,7 @@ Agents should use this stable-sign-and-replace flow whenever the user asks to ru
 5. Open `Frame -> 设置...` / `Frame -> Settings...`, then open it again from another display and confirm it centers on the current display.
 6. Change the language between Follow System, 中文, and English. Confirm the menu, settings window labels, alerts opened after the change, Quick Access tooltips, and capture placeholder use the selected language.
 7. In Settings, choose a custom screenshot save folder, quit and reopen Frame, and confirm the path persists.
-8. In Settings, change Window screenshot style between Soft Backdrop, Canvas Glow, and Transparent Shadow. Confirm the labels localize and the selected value persists after reopening Settings.
+8. In Settings, change Window screenshot style between Soft Backdrop, Canvas Glow, Transparent Shadow, and Original. Confirm the labels localize and the selected value persists after reopening Settings.
 9. Reset the screenshot save folder and confirm it returns to Desktop.
 10. Use the menu capture item or the configured keyboard shortcut.
 11. On a fresh app session with no previous selection, confirm the active display shows a centered placeholder instead of a `0 x 0` HUD.
@@ -163,7 +163,7 @@ Agents should use this stable-sign-and-replace flow whenever the user asks to ru
 19. Hover the preview and confirm icon-only save, copy, workspace, pin, and close actions appear.
 20. Confirm copy places an image on the pasteboard.
 21. Confirm save writes `Frame yyyy-MM-dd HH.mm.ss.png` to the configured screenshot folder, or Desktop after reset.
-22. Double-click an eligible app window, capture it, and confirm the output uses the selected window screenshot style while region screenshots remain undecorated.
+22. Double-click an eligible app window, capture it, and confirm the output uses the selected window screenshot style. Confirm Original keeps the cropped raw window output without an added background canvas while region screenshots remain undecorated.
 23. Confirm the workspace action opens a movable, resizable preview/edit workspace.
 24. Resize the workspace and confirm the image preview area preserves the captured image aspect ratio without empty fill.
 25. Confirm switching focus to another app does not close the preview/edit workspace.
@@ -220,4 +220,4 @@ tccutil reset ScreenCapture dev.dewey.frame
 Then reopen the exact app bundle you want to authorize.
 
 ---
-*Last updated: 2026-06-11 | Reason: add window screenshot style smoke checks*
+*Last updated: 2026-06-17 | Reason: add Original window screenshot smoke checks*

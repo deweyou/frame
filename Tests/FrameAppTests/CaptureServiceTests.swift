@@ -100,6 +100,23 @@ final class CaptureServiceTests: XCTestCase {
         XCTAssertEqual(try pixel(at: CGPoint(x: 0, y: 0), in: decoratedImage).alpha, 0)
     }
 
+    func testOriginalWindowScreenshotKeepsSourcePixelsWithoutCanvas() throws {
+        let sourceImage = try makeImageWithTransparentMargins()
+        let screenshot = try makeWindowScreenshotForTesting(
+            from: sourceImage,
+            rect: CGRect(x: 10, y: 20, width: 10, height: 8),
+            scale: 1,
+            style: .original
+        )
+        let outputImage = try XCTUnwrap(screenshot.image.cgImage(forProposedRect: nil, context: nil, hints: nil))
+
+        XCTAssertEqual(outputImage.width, sourceImage.width)
+        XCTAssertEqual(outputImage.height, sourceImage.height)
+        XCTAssertEqual(screenshot.image.size, CGSize(width: 10, height: 8))
+        XCTAssertEqual(screenshot.rect, CGRect(x: 10, y: 20, width: 10, height: 8))
+        XCTAssertEqual(try pixel(at: CGPoint(x: 0, y: 0), in: outputImage).alpha, 0)
+    }
+
     func testCroppedToVisibleContentRemovesTransparentWindowMargins() throws {
         let image = try makeImageWithTransparentMargins()
         let croppedImage = try XCTUnwrap(croppedToVisibleContent(image))
