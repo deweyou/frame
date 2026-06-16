@@ -30,10 +30,25 @@ final class VideoPreviewWindowController {
         window.isReleasedWhenClosed = false
         window.center()
 
-        let mediaView = makeMediaView(for: recording)
+        let media = makeMediaView(for: recording)
+        let mediaView = media.view
         mediaView.translatesAutoresizingMaskIntoConstraints = false
         let editingState = recording.format == .mp4 ? try? VideoEditingState(sourceDuration: recording.duration) : nil
         let editorBar = editingState.map { VideoEditorBarView(state: $0) }
+        let playerTimeObserver = media.player.map { player in
+            player.addPeriodicTimeObserver(
+                forInterval: CMTime(seconds: 0.05, preferredTimescale: 600),
+                queue: .main
+            ) { [weak self, weak player] time in
+                Task { @MainActor [weak self, weak player] in
+                    guard let self, let player else {
+                        return
+                    }
+
+                    self.stopPlaybackIfNeeded(player: player, recordingID: recording.id, time: time)
+                }
+            }
+        }
 
         let toolbar = NSStackView()
         toolbar.orientation = .horizontal
@@ -75,9 +90,15 @@ final class VideoPreviewWindowController {
             recording: recording,
             window: window,
             editingState: editingState,
+            editorBar: editorBar,
+            player: media.player,
+            playerTimeObserver: playerTimeObserver,
             saveCurrent: saveCurrent,
             isEditingEnabled: editingState != nil
         )
+        editorBar?.onStateChanged = { [weak self] state in
+            self?.updateEditingState(recordingID: recording.id, state: state)
+        }
         if focusEditor {
             editorBar?.window?.makeFirstResponder(editorBar)
         }
@@ -96,7 +117,40 @@ final class VideoPreviewWindowController {
         items[recordingID]?.editingState
     }
 
-    private func makeMediaView(for recording: CapturedRecording) -> NSView {
+    func setTrimRangeForTesting(recordingID: UUID, start: TimeInterval, end: TimeInterval) throws {
+        guard let item = items[recordingID], var state = item.editingState else {
+            return
+        }
+
+        try state.setTrimRange(start: start, end: end)
+        updateEditingState(recordingID: recordingID, state: state)
+    }
+
+    func setSpeedForTesting(recordingID: UUID, speed: VideoPlaybackSpeed) throws {
+        guard let item = items[recordingID], var state = item.editingState else {
+            return
+        }
+
+        try state.setSpeed(speed)
+        updateEditingState(recordingID: recordingID, state: state)
+    }
+
+    func hasUnsavedEditsForTesting(recordingID: UUID) -> Bool {
+        items[recordingID]?.editingState?.isDirty ?? false
+    }
+
+    func playbackRangeForTesting(recordingID: UUID) -> CMTimeRange? {
+        guard let state = items[recordingID]?.editingState else {
+            return nil
+        }
+
+        return CMTimeRange(
+            start: CMTime(seconds: state.startTime, preferredTimescale: 600),
+            end: CMTime(seconds: state.endTime, preferredTimescale: 600)
+        )
+    }
+
+    private func makeMediaView(for recording: CapturedRecording) -> (view: NSView, player: AVPlayer?) {
         switch recording.format {
         case .gif:
             let imageView = NSImageView()
@@ -105,12 +159,70 @@ final class VideoPreviewWindowController {
             imageView.animates = true
             imageView.wantsLayer = true
             imageView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-            return imageView
+            return (imageView, nil)
         case .mp4:
             let playerView = AVPlayerView()
-            playerView.player = AVPlayer(url: recording.fileURL)
+            let player = AVPlayer(url: recording.fileURL)
+            playerView.player = player
             playerView.controlsStyle = .floating
-            return playerView
+            return (playerView, player)
+        }
+    }
+
+    private func stopPlaybackIfNeeded(player: AVPlayer, recordingID: UUID, time: CMTime) {
+        guard let state = items[recordingID]?.editingState,
+              player.rate > 0 else {
+            return
+        }
+
+        if time.seconds < state.startTime {
+            player.seek(
+                to: CMTime(seconds: state.startTime, preferredTimescale: 600),
+                toleranceBefore: .zero,
+                toleranceAfter: .zero
+            )
+            player.rate = Float(state.speed.rate)
+            return
+        }
+
+        if abs(player.rate - Float(state.speed.rate)) > 0.001 {
+            player.rate = Float(state.speed.rate)
+        }
+
+        guard time.seconds >= state.endTime else {
+            return
+        }
+
+        player.pause()
+        player.seek(
+            to: CMTime(seconds: state.endTime, preferredTimescale: 600),
+            toleranceBefore: .zero,
+            toleranceAfter: .zero
+        )
+    }
+
+    private func updateEditingState(recordingID: UUID, state: VideoEditingState) {
+        guard let item = items[recordingID] else {
+            return
+        }
+
+        item.editingState = state
+        item.editorBar?.updateState(state)
+
+        guard let player = item.player else {
+            return
+        }
+
+        let currentTime = player.currentTime().seconds
+        if currentTime < state.startTime || currentTime > state.endTime {
+            player.seek(
+                to: CMTime(seconds: state.startTime, preferredTimescale: 600),
+                toleranceBefore: .zero,
+                toleranceAfter: .zero
+            )
+        }
+        if player.rate > 0 {
+            player.rate = Float(state.speed.rate)
         }
     }
 
@@ -137,6 +249,9 @@ private final class VideoPreviewItem {
     let recording: CapturedRecording
     let window: NSWindow
     var editingState: VideoEditingState?
+    weak var editorBar: VideoEditorBarView?
+    let player: AVPlayer?
+    let playerTimeObserver: Any?
     let saveCurrent: (CapturedRecording, VideoEditingState) -> Bool
     let isEditingEnabled: Bool
 
@@ -144,14 +259,26 @@ private final class VideoPreviewItem {
         recording: CapturedRecording,
         window: NSWindow,
         editingState: VideoEditingState?,
+        editorBar: VideoEditorBarView?,
+        player: AVPlayer?,
+        playerTimeObserver: Any?,
         saveCurrent: @escaping (CapturedRecording, VideoEditingState) -> Bool,
         isEditingEnabled: Bool
     ) {
         self.recording = recording
         self.window = window
         self.editingState = editingState
+        self.editorBar = editorBar
+        self.player = player
+        self.playerTimeObserver = playerTimeObserver
         self.saveCurrent = saveCurrent
         self.isEditingEnabled = isEditingEnabled
+    }
+
+    deinit {
+        if let playerTimeObserver, let player {
+            player.removeTimeObserver(playerTimeObserver)
+        }
     }
 }
 
