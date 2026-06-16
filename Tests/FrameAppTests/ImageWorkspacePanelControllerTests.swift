@@ -14,7 +14,6 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         }
         temporaryDefaultsSuiteNames.removeAll()
         retainedControllers.removeAll()
-        try await super.tearDown()
     }
 
     func testImageAnnotationRendererPreservesScreenshotIDAndChangesPixels() throws {
