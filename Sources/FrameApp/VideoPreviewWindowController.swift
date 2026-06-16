@@ -29,8 +29,8 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
     func show(
         recording: CapturedRecording,
         strings: AppStrings,
-        copy: @escaping () -> Bool,
-        download: @escaping () -> Bool,
+        copy: @escaping (CapturedRecording, VideoEditingState?) -> Bool,
+        download: @escaping (CapturedRecording, VideoEditingState?) -> Bool,
         saveCurrent: @escaping (CapturedRecording, VideoEditingState, VideoPreviewSaveChoice) -> Bool,
         focusEditor: Bool = false
     ) {
@@ -76,8 +76,24 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
         toolbar.alignment = .centerY
         toolbar.spacing = 8
         toolbar.translatesAutoresizingMaskIntoConstraints = false
-        toolbar.addArrangedSubview(makeButton(title: strings.videoQuickAccessCopy, symbolName: "doc.on.doc", action: copy))
-        toolbar.addArrangedSubview(makeButton(title: strings.videoQuickAccessDownload, symbolName: "tray.and.arrow.down", action: download))
+        toolbar.addArrangedSubview(
+            makeButton(
+                title: strings.videoQuickAccessCopy,
+                symbolName: "doc.on.doc",
+                action: { [weak self] in
+                    self?.performCopy(recordingID: recording.id) ?? false
+                }
+            )
+        )
+        toolbar.addArrangedSubview(
+            makeButton(
+                title: strings.videoQuickAccessDownload,
+                symbolName: "tray.and.arrow.down",
+                action: { [weak self] in
+                    self?.performDownload(recordingID: recording.id) ?? false
+                }
+            )
+        )
         if editingState != nil {
             toolbar.addArrangedSubview(
                 makeSaveCurrentButton(
@@ -129,6 +145,8 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
             editorBar: editorBar,
             player: media.player,
             playerTimeObserver: playerTimeObserver,
+            copy: copy,
+            download: download,
             saveCurrent: saveCurrent,
             isEditingEnabled: editingState != nil
         )
@@ -188,6 +206,14 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
 
     func performSaveCurrentForTesting(recordingID: UUID, choice: VideoPreviewSaveChoice) -> Bool {
         performSaveCurrent(recordingID: recordingID, choice: choice)
+    }
+
+    func performCopyForTesting(recordingID: UUID) -> Bool {
+        performCopy(recordingID: recordingID)
+    }
+
+    func performDownloadForTesting(recordingID: UUID) -> Bool {
+        performDownload(recordingID: recordingID)
     }
 
     func windowShouldCloseForTesting(recordingID: UUID) -> Bool {
@@ -347,6 +373,31 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
         return item.saveCurrent(item.recording, state, choice)
     }
 
+    private func performCopy(recordingID: UUID) -> Bool {
+        guard let item = items[recordingID] else {
+            return false
+        }
+
+        return item.copy(item.recording, dirtyEditingState(for: item))
+    }
+
+    private func performDownload(recordingID: UUID) -> Bool {
+        guard let item = items[recordingID] else {
+            return false
+        }
+
+        return item.download(item.recording, dirtyEditingState(for: item))
+    }
+
+    private func dirtyEditingState(for item: VideoPreviewItem) -> VideoEditingState? {
+        guard let state = item.editingState,
+              state.isDirty else {
+            return nil
+        }
+
+        return state
+    }
+
     private func item(for window: NSWindow) -> VideoPreviewItem? {
         items.values.first { $0.window === window }
     }
@@ -385,6 +436,8 @@ private final class VideoPreviewItem {
     weak var editorBar: VideoEditorBarView?
     let player: AVPlayer?
     let playerTimeObserver: Any?
+    let copy: (CapturedRecording, VideoEditingState?) -> Bool
+    let download: (CapturedRecording, VideoEditingState?) -> Bool
     let saveCurrent: (CapturedRecording, VideoEditingState, VideoPreviewSaveChoice) -> Bool
     let isEditingEnabled: Bool
 
@@ -396,6 +449,8 @@ private final class VideoPreviewItem {
         editorBar: VideoEditorBarView?,
         player: AVPlayer?,
         playerTimeObserver: Any?,
+        copy: @escaping (CapturedRecording, VideoEditingState?) -> Bool,
+        download: @escaping (CapturedRecording, VideoEditingState?) -> Bool,
         saveCurrent: @escaping (CapturedRecording, VideoEditingState, VideoPreviewSaveChoice) -> Bool,
         isEditingEnabled: Bool
     ) {
@@ -406,6 +461,8 @@ private final class VideoPreviewItem {
         self.editorBar = editorBar
         self.player = player
         self.playerTimeObserver = playerTimeObserver
+        self.copy = copy
+        self.download = download
         self.saveCurrent = saveCurrent
         self.isEditingEnabled = isEditingEnabled
     }

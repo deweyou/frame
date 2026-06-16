@@ -9,15 +9,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKeyController: HotKeyController?
     private let selectionOverlayController: SelectionOverlayControlling
     private let captureService = CaptureService()
-    private let quickAccessPanelController = QuickAccessPanelController()
-    private let videoPreviewWindowController = VideoPreviewWindowController()
+    private let quickAccessPanelController: QuickAccessPanelController
+    private let videoPreviewWindowController: VideoPreviewWindowController
     private let imageWorkspacePanelController = ImageWorkspacePanelController()
-    private let captureHistoryStore = CaptureHistoryStore()
+    private let captureHistoryStore: CaptureHistoryStore
     private let ocrService = OCRService()
     private let ocrTextPanelController = OCRTextPanelController()
-    private let clipboardWriter = ClipboardWriter()
+    private let clipboardWriter: ClipboardWriter
     private let recordingService: RecordingServicing
-    private let recordingFileWriter = RecordingFileWriter()
+    private let recordingFileWriter: RecordingFileWriter
+    private let videoEditingExporter: VideoEditingExporting
     private let keyboardHintOverlayController: KeyboardHintOverlayControlling
     private let hasScreenRecordingAccess: () -> Bool
     private let showMissingScreenRecordingPermission: () -> Void
@@ -44,6 +45,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         selectionOverlayController: SelectionOverlayControlling = SelectionOverlayController(),
         recordingService: RecordingServicing = ScreenCaptureRecordingService(),
         keyboardHintOverlayController: KeyboardHintOverlayControlling = KeyboardHintOverlayController(),
+        quickAccessPanelController: QuickAccessPanelController = QuickAccessPanelController(),
+        videoPreviewWindowController: VideoPreviewWindowController = VideoPreviewWindowController(),
+        captureHistoryStore: CaptureHistoryStore = CaptureHistoryStore(),
+        clipboardWriter: ClipboardWriter = ClipboardWriter(),
+        recordingFileWriter: RecordingFileWriter = RecordingFileWriter(),
+        videoEditingExporter: VideoEditingExporting = VideoEditingExporter(),
         hasScreenRecordingAccess: @escaping () -> Bool = { ScreenRecordingPermission.hasAccess },
         showMissingScreenRecordingPermission: @escaping () -> Void = { ScreenRecordingPermission.showMissingPermissionAlert() },
         playInvalidActionFeedback: @escaping () -> Void = { NSSound.beep() }
@@ -51,6 +58,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.selectionOverlayController = selectionOverlayController
         self.recordingService = recordingService
         self.keyboardHintOverlayController = keyboardHintOverlayController
+        self.quickAccessPanelController = quickAccessPanelController
+        self.videoPreviewWindowController = videoPreviewWindowController
+        self.captureHistoryStore = captureHistoryStore
+        self.clipboardWriter = clipboardWriter
+        self.recordingFileWriter = recordingFileWriter
+        self.videoEditingExporter = videoEditingExporter
         self.hasScreenRecordingAccess = hasScreenRecordingAccess
         self.showMissingScreenRecordingPermission = showMissingScreenRecordingPermission
         self.playInvalidActionFeedback = playInvalidActionFeedback
@@ -681,6 +694,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         activeRecordingSession != nil && activeRecordingSelection != nil
     }
 
+    func showVideoQuickAccessForTesting(_ recording: CapturedRecording) {
+        showVideoQuickAccess(for: recording, anchor: nil)
+    }
+
+    func quickAccessRecordingCountForTesting() -> Int {
+        quickAccessPanelController.recordingCountForTesting()
+    }
+
+    func quickAccessRecordingForTesting(id: UUID) -> CapturedRecording? {
+        quickAccessPanelController.recordingForTesting(id: id)
+    }
+
+    func saveEditedRecordingForTesting(
+        _ recording: CapturedRecording,
+        editingState: VideoEditingState,
+        choice: VideoPreviewSaveChoice
+    ) async -> Bool {
+        await exportEditedRecording(recording, editingState: editingState, choice: choice)
+    }
+
     private func showVideoQuickAccess(for recording: CapturedRecording, anchor: CGRect?) {
         quickAccessPanelController.show(
             for: recording,
@@ -708,11 +741,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         videoPreviewWindowController.show(
             recording: recording,
             strings: strings,
-            copy: { [weak self] in
-                self?.copyRecordingToClipboard(recording) ?? false
+            copy: { [weak self] recording, editingState in
+                self?.copyRecordingToClipboard(recording, editingState: editingState) ?? false
             },
-            download: { [weak self] in
-                self?.downloadRecording(recording) ?? false
+            download: { [weak self] recording, editingState in
+                self?.downloadRecording(recording, editingState: editingState) ?? false
             },
             saveCurrent: { [weak self] recording, editingState, choice in
                 self?.saveEditedRecording(recording, editingState: editingState, choice: choice) ?? false
@@ -727,11 +760,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editingState: VideoEditingState,
         choice: VideoPreviewSaveChoice
     ) -> Bool {
-        showQuickAccessFailedAlert(
-            title: strings.saveFailedTitle,
-            error: VideoEditingExportError.exportFailed("录屏编辑导出尚未连接。")
-        )
-        return false
+        Task { @MainActor in
+            _ = await self.exportEditedRecording(recording, editingState: editingState, choice: choice)
+        }
+        return true
+    }
+
+    private func exportEditedRecording(
+        _ recording: CapturedRecording,
+        editingState: VideoEditingState,
+        choice: VideoPreviewSaveChoice
+    ) async -> Bool {
+        do {
+            let exportedURL = try await videoEditingExporter.export(
+                sourceURL: recording.fileURL,
+                format: recording.format,
+                editingState: editingState
+            )
+            let editedRecording = CapturedRecording(
+                id: choice == .replaceCurrent ? recording.id : UUID(),
+                fileURL: exportedURL,
+                format: .mp4,
+                rect: recording.rect,
+                pixelSize: recording.pixelSize,
+                byteSize: byteSize(of: exportedURL),
+                duration: editingState.outputDuration
+            )
+
+            switch choice {
+            case .replaceCurrent:
+                _ = quickAccessPanelController.updatePreview(for: editedRecording)
+            case .saveAsNew:
+                let stableRecording = storeInCaptureHistory(editedRecording)
+                showVideoQuickAccess(for: stableRecording, anchor: nil)
+            }
+
+            return true
+        } catch {
+            showQuickAccessFailedAlert(title: strings.saveFailedTitle, error: error)
+            return false
+        }
     }
 
     private func showCaptureHistory() {
@@ -1044,11 +1112,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func copyRecordingToClipboard(_ recording: CapturedRecording) -> Bool {
+    private func copyRecordingToClipboard(
+        _ recording: CapturedRecording,
+        editingState: VideoEditingState? = nil
+    ) -> Bool {
+        guard let editingState else {
+            return copyRecordingFileToClipboard(recording.fileURL)
+        }
+
+        Task { @MainActor in
+            _ = await self.copyEditedRecordingToClipboard(recording, editingState: editingState)
+        }
+        return true
+    }
+
+    private func copyRecordingFileToClipboard(_ fileURL: URL) -> Bool {
         do {
-            try clipboardWriter.write(fileURL: recording.fileURL)
+            try clipboardWriter.write(fileURL: fileURL)
             NSLog("Frame 已复制录屏文件到剪贴板")
             return true
+        } catch {
+            showQuickAccessFailedAlert(title: strings.copyFailedTitle, error: error)
+            return false
+        }
+    }
+
+    private func copyEditedRecordingToClipboard(
+        _ recording: CapturedRecording,
+        editingState: VideoEditingState
+    ) async -> Bool {
+        do {
+            let exportedURL = try await videoEditingExporter.export(
+                sourceURL: recording.fileURL,
+                format: recording.format,
+                editingState: editingState
+            )
+            return copyRecordingFileToClipboard(exportedURL)
         } catch {
             showQuickAccessFailedAlert(title: strings.copyFailedTitle, error: error)
             return false
@@ -1066,11 +1165,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func downloadRecording(_ recording: CapturedRecording) -> Bool {
+    private func downloadRecording(
+        _ recording: CapturedRecording,
+        editingState: VideoEditingState? = nil
+    ) -> Bool {
+        guard let editingState else {
+            return downloadRecordingFile(recording.fileURL, format: recording.format)
+        }
+
+        Task { @MainActor in
+            _ = await self.downloadEditedRecording(recording, editingState: editingState)
+        }
+        return true
+    }
+
+    private func downloadRecordingFile(_ fileURL: URL, format: RecordingFormat) -> Bool {
         do {
             let saveURL = try recordingFileWriter.copyRecording(
-                from: recording.fileURL,
-                format: recording.format
+                from: fileURL,
+                format: format
             )
             NSLog("Frame 已保存录屏：\(saveURL.path)")
             return true
@@ -1078,6 +1191,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showQuickAccessFailedAlert(title: strings.saveFailedTitle, error: error)
             return false
         }
+    }
+
+    private func downloadEditedRecording(
+        _ recording: CapturedRecording,
+        editingState: VideoEditingState
+    ) async -> Bool {
+        do {
+            let exportedURL = try await videoEditingExporter.export(
+                sourceURL: recording.fileURL,
+                format: recording.format,
+                editingState: editingState
+            )
+            return downloadRecordingFile(exportedURL, format: .mp4)
+        } catch {
+            showQuickAccessFailedAlert(title: strings.saveFailedTitle, error: error)
+            return false
+        }
+    }
+
+    private func byteSize(of url: URL) -> Int {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        if let size = attributes?[.size] as? NSNumber {
+            return size.intValue
+        }
+
+        return attributes?[.size] as? Int ?? 0
     }
 
     private func recordingFormat(for record: CaptureHistoryRecord) -> RecordingFormat? {

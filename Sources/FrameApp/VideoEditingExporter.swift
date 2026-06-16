@@ -8,7 +8,12 @@ enum VideoEditingExportError: Equatable, Error {
     case exportFailed(String)
 }
 
-final class VideoEditingExporter {
+@MainActor
+protocol VideoEditingExporting {
+    func export(sourceURL: URL, format: RecordingFormat, editingState: VideoEditingState) async throws -> URL
+}
+
+final class VideoEditingExporter: VideoEditingExporting {
     private let fileManager: FileManager
     private let temporaryDirectory: () -> URL
 

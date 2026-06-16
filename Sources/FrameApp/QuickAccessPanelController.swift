@@ -50,6 +50,7 @@ final class QuickAccessPanelController: NSObject {
                 ocrProgressIndicator: content.ocrProgressIndicator,
                 statusLabel: content.statusLabel,
                 screenshotImageView: content.imageView,
+                recordingContentView: nil,
                 copy: copy,
                 save: save,
                 recognizeText: recognizeText,
@@ -106,6 +107,7 @@ final class QuickAccessPanelController: NSObject {
                 ocrProgressIndicator: nil,
                 statusLabel: nil,
                 screenshotImageView: nil,
+                recordingContentView: content,
                 copy: nil,
                 save: nil,
                 recognizeText: nil,
@@ -144,6 +146,20 @@ final class QuickAccessPanelController: NSObject {
 
         item.screenshotImageView?.setImage(screenshot.image)
         item.hoverPreviewMedia = .image(screenshot.image)
+        item.hoverPreviewWorkItem?.cancel()
+        item.hoverPreviewWorkItem = nil
+        hoverPreviewController.close()
+        return true
+    }
+
+    @discardableResult
+    func updatePreview(for recording: CapturedRecording) -> Bool {
+        guard let item = previewItems.first(where: { $0.recordingID == recording.id }) else {
+            return false
+        }
+
+        item.hoverPreviewMedia = .recording(recording)
+        item.recordingContentView?.updateDuration(recording.duration)
         item.hoverPreviewWorkItem?.cancel()
         item.hoverPreviewWorkItem = nil
         hoverPreviewController.close()
@@ -695,6 +711,21 @@ final class QuickAccessPanelController: NSObject {
             .pngDataForTesting()
     }
 
+    func recordingCountForTesting() -> Int {
+        previewItems.filter { $0.recordingID != nil }.count
+    }
+
+    func recordingForTesting(id: UUID) -> CapturedRecording? {
+        previewItems.compactMap { item -> CapturedRecording? in
+            guard item.recordingID == id,
+                  case let .recording(recording) = item.hoverPreviewMedia else {
+                return nil
+            }
+
+            return recording
+        }.first
+    }
+
     private func scheduleHoverPreview(for window: NSWindow?) {
         guard let item = previewItem(for: window) else {
             return
@@ -991,6 +1022,7 @@ private final class QuickAccessPreviewItem {
     let ocrProgressIndicator: NSProgressIndicator?
     let statusLabel: NSTextField?
     weak var screenshotImageView: AspectFillImageView?
+    weak var recordingContentView: RecordingQuickAccessContentView?
     let copy: (() -> Bool)?
     let save: (() -> Bool)?
     let recognizeText: (() -> Bool)?
@@ -1014,6 +1046,7 @@ private final class QuickAccessPreviewItem {
         ocrProgressIndicator: NSProgressIndicator?,
         statusLabel: NSTextField?,
         screenshotImageView: AspectFillImageView?,
+        recordingContentView: RecordingQuickAccessContentView?,
         copy: (() -> Bool)?,
         save: (() -> Bool)?,
         recognizeText: (() -> Bool)?,
@@ -1033,6 +1066,7 @@ private final class QuickAccessPreviewItem {
         self.ocrProgressIndicator = ocrProgressIndicator
         self.statusLabel = statusLabel
         self.screenshotImageView = screenshotImageView
+        self.recordingContentView = recordingContentView
         self.copy = copy
         self.save = save
         self.recognizeText = recognizeText
@@ -1405,6 +1439,11 @@ private final class RecordingQuickAccessContentView: ScreenshotPreviewView {
         didSet {
             invalidateIntrinsicContentSize()
         }
+    }
+
+    func updateDuration(_ duration: TimeInterval) {
+        let seconds = max(0, Int(duration.rounded(.down)))
+        durationLabel?.stringValue = String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
 
     override var intrinsicContentSize: NSSize {

@@ -20,8 +20,8 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
         controller.show(
             recording: recording,
             strings: AppStrings(language: .en),
-            copy: { true },
-            download: { true },
+            copy: { _, _ in true },
+            download: { _, _ in true },
             saveCurrent: { _, _, _ in true }
         )
 
@@ -47,8 +47,8 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
         controller.show(
             recording: recording,
             strings: AppStrings(language: .en),
-            copy: { true },
-            download: { true },
+            copy: { _, _ in true },
+            download: { _, _ in true },
             saveCurrent: { _, _, _ in true }
         )
 
@@ -73,8 +73,8 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
         controller.show(
             recording: recording,
             strings: AppStrings(language: .en),
-            copy: { true },
-            download: { true },
+            copy: { _, _ in true },
+            download: { _, _ in true },
             saveCurrent: { _, _, _ in true }
         )
 
@@ -91,8 +91,8 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
         controller.show(
             recording: recording,
             strings: AppStrings(language: .en),
-            copy: { true },
-            download: { true },
+            copy: { _, _ in true },
+            download: { _, _ in true },
             saveCurrent: { _, _, _ in true }
         )
 
@@ -110,8 +110,8 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
         controller.show(
             recording: recording,
             strings: AppStrings(language: .en),
-            copy: { true },
-            download: { true },
+            copy: { _, _ in true },
+            download: { _, _ in true },
             saveCurrent: { _, _, _ in true }
         )
 
@@ -128,8 +128,8 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
         controller.show(
             recording: recording,
             strings: AppStrings(language: .en),
-            copy: { true },
-            download: { true },
+            copy: { _, _ in true },
+            download: { _, _ in true },
             saveCurrent: { _, _, _ in true }
         )
 
@@ -148,8 +148,8 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
         controller.show(
             recording: recording,
             strings: AppStrings(language: .en),
-            copy: { true },
-            download: { true },
+            copy: { _, _ in true },
+            download: { _, _ in true },
             saveCurrent: {
                 calls.append(($0, $1, $2))
                 return true
@@ -168,8 +168,8 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
         controller.show(
             recording: recording,
             strings: AppStrings(language: .en),
-            copy: { true },
-            download: { true },
+            copy: { _, _ in true },
+            download: { _, _ in true },
             saveCurrent: { _, _, _ in true }
         )
         try controller.setTrimRangeForTesting(recordingID: recording.id, start: 1, end: 2)
@@ -184,8 +184,8 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
         controller.show(
             recording: recording,
             strings: AppStrings(language: .en),
-            copy: { true },
-            download: { true },
+            copy: { _, _ in true },
+            download: { _, _ in true },
             saveCurrent: { _, _, choice in
                 calls.append(choice)
                 return true
@@ -195,6 +195,32 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
 
         XCTAssertTrue(controller.windowShouldCloseForTesting(recordingID: recording.id))
         XCTAssertEqual(calls, [.replaceCurrent])
+    }
+
+    func testCopyAndDownloadReceiveCurrentEditingState() throws {
+        let recording = makeMP4Recording(duration: 24)
+        let controller = VideoPreviewWindowController()
+        var copyState: VideoEditingState?
+        var downloadState: VideoEditingState?
+        controller.show(
+            recording: recording,
+            strings: AppStrings(language: .en),
+            copy: { _, state in
+                copyState = state
+                return true
+            },
+            download: { _, state in
+                downloadState = state
+                return true
+            },
+            saveCurrent: { _, _, _ in true }
+        )
+        try controller.setTrimRangeForTesting(recordingID: recording.id, start: 1, end: 2)
+
+        XCTAssertTrue(controller.performCopyForTesting(recordingID: recording.id))
+        XCTAssertTrue(controller.performDownloadForTesting(recordingID: recording.id))
+        XCTAssertEqual(copyState?.startTime, 1)
+        XCTAssertEqual(downloadState?.endTime, 2)
     }
 
     private func findSubview<T: NSView>(of type: T.Type, in view: NSView) -> T? {

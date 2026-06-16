@@ -5,6 +5,44 @@ import XCTest
 
 @MainActor
 final class AppDelegateRecordingTests: XCTestCase {
+    func testSavingEditedRecordingAsNewShowsNewQuickAccessRecording() async throws {
+        let exporter = FakeVideoEditingExporter(resultURL: try makeTemporaryMP4File())
+        let delegate = AppDelegate(
+            captureHistoryStore: CaptureHistoryStore(rootDirectory: makeTemporaryDirectory()),
+            videoEditingExporter: exporter
+        )
+        let recording = makeRecording(id: UUID(), fileURL: try makeTemporaryMP4File())
+        delegate.showVideoQuickAccessForTesting(recording)
+        var state = try VideoEditingState(sourceDuration: 10)
+        try state.setTrimRange(start: 1, end: 5)
+
+        let didSave = await delegate.saveEditedRecordingForTesting(recording, editingState: state, choice: .saveAsNew)
+        XCTAssertTrue(didSave)
+
+        XCTAssertEqual(exporter.requests.count, 1)
+        XCTAssertEqual(delegate.quickAccessRecordingCountForTesting(), 2)
+    }
+
+    func testReplacingEditedRecordingUpdatesQuickAccessPreview() async throws {
+        let exporter = FakeVideoEditingExporter(resultURL: try makeTemporaryMP4File())
+        let delegate = AppDelegate(
+            captureHistoryStore: CaptureHistoryStore(rootDirectory: makeTemporaryDirectory()),
+            videoEditingExporter: exporter
+        )
+        let recordingID = UUID()
+        let recording = makeRecording(id: recordingID, fileURL: try makeTemporaryMP4File())
+        delegate.showVideoQuickAccessForTesting(recording)
+        var state = try VideoEditingState(sourceDuration: 10)
+        try state.setTrimRange(start: 1, end: 5)
+
+        let didReplace = await delegate.saveEditedRecordingForTesting(recording, editingState: state, choice: .replaceCurrent)
+        XCTAssertTrue(didReplace)
+
+        XCTAssertEqual(exporter.requests.count, 1)
+        XCTAssertEqual(delegate.quickAccessRecordingCountForTesting(), 1)
+        XCTAssertEqual(delegate.quickAccessRecordingForTesting(id: recordingID)?.duration, 4)
+    }
+
     func testCaptureFlowIgnoresRepeatedShortcutWhileSelectionIsActive() {
         _ = NSApplication.shared
         let selectionOverlay = SpySelectionOverlayController()
@@ -241,6 +279,61 @@ final class AppDelegateRecordingTests: XCTestCase {
 
         XCTFail("Timed out waiting for recording test condition")
     }
+}
+
+private final class FakeVideoEditingExporter: VideoEditingExporting, @unchecked Sendable {
+    struct Request: Equatable {
+        let sourceURL: URL
+        let format: RecordingFormat
+        let editingState: VideoEditingState
+    }
+
+    private let lock = NSLock()
+    let resultURL: URL
+    private var recordedRequests: [Request] = []
+
+    var requests: [Request] {
+        lock.withLock {
+            recordedRequests
+        }
+    }
+
+    init(resultURL: URL) {
+        self.resultURL = resultURL
+    }
+
+    func export(sourceURL: URL, format: RecordingFormat, editingState: VideoEditingState) async throws -> URL {
+        lock.withLock {
+            recordedRequests.append(Request(sourceURL: sourceURL, format: format, editingState: editingState))
+        }
+        return resultURL
+    }
+}
+
+private func makeRecording(id: UUID, fileURL: URL, duration: TimeInterval = 10) -> CapturedRecording {
+    CapturedRecording(
+        id: id,
+        fileURL: fileURL,
+        format: .mp4,
+        rect: CGRect(x: 0, y: 0, width: 320, height: 240),
+        pixelSize: CGSize(width: 320, height: 240),
+        byteSize: 3,
+        duration: duration
+    )
+}
+
+private func makeTemporaryMP4File() throws -> URL {
+    let directory = makeTemporaryDirectory()
+    let url = directory.appendingPathComponent("recording-\(UUID().uuidString).mp4")
+    try Data([1, 2, 3]).write(to: url)
+    return url
+}
+
+private func makeTemporaryDirectory() -> URL {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("FrameAppDelegateRecordingTests-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    return directory
 }
 
 @MainActor

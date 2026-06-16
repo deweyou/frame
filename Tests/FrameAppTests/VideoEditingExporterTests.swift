@@ -3,6 +3,7 @@ import XCTest
 @testable import FrameApp
 @testable import FrameCore
 
+@MainActor
 final class VideoEditingExporterTests: XCTestCase {
     func testExporterRejectsGIFInput() async throws {
         let exporter = VideoEditingExporter()
