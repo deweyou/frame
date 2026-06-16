@@ -5,7 +5,7 @@ import AVKit
 
 @MainActor
 final class VideoPreviewWindowControllerTests: XCTestCase {
-    func testPreviewWindowKeepsEditControlsDisabled() {
+    func testMP4PreviewWindowShowsEditorBarByDefault() throws {
         let recording = CapturedRecording(
             id: UUID(),
             fileURL: URL(fileURLWithPath: "/tmp/test.mp4"),
@@ -21,10 +21,41 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
             recording: recording,
             strings: AppStrings(language: .en),
             copy: { true },
-            download: { true }
+            download: { true },
+            saveCurrent: { _, _ in true }
+        )
+
+        XCTAssertTrue(controller.isEditingEnabledForTesting(recordingID: recording.id))
+        XCTAssertEqual(controller.editingStateForTesting(recordingID: recording.id)?.endTime, 24)
+        let window = try XCTUnwrap(controller.windowForTesting(recordingID: recording.id))
+        let contentView = try XCTUnwrap(window.contentView)
+        XCTAssertNotNil(findSubview(of: VideoEditorBarView.self, in: contentView))
+    }
+
+    func testGIFPreviewWindowDoesNotShowEditorBar() throws {
+        let recording = CapturedRecording(
+            id: UUID(),
+            fileURL: URL(fileURLWithPath: "/tmp/test.gif"),
+            format: .gif,
+            rect: .zero,
+            pixelSize: CGSize(width: 320, height: 240),
+            byteSize: 10,
+            duration: 24
+        )
+        let controller = VideoPreviewWindowController()
+
+        controller.show(
+            recording: recording,
+            strings: AppStrings(language: .en),
+            copy: { true },
+            download: { true },
+            saveCurrent: { _, _ in true }
         )
 
         XCTAssertFalse(controller.isEditingEnabledForTesting(recordingID: recording.id))
+        let window = try XCTUnwrap(controller.windowForTesting(recordingID: recording.id))
+        let contentView = try XCTUnwrap(window.contentView)
+        XCTAssertNil(findSubview(of: VideoEditorBarView.self, in: contentView))
     }
 
     func testGIFPreviewUsesAnimatedImageViewInsteadOfVideoPlayer() throws {
@@ -43,7 +74,8 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
             recording: recording,
             strings: AppStrings(language: .en),
             copy: { true },
-            download: { true }
+            download: { true },
+            saveCurrent: { _, _ in true }
         )
 
         let window = try XCTUnwrap(controller.windowForTesting(recordingID: recording.id))

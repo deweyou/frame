@@ -1,5 +1,6 @@
 import AppKit
 import AVKit
+import FrameCore
 
 @MainActor
 final class VideoPreviewWindowController {
@@ -9,7 +10,9 @@ final class VideoPreviewWindowController {
         recording: CapturedRecording,
         strings: AppStrings,
         copy: @escaping () -> Bool,
-        download: @escaping () -> Bool
+        download: @escaping () -> Bool,
+        saveCurrent: @escaping (CapturedRecording, VideoEditingState) -> Bool,
+        focusEditor: Bool = false
     ) {
         if let item = items[recording.id] {
             item.window.makeKeyAndOrderFront(nil)
@@ -29,6 +32,8 @@ final class VideoPreviewWindowController {
 
         let mediaView = makeMediaView(for: recording)
         mediaView.translatesAutoresizingMaskIntoConstraints = false
+        let editingState = recording.format == .mp4 ? try? VideoEditingState(sourceDuration: recording.duration) : nil
+        let editorBar = editingState.map { VideoEditorBarView(state: $0) }
 
         let toolbar = NSStackView()
         toolbar.orientation = .horizontal
@@ -42,17 +47,40 @@ final class VideoPreviewWindowController {
         let root = NSView()
         root.addSubview(toolbar)
         root.addSubview(mediaView)
-        NSLayoutConstraint.activate([
+        if let editorBar {
+            root.addSubview(editorBar)
+        }
+
+        var constraints = [
             toolbar.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
             toolbar.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
             mediaView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             mediaView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             mediaView.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 8),
-            mediaView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-        ])
+        ]
+        if let editorBar {
+            constraints.append(contentsOf: [
+                editorBar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+                editorBar.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+                editorBar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+                mediaView.bottomAnchor.constraint(equalTo: editorBar.topAnchor),
+            ])
+        } else {
+            constraints.append(mediaView.bottomAnchor.constraint(equalTo: root.bottomAnchor))
+        }
+        NSLayoutConstraint.activate(constraints)
 
         window.contentView = root
-        items[recording.id] = VideoPreviewItem(recording: recording, window: window, isEditingEnabled: false)
+        items[recording.id] = VideoPreviewItem(
+            recording: recording,
+            window: window,
+            editingState: editingState,
+            saveCurrent: saveCurrent,
+            isEditingEnabled: editingState != nil
+        )
+        if focusEditor {
+            editorBar?.window?.makeFirstResponder(editorBar)
+        }
         window.makeKeyAndOrderFront(nil)
     }
 
@@ -62,6 +90,10 @@ final class VideoPreviewWindowController {
 
     func windowForTesting(recordingID: UUID) -> NSWindow? {
         items[recordingID]?.window
+    }
+
+    func editingStateForTesting(recordingID: UUID) -> VideoEditingState? {
+        items[recordingID]?.editingState
     }
 
     private func makeMediaView(for recording: CapturedRecording) -> NSView {
@@ -104,11 +136,21 @@ final class VideoPreviewWindowController {
 private final class VideoPreviewItem {
     let recording: CapturedRecording
     let window: NSWindow
+    var editingState: VideoEditingState?
+    let saveCurrent: (CapturedRecording, VideoEditingState) -> Bool
     let isEditingEnabled: Bool
 
-    init(recording: CapturedRecording, window: NSWindow, isEditingEnabled: Bool) {
+    init(
+        recording: CapturedRecording,
+        window: NSWindow,
+        editingState: VideoEditingState?,
+        saveCurrent: @escaping (CapturedRecording, VideoEditingState) -> Bool,
+        isEditingEnabled: Bool
+    ) {
         self.recording = recording
         self.window = window
+        self.editingState = editingState
+        self.saveCurrent = saveCurrent
         self.isEditingEnabled = isEditingEnabled
     }
 }

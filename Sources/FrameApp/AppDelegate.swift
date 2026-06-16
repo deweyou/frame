@@ -713,6 +713,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             download: { [weak self] in
                 self?.downloadRecording(recording) ?? false
+            },
+            saveCurrent: { _, _ in
+                false
             }
         )
         return true
