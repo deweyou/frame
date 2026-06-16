@@ -124,31 +124,13 @@ final class CaptureService {
     }
 
     private func screenshot(from cgImage: CGImage, rect: CGRect, scale: CGFloat) throws -> CapturedScreenshot {
-        let style = windowScreenshotDecorationStyle()
-        return try windowScreenshotDecorator.decoratedScreenshot(
+        try makeWindowScreenshot(
             from: cgImage,
-            sourceRect: rect,
+            rect: rect,
             scale: scale,
-            style: style
+            style: windowScreenshotDecorationStyle(),
+            decorator: windowScreenshotDecorator
         )
-    }
-
-    private func rawScreenshot(from cgImage: CGImage, rect: CGRect, scale: CGFloat) throws -> CapturedScreenshot {
-        let bitmapRepresentation = NSBitmapImageRep(cgImage: cgImage)
-        guard let pngData = bitmapRepresentation.representation(
-            using: .png,
-            properties: [:]
-        ) else {
-            throw CaptureServiceError.pngEncodingFailed
-        }
-
-        let imageScale = max(scale, 1)
-        let imageSize = CGSize(
-            width: CGFloat(cgImage.width) / imageScale,
-            height: CGFloat(cgImage.height) / imageScale
-        )
-        let image = NSImage(cgImage: cgImage, size: imageSize)
-        return CapturedScreenshot(pngData: pngData, image: image, rect: rect)
     }
 
     private func quartzCaptureRect(for cocoaRect: CGRect) -> CGRect {
@@ -189,6 +171,63 @@ func makeSingleWindowCaptureConfiguration(rect: CGRect, scale: CGFloat) -> SCStr
     configuration.showsCursor = false
     configuration.ignoreShadowsSingleWindow = true
     return configuration
+}
+
+func makeWindowScreenshotForTesting(
+    from cgImage: CGImage,
+    rect: CGRect,
+    scale: CGFloat,
+    style: WindowScreenshotDecorationStyle
+) throws -> CapturedScreenshot {
+    try makeWindowScreenshot(
+        from: cgImage,
+        rect: rect,
+        scale: scale,
+        style: style,
+        decorator: WindowScreenshotDecorator()
+    )
+}
+
+private func makeWindowScreenshot(
+    from cgImage: CGImage,
+    rect: CGRect,
+    scale: CGFloat,
+    style: WindowScreenshotDecorationStyle,
+    decorator: WindowScreenshotDecorator
+) throws -> CapturedScreenshot {
+    switch style {
+    case .original:
+        return try makeRawWindowScreenshot(from: cgImage, rect: rect, scale: scale)
+    case .softBackdrop, .canvasGlow, .transparentShadow:
+        return try decorator.decoratedScreenshot(
+            from: cgImage,
+            sourceRect: rect,
+            scale: scale,
+            style: style
+        )
+    }
+}
+
+private func makeRawWindowScreenshot(from cgImage: CGImage, rect: CGRect, scale: CGFloat) throws -> CapturedScreenshot {
+    let bitmapRepresentation = NSBitmapImageRep(cgImage: cgImage)
+    guard let pngData = bitmapRepresentation.representation(
+        using: .png,
+        properties: [:]
+    ) else {
+        throw CaptureServiceError.pngEncodingFailed
+    }
+
+    let imageScale = max(scale, 1)
+    let imageSize = CGSize(
+        width: CGFloat(cgImage.width) / imageScale,
+        height: CGFloat(cgImage.height) / imageScale
+    )
+    let image = NSImage(cgImage: cgImage, size: imageSize)
+    return CapturedScreenshot(
+        pngData: pngData,
+        image: image,
+        rect: CGRect(origin: rect.origin, size: imageSize)
+    )
 }
 
 func croppedToVisibleContent(_ image: CGImage) -> CGImage? {

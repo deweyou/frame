@@ -282,6 +282,11 @@ struct AppStrings {
             case .zhHans: "透明投影"
             case .en: "Transparent Shadow"
             }
+        case .original:
+            switch language {
+            case .zhHans: "原图"
+            case .en: "Original"
+            }
         }
     }
 

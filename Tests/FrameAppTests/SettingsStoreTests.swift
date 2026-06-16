@@ -80,6 +80,12 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(SettingsStore.windowScreenshotDecorationStyle(defaults: defaults), .canvasGlow)
     }
 
+    func testWindowScreenshotDecorationStylePersistsOriginalChoice() {
+        SettingsStore.setWindowScreenshotDecorationStyle(.original, defaults: defaults)
+
+        XCTAssertEqual(SettingsStore.windowScreenshotDecorationStyle(defaults: defaults), .original)
+    }
+
     func testWindowScreenshotDecorationStyleFallsBackWhenPersistedValueIsInvalid() {
         defaults.set("bad-style", forKey: SettingsStore.windowScreenshotDecorationStyleKey)
 

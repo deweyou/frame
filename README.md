@@ -23,7 +23,7 @@ Screenshots are often a tiny step inside a larger workflow: explaining an idea, 
 ## What Frame Does
 
 - Region capture: drag to select part of the screen, then press Enter to capture.
-- Window capture: double-click an eligible app window to capture a decorated window screenshot, with a configurable style in Settings.
+- Window capture: double-click an eligible app window to capture either a styled window screenshot or the original window image, configurable in Settings.
 - PNG output: saved files use the `Frame yyyy-MM-dd HH.mm.ss.png` filename format.
 - Clipboard copy: copy the captured image for pasting into chat, docs, or other apps.
 - Save location: save PNG files to the configured screenshot folder, defaulting to Desktop.
@@ -48,7 +48,7 @@ Screenshots are often a tiny step inside a larger workflow: explaining an idea, 
   recording thumbnails when a first frame can be decoded. History is enabled by
   default, keeps captures for 7 days, and uses a 2 GB local cache limit.
 - Multi-display selection: show capture overlays across connected displays and account for Retina scale and screen coordinates.
-- Window screenshot styles: choose Soft Backdrop, Canvas Glow, or Transparent Shadow for window captures.
+- Window screenshot styles: choose Soft Backdrop, Canvas Glow, Transparent Shadow, or Original for window captures.
 - Permission guidance: explain missing Screen Recording permission and open the relevant system settings.
 
 ## Privacy And Permissions
