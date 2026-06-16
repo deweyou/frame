@@ -36,8 +36,8 @@ Frame is a native macOS menu bar app. AppKit owns the runtime because the produc
 
 ## Runtime Flow
 
-See `DESIGN.md` for interface principles, including the native glass HUD,
-background-aware contrast, and direct-manipulation capture behavior.
+See `DESIGN.md` for interface principles, including the native dark glass HUD,
+white icon contrast, and direct-manipulation capture behavior.
 
 1. `FrameApplication` starts `NSApplication` with accessory activation policy.
 2. `AppDelegate` creates the menu bar item, hotkey controller, overlay controller, capture and recording services, active-screen resolver, preview controllers, and output writers. It rejects new capture shortcut entries while selection, recording countdown, active recording, paused recording, or recording finalization is already in progress.
@@ -56,7 +56,7 @@ background-aware contrast, and direct-manipulation capture behavior.
 15. `QuickAccessPanelController` presents fixed-position screenshot and recording previews at the active screen's bottom-left corner, stacks mixed media cards upward with one shared card size, exposes localized icon-only hover actions, acts as the drag source for screenshot image content, and routes recording cards to download, copy, preview, disabled edit, and close actions. Recording start temporarily hides existing managed Quick Access cards and restores them before showing the completed recording card. A two-second hover opens a transient rounded right-side preview without an arrow; image and recording previews use aspect-fit scaling at the original media ratio, and recording previews play muted in that panel.
 16. Recording thumbnails use the first decodable MP4 or GIF frame when available, otherwise Quick Access and Capture History show a lightweight video placeholder.
 17. `VideoPreviewWindowController` opens a playable AVKit preview for local recording files. Editing controls remain disabled until editing ships.
-18. `ImageWorkspacePanelController` presents movable and resizable preview/edit workspace windows for preview sessions, plus separate image-only pinned windows. Preview/edit windows use native macOS close controls plus a top toolbar that leaves captured pixels unobstructed. Copy and download close both the preview/edit workspace and the originating Quick Access preview on success; edited-image save remains disabled until editing ships. Pinned windows expose copy, download, and edit through a context menu while keeping the pinned image open.
+18. `ImageWorkspacePanelController` presents movable and resizable preview/edit workspace windows for preview sessions, plus separate image-only pinned windows. Preview/edit windows use native macOS close controls plus a top toolbar that leaves captured pixels unobstructed. The workspace hosts an `ImageAnnotationCanvasView` for object-based screenshot annotations, opens with pointer/select active, lays rectangle/oval/line/arrow shape tools out as direct toolbar buttons, and only keeps mosaic as a split tool whose main icon activates the current mosaic mode while the adjacent chevron opens Region/Brush mosaic options. Shift-constrained drawing turns rectangles/ovals into squares/circles and snaps lines/arrows to horizontal, vertical, or 45-degree angles. Color is a shared toolbar dropdown that shows the current color as its icon; the adjacent style dropdown is contextual, showing stroke Thickness for shape/brush/highlight and Font Size for text, with no text-specific tool dropdown. Toolbar menus mark the active option and remember the last selected color, thickness, font size, shape kind, and mosaic mode without changing the default pointer tool; Thickness offers 1, 2, 4, 8, 12, 16, and 24 px. Changing Font Size while a text annotation is selected updates that annotation immediately. Copy and download render the current edited screenshot and close both the preview/edit workspace and the originating Quick Access preview on success. Save Current opens Replace Current and Save As New actions; Replace Current updates the workspace's current edited screenshot and any still-active Quick Access preview in memory without overwriting external user files, while Save As New creates another Quick Access preview and keeps the workspace open. Closing a workspace with unsaved edits prompts for Replace Current, Save As New, Don't Save, or Cancel; Don't Save closes without calling save handlers, and Cancel keeps editing. Pinned windows expose copy, download, and edit through a context menu while keeping the pinned image open.
 19. `ClipboardWriter` writes captured images or recording file URLs to `NSPasteboard`.
 20. `ScreenshotFileWriter` and `RecordingFileWriter` save output files to the configured screenshot directory, defaulting to Desktop when no custom directory is stored.
 21. `CaptureHistoryStore` writes recent captures to `Application Support/Frame/History`, stores metadata in a JSON index, enforces retention and size limits, and keeps these cached files separate from user-saved files.
@@ -75,7 +75,7 @@ background-aware contrast, and direct-manipulation capture behavior.
 - deterministic selection sizing, ratio fitting, and center-preserving rectangle adjustment
 - selection capture metadata for region selections and window selections with window IDs
 - window screenshot decoration style
-- workspace close policy and selected editing tool state
+- workspace close policy, selected editing tool state, and deterministic screenshot annotation document state
 
 AppKit-specific code stays in `FrameApp`. Keep permission, capture, recording, pasteboard, panels, settings, localization, window metadata, and window behavior behind narrow adapters so future ScreenCaptureKit migration or UI changes are local.
 

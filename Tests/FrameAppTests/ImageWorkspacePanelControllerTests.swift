@@ -6,6 +6,1444 @@ import XCTest
 @MainActor
 final class ImageWorkspacePanelControllerTests: XCTestCase {
     private var retainedControllers: [ImageWorkspacePanelController] = []
+    private var temporaryDefaultsSuiteNames: [String] = []
+
+    override func tearDown() async throws {
+        for suiteName in temporaryDefaultsSuiteNames {
+            UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+        }
+        temporaryDefaultsSuiteNames.removeAll()
+        retainedControllers.removeAll()
+    }
+
+    func testImageAnnotationRendererPreservesScreenshotIDAndChangesPixels() throws {
+        let screenshotID = UUID()
+        var document = ImageAnnotationDocument()
+        document.add(ImageAnnotationElement(
+            kind: .shape(.rectangle),
+            bounds: CGRect(x: 12, y: 12, width: 28, height: 24),
+            style: ImageAnnotationStyle(
+                strokeColor: .red,
+                fillColor: .red.withAlpha(1),
+                lineWidth: 4,
+                fontSize: 16,
+                fontWeight: .regular,
+                mosaicBlockSize: 10,
+                mosaicStrength: 0.8
+            )
+        ))
+
+        let screenshot = try makeSolidScreenshot(id: screenshotID, color: .white)
+        let rendered = try ImageAnnotationRenderer().render(
+            screenshot: screenshot,
+            document: document,
+            preservingID: true
+        )
+
+        XCTAssertEqual(rendered.id, screenshotID)
+        XCTAssertNotEqual(rendered.pngData, screenshot.pngData)
+        XCTAssertNotEqual(try pixelColor(in: rendered.pngData, x: 18, y: 18), try pixelColor(in: screenshot.pngData, x: 18, y: 18))
+    }
+
+    func testImageAnnotationRendererAppliesMosaicBlocks() throws {
+        var document = ImageAnnotationDocument()
+        document.add(ImageAnnotationElement(
+            kind: .mosaic(.rectangle),
+            bounds: CGRect(x: 0, y: 0, width: 32, height: 32),
+            style: ImageAnnotationStyle(
+                strokeColor: .blue,
+                lineWidth: 4,
+                fontSize: 16,
+                fontWeight: .regular,
+                mosaicBlockSize: 16,
+                mosaicStrength: 1
+            )
+        ))
+
+        let screenshot = try makeGradientScreenshot()
+        let rendered = try ImageAnnotationRenderer().render(
+            screenshot: screenshot,
+            document: document,
+            preservingID: true
+        )
+
+        XCTAssertEqual(try pixelColor(in: rendered.pngData, x: 2, y: 2), try pixelColor(in: rendered.pngData, x: 14, y: 14))
+        XCTAssertNotEqual(try pixelColor(in: screenshot.pngData, x: 2, y: 2), try pixelColor(in: screenshot.pngData, x: 14, y: 14))
+
+        var largeBlockDocument = ImageAnnotationDocument()
+        largeBlockDocument.add(ImageAnnotationElement(
+            kind: .mosaic(.rectangle),
+            bounds: CGRect(x: 0, y: 0, width: 32, height: 32),
+            style: ImageAnnotationStyle(
+                strokeColor: .blue,
+                lineWidth: 4,
+                fontSize: 16,
+                fontWeight: .regular,
+                mosaicBlockSize: 32,
+                mosaicStrength: 1
+            )
+        ))
+        let largeBlockRendered = try ImageAnnotationRenderer().render(
+            screenshot: screenshot,
+            document: largeBlockDocument,
+            preservingID: true
+        )
+        XCTAssertNotEqual(try pixelColor(in: rendered.pngData, x: 2, y: 2), try pixelColor(in: largeBlockRendered.pngData, x: 2, y: 2))
+    }
+
+    func testImageAnnotationRendererAveragesPixelsBeforeNearestUpscale() throws {
+        var document = ImageAnnotationDocument()
+        document.add(ImageAnnotationElement(
+            kind: .mosaic(.rectangle),
+            bounds: CGRect(x: 0, y: 0, width: 32, height: 32),
+            style: ImageAnnotationStyle(
+                strokeColor: .blue,
+                lineWidth: 4,
+                fontSize: 16,
+                fontWeight: .regular,
+                mosaicBlockSize: 16,
+                mosaicStrength: 1
+            )
+        ))
+
+        let screenshot = try makeCheckerboardScreenshot(size: CGSize(width: 32, height: 32))
+        let rendered = try ImageAnnotationRenderer().render(
+            screenshot: screenshot,
+            document: document,
+            preservingID: true
+        )
+        let color = try pixelColor(in: rendered.pngData, x: 4, y: 4)
+
+        XCTAssertTrue((80...175).contains(Int(color[0])))
+        XCTAssertTrue((80...175).contains(Int(color[1])))
+        XCTAssertTrue((80...175).contains(Int(color[2])))
+    }
+
+    func testImageAnnotationRendererBrushMosaicUsesContinuousStrokeMask() throws {
+        var document = ImageAnnotationDocument()
+        document.add(ImageAnnotationElement(
+            kind: .mosaic(.brush),
+            bounds: CGRect(x: 0, y: 4, width: 32, height: 24),
+            points: [CGPoint(x: 4, y: 16), CGPoint(x: 28, y: 16)],
+            style: ImageAnnotationStyle(
+                strokeColor: .blue,
+                lineWidth: 4,
+                fontSize: 16,
+                fontWeight: .regular,
+                mosaicBlockSize: 8,
+                mosaicStrength: 1
+            )
+        ))
+
+        let screenshot = try makeCheckerboardScreenshot(size: CGSize(width: 32, height: 32))
+        let rendered = try ImageAnnotationRenderer().render(
+            screenshot: screenshot,
+            document: document,
+            preservingID: true
+        )
+
+        XCTAssertNotEqual(try pixelColor(in: rendered.pngData, x: 16, y: 16), try pixelColor(in: screenshot.pngData, x: 16, y: 16))
+        XCTAssertEqual(try pixelColor(in: rendered.pngData, x: 16, y: 31), try pixelColor(in: screenshot.pngData, x: 16, y: 31))
+    }
+
+    func testImageAnnotationCanvasPreviewsMosaicAsPixelBlocks() throws {
+        let screenshot = try makeGradientScreenshot(size: CGSize(width: 32, height: 32))
+        var document = ImageAnnotationDocument()
+        document.add(ImageAnnotationElement(
+            kind: .mosaic(.rectangle),
+            bounds: CGRect(x: 0, y: 0, width: 32, height: 32),
+            style: ImageAnnotationStyle(
+                strokeColor: .blue,
+                lineWidth: 4,
+                fontSize: 16,
+                fontWeight: .regular,
+                mosaicBlockSize: 16,
+                mosaicStrength: 1
+            )
+        ))
+
+        let canvas = ImageAnnotationCanvasView(
+            image: screenshot.image,
+            document: document
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 32, height: 32)
+
+        XCTAssertEqual(try pixelColor(in: canvas, x: 4, y: 4), try pixelColor(in: canvas, x: 12, y: 12))
+        XCTAssertNotEqual(try pixelColor(in: screenshot.pngData, x: 4, y: 4), try pixelColor(in: screenshot.pngData, x: 12, y: 12))
+    }
+
+    func testImageAnnotationCanvasDefersRectangleMosaicPixelationUntilMouseUp() throws {
+        let screenshot = try makeGradientScreenshot(size: CGSize(width: 32, height: 32))
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 32, height: 32),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: screenshot.image,
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 32, height: 32)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.mosaic)
+        canvas.setMosaicMode(.rectangle)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 0, y: 0), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 31, y: 31), panel: panel))
+
+        XCTAssertNotEqual(try pixelColor(in: canvas, x: 4, y: 4), try pixelColor(in: canvas, x: 12, y: 12))
+
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 31, y: 31), panel: panel))
+
+        XCTAssertEqual(try pixelColor(in: canvas, x: 4, y: 4), try pixelColor(in: canvas, x: 12, y: 12))
+    }
+
+    func testImageAnnotationCanvasDrawsScaledShapeDraftUnderMouse() throws {
+        let screenshot = try makeSolidScreenshot(color: .white, size: CGSize(width: 32, height: 24))
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 64, height: 48),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: screenshot.image,
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 64, height: 48)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        var style = ImageAnnotationStyle.default
+        style.fillColor = .red.withAlpha(1)
+        canvas.setStyle(style)
+        canvas.selectTool(.shape)
+        canvas.setShapeKind(.rectangle)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 16), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 52, y: 36), panel: panel))
+
+        let pixelUnderDrag = try pixelColor(in: canvas, x: 36, y: 26)
+        XCTAssertGreaterThan(pixelUnderDrag[0], 180)
+        XCTAssertLessThan(pixelUnderDrag[1], 180)
+        XCTAssertLessThan(pixelUnderDrag[2], 180)
+    }
+
+    func testImageAnnotationCanvasStoresArrowFromMouseStartToEnd() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.shape)
+        canvas.setShapeKind(.arrow)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 140, y: 120), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 40, y: 60), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 40, y: 60), panel: panel))
+
+        let arrow = try XCTUnwrap(canvas.documentForTesting.elements.first)
+        XCTAssertEqual(arrow.kind, .shape(.arrow))
+        XCTAssertEqual(arrow.bounds, CGRect(x: 40, y: 60, width: 100, height: 60))
+        XCTAssertEqual(arrow.points, [CGPoint(x: 140, y: 120), CGPoint(x: 40, y: 60)])
+    }
+
+    func testImageAnnotationCanvasConstrainsRectangleAndEllipseWithShift() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.shape)
+        canvas.setShapeKind(.rectangle)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel, modifiers: .shift))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 100, y: 70), panel: panel, modifiers: .shift))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 100, y: 70), panel: panel, modifiers: .shift))
+
+        canvas.setShapeKind(.ellipse)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 160, y: 30), panel: panel, modifiers: .shift))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 210, y: 100), panel: panel, modifiers: .shift))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 210, y: 100), panel: panel, modifiers: .shift))
+
+        XCTAssertEqual(canvas.documentForTesting.elements[0].bounds, CGRect(x: 20, y: 20, width: 80, height: 80))
+        XCTAssertEqual(canvas.documentForTesting.elements[1].bounds, CGRect(x: 160, y: 30, width: 70, height: 70))
+    }
+
+    func testImageAnnotationCanvasConstrainsLineAndArrowAnglesWithShift() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.shape)
+        canvas.setShapeKind(.line)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel, modifiers: .shift))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 100, y: 36), panel: panel, modifiers: .shift))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 100, y: 36), panel: panel, modifiers: .shift))
+
+        canvas.setShapeKind(.arrow)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 140, y: 40), panel: panel, modifiers: .shift))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 200, y: 110), panel: panel, modifiers: .shift))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 200, y: 110), panel: panel, modifiers: .shift))
+
+        XCTAssertEqual(canvas.documentForTesting.elements[0].points, [CGPoint(x: 20, y: 20), CGPoint(x: 100, y: 20)])
+        XCTAssertEqual(canvas.documentForTesting.elements[0].bounds, CGRect(x: 20, y: 20, width: 80, height: 2))
+        XCTAssertEqual(canvas.documentForTesting.elements[1].points, [CGPoint(x: 140, y: 40), CGPoint(x: 210, y: 110)])
+        XCTAssertEqual(canvas.documentForTesting.elements[1].bounds, CGRect(x: 140, y: 40, width: 70, height: 70))
+    }
+
+    func testImageAnnotationRendererUsesStoredArrowDirectionAndBoldStyle() throws {
+        var document = ImageAnnotationDocument()
+        document.add(ImageAnnotationElement(
+            kind: .shape(.arrow),
+            bounds: CGRect(x: 8, y: 24, width: 48, height: 1),
+            points: [CGPoint(x: 56, y: 24), CGPoint(x: 8, y: 24)],
+            style: ImageAnnotationStyle(
+                strokeColor: .red,
+                lineWidth: 1,
+                fontSize: 16,
+                fontWeight: .regular,
+                mosaicBlockSize: 20,
+                mosaicStrength: 0.8
+            )
+        ))
+
+        let screenshot = try makeSolidScreenshot(color: .white, size: CGSize(width: 64, height: 48))
+        let rendered = try ImageAnnotationRenderer().render(
+            screenshot: screenshot,
+            document: document,
+            preservingID: true
+        )
+        let redPixelsAcrossBody = try (16...32).filter { y in
+            try isRedAnnotationPixel(pixelColor(in: rendered.pngData, x: 32, y: y))
+        }.count
+        let arrowHeadPixel = try pixelColor(in: rendered.pngData, x: 12, y: 24)
+
+        XCTAssertGreaterThanOrEqual(redPixelsAcrossBody, 4)
+        XCTAssertTrue(isRedAnnotationPixel(arrowHeadPixel))
+    }
+
+    func testImageAnnotationRendererDrawsStraightEdgedWedgeArrowWithoutLengthInflatedWidth() throws {
+        var document = ImageAnnotationDocument()
+        document.add(ImageAnnotationElement(
+            kind: .shape(.arrow),
+            bounds: CGRect(x: 16, y: 70, width: 200, height: 1),
+            points: [CGPoint(x: 16, y: 70), CGPoint(x: 216, y: 70)],
+            style: ImageAnnotationStyle(
+                strokeColor: .red,
+                lineWidth: 6,
+                fontSize: 16,
+                fontWeight: .regular,
+                mosaicBlockSize: 20,
+                mosaicStrength: 0.8
+            )
+        ))
+
+        let screenshot = try makeSolidScreenshot(color: .white, size: CGSize(width: 240, height: 140))
+        let rendered = try ImageAnnotationRenderer().render(
+            screenshot: screenshot,
+            document: document,
+            preservingID: true
+        )
+        let tailWidth = try redPixelCount(in: rendered.pngData, x: 32, yRange: 32...108)
+        let midBodyWidth = try redPixelCount(in: rendered.pngData, x: 96, yRange: 32...108)
+        let headwardBodyWidth = try redPixelCount(in: rendered.pngData, x: 164, yRange: 32...108)
+        let headBaseWidth = try redPixelCount(in: rendered.pngData, x: 186, yRange: 32...108)
+
+        XCTAssertGreaterThanOrEqual(tailWidth, 2)
+        XCTAssertGreaterThan(midBodyWidth, tailWidth + 3)
+        XCTAssertGreaterThan(headwardBodyWidth, midBodyWidth + 3)
+        XCTAssertLessThanOrEqual(headwardBodyWidth, 24)
+        XCTAssertGreaterThan(headBaseWidth, headwardBodyWidth + 14)
+        XCTAssertLessThanOrEqual(headBaseWidth, 46)
+    }
+
+    func testImageAnnotationCanvasMovesSelectedShapeWhileShapeToolRemainsActive() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.shape)
+        canvas.setShapeKind(.rectangle)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 100, y: 80), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 100, y: 80), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.selectedTool, .shape)
+
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 40, y: 40), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 60, y: 55), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 60, y: 55), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 1)
+        XCTAssertEqual(canvas.documentForTesting.elements[0].bounds, CGRect(x: 40, y: 35, width: 80, height: 60))
+    }
+
+    func testImageAnnotationCanvasResizesSelectedMosaicWhileMosaicToolRemainsActive() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.mosaic)
+        canvas.setMosaicMode(.rectangle)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 100, y: 80), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 100, y: 80), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.selectedTool, .mosaic)
+
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 100, y: 80), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 130, y: 100), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 130, y: 100), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 1)
+        XCTAssertEqual(canvas.documentForTesting.elements[0].bounds, CGRect(x: 20, y: 20, width: 110, height: 80))
+    }
+
+    func testImageAnnotationCanvasDoubleClickSelectsExistingShapeWhileShapeToolRemainsActive() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.shape)
+        canvas.setShapeKind(.rectangle)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 100, y: 80), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 100, y: 80), panel: panel))
+        let firstShapeID = try XCTUnwrap(canvas.documentForTesting.elements.first?.id)
+
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 150, y: 120), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 220, y: 180), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 220, y: 180), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 2)
+
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 40, y: 40), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 40, y: 40), panel: panel))
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 40, y: 40), panel: panel, clickCount: 2))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 40, y: 40), panel: panel, clickCount: 2))
+
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 2)
+        XCTAssertEqual(canvas.documentForTesting.selectedElementID, firstShapeID)
+        XCTAssertEqual(canvas.documentForTesting.selectedTool, .shape)
+    }
+
+    func testImageAnnotationCanvasDoubleClickSelectsExistingMosaicWhileMosaicToolRemainsActive() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.mosaic)
+        canvas.setMosaicMode(.rectangle)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 100, y: 80), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 100, y: 80), panel: panel))
+        let firstMosaicID = try XCTUnwrap(canvas.documentForTesting.elements.first?.id)
+
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 150, y: 120), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 220, y: 180), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 220, y: 180), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 2)
+
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 40, y: 40), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 40, y: 40), panel: panel))
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 40, y: 40), panel: panel, clickCount: 2))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 40, y: 40), panel: panel, clickCount: 2))
+
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 2)
+        XCTAssertEqual(canvas.documentForTesting.selectedElementID, firstMosaicID)
+        XCTAssertEqual(canvas.documentForTesting.selectedTool, .mosaic)
+    }
+
+    func testImageAnnotationCanvasDeletesSelectedElementWithEscape() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.shape)
+        canvas.setShapeKind(.rectangle)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 100, y: 80), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 100, y: 80), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 1)
+
+        canvas.keyDown(with: try makeKeyEvent("\u{1b}", modifiers: [], panel: panel, keyCode: 53))
+
+        XCTAssertTrue(canvas.documentForTesting.elements.isEmpty)
+    }
+
+    func testImageAnnotationCanvasClickingBlankCancelsSelectedShapeWithoutCreatingPoint() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.shape)
+        canvas.setShapeKind(.rectangle)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 100, y: 80), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 100, y: 80), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 1)
+        XCTAssertNotNil(canvas.documentForTesting.selectedElementID)
+
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 240, y: 200), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 240, y: 200), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 1)
+        XCTAssertNil(canvas.documentForTesting.selectedElementID)
+    }
+
+    func testImageAnnotationCanvasClickingBlankCancelsSelectedMosaicWithoutCreatingPoint() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.mosaic)
+        canvas.setMosaicMode(.rectangle)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 100, y: 80), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 100, y: 80), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 1)
+        XCTAssertNotNil(canvas.documentForTesting.selectedElementID)
+
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 240, y: 200), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 240, y: 200), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 1)
+        XCTAssertNil(canvas.documentForTesting.selectedElementID)
+    }
+
+    func testImageAnnotationCanvasSingleClickDoesNotCreateBrushPoint() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.brush)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 120, y: 120), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 120), panel: panel))
+
+        XCTAssertTrue(canvas.documentForTesting.elements.isEmpty)
+    }
+
+    func testImageAnnotationCanvasDoesNotDecodeBitmapWhenSelectingMosaicWithoutMosaicContent() throws {
+        let image = TIFFAccessCountingImage(size: NSSize(width: 64, height: 48))
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSRect(x: 0, y: 0, width: 64, height: 48).fill()
+        image.unlockFocus()
+        image.tiffAccessCount = 0
+
+        let canvas = ImageAnnotationCanvasView(
+            image: image,
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 64, height: 48)
+        canvas.selectTool(.mosaic)
+
+        _ = try pixelColor(in: canvas, x: 4, y: 4)
+
+        XCTAssertEqual(image.tiffAccessCount, 0)
+    }
+
+    func testImageAnnotationCanvasCreatesMovesResizesDeletesAndUndoesShape() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.shape)
+        canvas.setShapeKind(.rectangle)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 100, y: 80), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 100, y: 80), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 1)
+        XCTAssertEqual(canvas.documentForTesting.elements[0].bounds, CGRect(x: 20, y: 20, width: 80, height: 60))
+
+        canvas.selectTool(.select)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 40, y: 40), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 60, y: 55), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 70, y: 65), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 70, y: 65), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.elements[0].bounds, CGRect(x: 50, y: 45, width: 80, height: 60))
+        canvas.undo()
+        XCTAssertEqual(canvas.documentForTesting.elements[0].bounds, CGRect(x: 20, y: 20, width: 80, height: 60))
+        canvas.redo()
+        XCTAssertEqual(canvas.documentForTesting.elements[0].bounds, CGRect(x: 50, y: 45, width: 80, height: 60))
+
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 130, y: 105), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 150, y: 120), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 150, y: 120), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.elements[0].bounds, CGRect(x: 50, y: 45, width: 100, height: 75))
+
+        canvas.keyDown(with: try makeKeyEvent("\u{7f}", modifiers: [], panel: panel, keyCode: 51))
+
+        XCTAssertTrue(canvas.documentForTesting.elements.isEmpty)
+        canvas.undo()
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 1)
+        XCTAssertEqual(canvas.documentForTesting.elements[0].bounds, CGRect(x: 50, y: 45, width: 100, height: 75))
+    }
+
+    func testImageAnnotationCanvasSupportsMosaicBrushAndTextReEditing() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.mosaic)
+        canvas.setMosaicMode(.brush)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 30, y: 30), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 60, y: 60), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 60, y: 60), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.elements.last?.kind, .mosaic(.brush))
+        XCTAssertEqual(canvas.documentForTesting.elements.last?.points.count, 2)
+
+        canvas.selectTool(.text)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 80, y: 90), panel: panel))
+        canvas.commitActiveTextForTesting("Hello")
+
+        let textID = try XCTUnwrap(canvas.documentForTesting.selectedElementID)
+        XCTAssertEqual(canvas.documentForTesting.elements.last?.kind, .text("Hello"))
+
+        canvas.selectTool(.select)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 82, y: 92), panel: panel, clickCount: 2))
+        XCTAssertTrue(canvas.isEditingTextForTesting)
+
+        canvas.commitActiveTextForTesting("Frame")
+        XCTAssertEqual(canvas.documentForTesting.elements.first { $0.id == textID }?.kind, .text("Frame"))
+
+        canvas.selectTool(.text)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 180, y: 120), panel: panel))
+        XCTAssertNil(canvas.documentForTesting.selectedElementID)
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 2)
+
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 180, y: 120), panel: panel))
+        canvas.commitActiveTextForTesting("Second")
+
+        let textValues = canvas.documentForTesting.elements.compactMap { element -> String? in
+            guard case let .text(text) = element.kind else {
+                return nil
+            }
+
+            return text
+        }
+        XCTAssertEqual(textValues, ["Frame", "Second"])
+    }
+
+    func testImageAnnotationTextEditorScalesFontToMatchRenderedPreview() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 160, height: 120),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 160, height: 120)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        var style = ImageAnnotationStyle.default
+        style.fontSize = 22
+        canvas.setStyle(style)
+        canvas.selectTool(.text)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 40, y: 45), panel: panel))
+
+        let editorFontSize = try XCTUnwrap(canvas.activeTextEditorFontSizeForTesting)
+        XCTAssertEqual(editorFontSize, 11, accuracy: 0.1)
+    }
+
+    func testImageAnnotationTextEditingUsesInPlaceTransparentFinalObject() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.text)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 80, y: 90), panel: panel))
+
+        let editor = try XCTUnwrap(canvas.subviews.compactMap { $0 as? NSTextView }.first)
+        XCTAssertFalse(editor.drawsBackground)
+        XCTAssertEqual(editor.textContainerInset, .zero)
+        XCTAssertEqual(editor.textContainer?.lineFragmentPadding, 0)
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 1)
+        let textElementID = try XCTUnwrap(canvas.documentForTesting.selectedElementID)
+        XCTAssertEqual(canvas.documentForTesting.elements.first?.id, textElementID)
+        XCTAssertEqual(canvas.documentForTesting.elements.first?.kind, .text(""))
+
+        canvas.editActiveTextForTesting("Frame")
+
+        let liveTextElement = try XCTUnwrap(canvas.documentForTesting.elements.first)
+        XCTAssertEqual(liveTextElement.id, textElementID)
+        XCTAssertEqual(liveTextElement.kind, .text("Frame"))
+        XCTAssertEqual(liveTextElement.bounds.origin.x, editor.frame.origin.x, accuracy: 0.5)
+        XCTAssertEqual(liveTextElement.bounds.origin.y, editor.frame.origin.y, accuracy: 0.5)
+        XCTAssertEqual(liveTextElement.bounds.width, editor.frame.width, accuracy: 0.5)
+        XCTAssertEqual(liveTextElement.bounds.height, editor.frame.height, accuracy: 0.5)
+
+        let liveBounds = liveTextElement.bounds
+        canvas.commitActiveTextForTesting("Frame")
+
+        let committedTextElement = try XCTUnwrap(canvas.documentForTesting.elements.first)
+        XCTAssertEqual(committedTextElement.id, textElementID)
+        XCTAssertEqual(committedTextElement.kind, .text("Frame"))
+        XCTAssertEqual(committedTextElement.bounds, liveBounds)
+        XCTAssertTrue(canvas.subviews.compactMap { $0 as? NSTextView }.isEmpty)
+    }
+
+    func testImageAnnotationTextToolBlankClickClearsSelectedTextWithoutCreatingAnotherText() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.text)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 80, y: 90), panel: panel))
+        canvas.commitActiveTextForTesting("Frame")
+
+        let textElementID = try XCTUnwrap(canvas.documentForTesting.selectedElementID)
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 1)
+
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 240, y: 190), panel: panel))
+
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 1)
+        XCTAssertEqual(canvas.documentForTesting.elements.first?.id, textElementID)
+        XCTAssertNil(canvas.documentForTesting.selectedElementID)
+        XCTAssertFalse(canvas.isEditingTextForTesting)
+    }
+
+    func testImageAnnotationTextToolDoubleClickEditsExistingText() throws {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let canvas = ImageAnnotationCanvasView(
+            image: NSImage(size: NSSize(width: 320, height: 240)),
+            document: ImageAnnotationDocument()
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = canvas
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        canvas.selectTool(.text)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 80, y: 90), panel: panel))
+        canvas.commitActiveTextForTesting("Frame")
+
+        let textElementID = try XCTUnwrap(canvas.documentForTesting.selectedElementID)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 82, y: 92), panel: panel, clickCount: 2))
+
+        XCTAssertTrue(canvas.isEditingTextForTesting)
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 1)
+        XCTAssertEqual(canvas.documentForTesting.selectedElementID, textElementID)
+
+        canvas.commitActiveTextForTesting("Updated")
+
+        XCTAssertEqual(canvas.documentForTesting.elements.count, 1)
+        XCTAssertEqual(canvas.documentForTesting.elements.first?.id, textElementID)
+        XCTAssertEqual(canvas.documentForTesting.elements.first?.kind, .text("Updated"))
+    }
+
+    func testWorkspaceToolbarEnablesEditingToolsAndDropdownOptions() throws {
+        let panel = try showWorkspace(copy: { _ in true }, save: { _ in true })
+        defer {
+            closePanel(panel)
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+
+        let selectButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Select"))
+        let rectangleButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Rectangle"))
+        let ovalButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Oval"))
+        let lineButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Line"))
+        let arrowButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Arrow"))
+        let mosaicButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Mosaic"))
+        let brushButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Brush"))
+        let textButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Text"))
+        let highlightButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Highlight"))
+        let colorButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Color"))
+        let thicknessButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Thickness"))
+
+        for button in [selectButton, rectangleButton, ovalButton, lineButton, arrowButton, mosaicButton, brushButton, textButton, highlightButton, colorButton] {
+            XCTAssertTrue(button.isEnabled)
+        }
+        XCTAssertFalse(thicknessButton.isEnabled)
+
+        XCTAssertNil(rectangleButton.menu)
+        XCTAssertNil(ovalButton.menu)
+        XCTAssertNil(lineButton.menu)
+        XCTAssertNil(arrowButton.menu)
+        XCTAssertNil(mosaicButton.menu)
+        XCTAssertEqual(selectButton.state, .on)
+        XCTAssertEqual([selectButton, rectangleButton, ovalButton, lineButton, arrowButton, brushButton, textButton, highlightButton, mosaicButton].map {
+            $0.convert($0.bounds, to: contentView).minX
+        }, [selectButton, rectangleButton, ovalButton, lineButton, arrowButton, brushButton, textButton, highlightButton, mosaicButton].map {
+            $0.convert($0.bounds, to: contentView).minX
+        }.sorted())
+
+        let mosaicOptionsButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Mosaic Options"))
+        let colorOptionsButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Color"))
+        let thicknessOptionsButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Thickness"))
+        XCTAssertNil(findButton(in: contentView, accessibilityLabel: "Shape"))
+        XCTAssertNil(findButton(in: contentView, accessibilityLabel: "Shape Options"))
+        XCTAssertNil(findButton(in: contentView, accessibilityLabel: "Text Options"))
+        XCTAssertEqual(mosaicOptionsButton.menu?.items.map(\.title), [
+            "Region", "Brush",
+        ])
+        XCTAssertEqual(mosaicOptionsButton.menu?.item(withTitle: "Region")?.state, .on)
+        XCTAssertEqual(mosaicOptionsButton.menu?.item(withTitle: "Brush")?.state, .off)
+        XCTAssertEqual(colorOptionsButton.menu?.items.map(\.title), [
+            "Red", "Yellow", "Blue", "Green",
+        ])
+        XCTAssertEqual(colorOptionsButton.menu?.item(withTitle: "Red")?.state, .on)
+        XCTAssertEqual(colorOptionsButton.menu?.item(withTitle: "Blue")?.state, .off)
+        XCTAssertEqual(thicknessOptionsButton.menu?.items.map(\.title), [
+            "1 px", "2 px", "4 px", "8 px", "12 px", "16 px", "24 px",
+        ])
+        XCTAssertEqual(thicknessOptionsButton.menu?.item(withTitle: "4 px")?.state, .on)
+        XCTAssertEqual(thicknessOptionsButton.menu?.item(withTitle: "24 px")?.state, .off)
+        XCTAssertTrue(mosaicOptionsButton.menu?.items.filter { !$0.isSeparatorItem }.allSatisfy { $0.image != nil } == true)
+
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(rectangleButton.action), to: rectangleButton.target, from: rectangleButton))
+        XCTAssertTrue(thicknessButton.isEnabled)
+        XCTAssertEqual(thicknessButton.menu?.items.map(\.title), [
+            "1 px", "2 px", "4 px", "8 px", "12 px", "16 px", "24 px",
+        ])
+
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(textButton.action), to: textButton.target, from: textButton))
+        let fontSizeButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Font Size"))
+        XCTAssertTrue(fontSizeButton.isEnabled)
+        XCTAssertEqual(fontSizeButton.menu?.items.map(\.title), [
+            "12 pt", "14 pt", "16 pt", "18 pt", "22 pt", "28 pt", "36 pt", "48 pt",
+        ])
+        XCTAssertEqual(fontSizeButton.menu?.item(withTitle: "16 pt")?.state, .on)
+        XCTAssertEqual(fontSizeButton.menu?.item(withTitle: "28 pt")?.state, .off)
+
+        let canvas = try XCTUnwrap(findAnnotationCanvas(in: contentView))
+        XCTAssertEqual(canvas.documentForTesting.selectedTool, .text)
+        let canvasMenu = try XCTUnwrap(canvas.menu(for: try makeRightClickEvent(windowNumber: panel.windowNumber)))
+        let textSelectionOverlay = try XCTUnwrap(findTextSelectionOverlay(in: contentView))
+        XCTAssertNotNil(canvasMenu.item(withTitle: "Copy"))
+        XCTAssertTrue(textSelectionOverlay.isHidden)
+    }
+
+    func testWorkspaceToolbarUsesProvidedLocalizedStrings() throws {
+        let panel = try showWorkspace(
+            strings: AppStrings(language: .zhHans),
+            copy: { _ in true },
+            save: { _ in true }
+        )
+        defer {
+            closePanel(panel)
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+
+        let rectangleButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "矩形"))
+        let ovalButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "椭圆"))
+        let lineButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "直线"))
+        let arrowButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "箭头"))
+        let mosaicOptionsButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "马赛克选项"))
+        let colorOptionsButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "颜色"))
+        let thicknessOptionsButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "粗细"))
+        let saveCurrentButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "保存当前稿"))
+        let contextMenu = try XCTUnwrap(contentView.menu(for: try makeRightClickEvent(windowNumber: panel.windowNumber)))
+
+        XCTAssertFalse(saveCurrentButton.isEnabled)
+        XCTAssertNotNil(contextMenu.item(withTitle: "保存当前稿"))
+        XCTAssertNil(findButton(in: contentView, accessibilityLabel: "形状"))
+        XCTAssertNil(findButton(in: contentView, accessibilityLabel: "形状选项"))
+        XCTAssertNil(findButton(in: contentView, accessibilityLabel: "文本选项"))
+        XCTAssertTrue([rectangleButton, ovalButton, lineButton, arrowButton].allSatisfy(\.isEnabled))
+        XCTAssertEqual(mosaicOptionsButton.menu?.items.map(\.title), ["区域", "画笔"])
+        XCTAssertEqual(colorOptionsButton.menu?.items.map(\.title), [
+            "红色", "黄色", "蓝色", "绿色",
+        ])
+        XCTAssertEqual(thicknessOptionsButton.menu?.items.map(\.title), [
+            "1 px", "2 px", "4 px", "8 px", "12 px", "16 px", "24 px",
+        ])
+    }
+
+    func testColorToolbarButtonReflectsSelectedColor() throws {
+        let panel = try showWorkspace(copy: { _ in true }, save: { _ in true })
+        defer {
+            closePanel(panel)
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+
+        let colorButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Color"))
+        let originalIcon = try XCTUnwrap(colorButton.image?.pngDataForTesting())
+        let blueMenuItem = try XCTUnwrap(colorButton.menu?.item(withTitle: "Blue"))
+
+        XCTAssertEqual(colorButton.toolTip, "Red")
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(blueMenuItem.action), to: blueMenuItem.target, from: blueMenuItem))
+
+        XCTAssertEqual(colorButton.toolTip, "Blue")
+        XCTAssertNotEqual(colorButton.image?.pngDataForTesting(), originalIcon)
+        XCTAssertEqual(colorButton.menu?.item(withTitle: "Red")?.state, .off)
+        XCTAssertEqual(colorButton.menu?.item(withTitle: "Blue")?.state, .on)
+    }
+
+    func testWorkspaceToolbarPersistsLastAnnotationOptions() throws {
+        let suiteName = "FrameTests.ImageWorkspaceOptions.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let firstPanel = try showWorkspace(
+            editingOptionsDefaults: defaults,
+            copy: { _ in true },
+            save: { _ in true }
+        )
+        let firstContentView = try XCTUnwrap(firstPanel.contentView)
+        firstContentView.layoutSubtreeIfNeeded()
+
+        let arrowButton = try XCTUnwrap(findButton(in: firstContentView, accessibilityLabel: "Arrow"))
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(arrowButton.action), to: arrowButton.target, from: arrowButton))
+
+        let mosaicOptionsButton = try XCTUnwrap(findButton(in: firstContentView, accessibilityLabel: "Mosaic Options"))
+        let brushMosaicItem = try XCTUnwrap(mosaicOptionsButton.menu?.item(withTitle: "Brush"))
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(brushMosaicItem.action), to: brushMosaicItem.target, from: brushMosaicItem))
+
+        let colorButton = try XCTUnwrap(findButton(in: firstContentView, accessibilityLabel: "Color"))
+        let blueItem = try XCTUnwrap(colorButton.menu?.item(withTitle: "Blue"))
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(blueItem.action), to: blueItem.target, from: blueItem))
+
+        let thicknessButton = try XCTUnwrap(findButton(in: firstContentView, accessibilityLabel: "Thickness"))
+        let thickLineItem = try XCTUnwrap(thicknessButton.menu?.item(withTitle: "16 px"))
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(thickLineItem.action), to: thickLineItem.target, from: thickLineItem))
+
+        let textButton = try XCTUnwrap(findButton(in: firstContentView, accessibilityLabel: "Text"))
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(textButton.action), to: textButton.target, from: textButton))
+        let fontSizeButton = try XCTUnwrap(findButton(in: firstContentView, accessibilityLabel: "Font Size"))
+        let largeFontItem = try XCTUnwrap(fontSizeButton.menu?.item(withTitle: "28 pt"))
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(largeFontItem.action), to: largeFontItem.target, from: largeFontItem))
+
+        closePanel(firstPanel)
+
+        let secondPanel = try showWorkspace(
+            editingOptionsDefaults: defaults,
+            copy: { _ in true },
+            save: { _ in true }
+        )
+        defer {
+            closePanel(secondPanel)
+        }
+        let secondContentView = try XCTUnwrap(secondPanel.contentView)
+        secondContentView.layoutSubtreeIfNeeded()
+
+        let canvas = try XCTUnwrap(findAnnotationCanvas(in: secondContentView))
+        XCTAssertEqual(canvas.documentForTesting.selectedTool, .select)
+        XCTAssertEqual(canvas.documentForTesting.editingOptions.shapeKind, .arrow)
+        XCTAssertEqual(canvas.documentForTesting.editingOptions.mosaicMode, .brush)
+        XCTAssertEqual(canvas.documentForTesting.editingOptions.style.strokeColor, .blue)
+        XCTAssertEqual(canvas.documentForTesting.editingOptions.style.lineWidth, 16)
+        XCTAssertEqual(canvas.documentForTesting.editingOptions.style.fontSize, 28)
+
+        let restoredMosaicOptionsButton = try XCTUnwrap(findButton(in: secondContentView, accessibilityLabel: "Mosaic Options"))
+        XCTAssertEqual(restoredMosaicOptionsButton.menu?.item(withTitle: "Region")?.state, .off)
+        XCTAssertEqual(restoredMosaicOptionsButton.menu?.item(withTitle: "Brush")?.state, .on)
+
+        let restoredColorButton = try XCTUnwrap(findButton(in: secondContentView, accessibilityLabel: "Color"))
+        XCTAssertEqual(restoredColorButton.menu?.item(withTitle: "Red")?.state, .off)
+        XCTAssertEqual(restoredColorButton.menu?.item(withTitle: "Blue")?.state, .on)
+
+        let restoredThicknessButton = try XCTUnwrap(findButton(in: secondContentView, accessibilityLabel: "Thickness"))
+        XCTAssertEqual(restoredThicknessButton.menu?.item(withTitle: "4 px")?.state, .off)
+        XCTAssertEqual(restoredThicknessButton.menu?.item(withTitle: "16 px")?.state, .on)
+    }
+
+    func testFlatShapeToolbarButtonsSelectShapeKind() throws {
+        let panel = try showWorkspace(copy: { _ in true }, save: { _ in true })
+        defer {
+            closePanel(panel)
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+
+        let rectangleButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Rectangle"))
+        let arrowButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Arrow"))
+        let canvas = try XCTUnwrap(findAnnotationCanvas(in: contentView))
+
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(rectangleButton.action), to: rectangleButton.target, from: rectangleButton))
+        XCTAssertEqual(canvas.documentForTesting.selectedTool, .shape)
+        XCTAssertEqual(canvas.documentForTesting.editingOptions.shapeKind, .rectangle)
+        XCTAssertEqual(rectangleButton.state, .on)
+
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(arrowButton.action), to: arrowButton.target, from: arrowButton))
+        XCTAssertEqual(canvas.documentForTesting.selectedTool, .shape)
+        XCTAssertEqual(canvas.documentForTesting.editingOptions.shapeKind, .arrow)
+        XCTAssertEqual(rectangleButton.state, .off)
+        XCTAssertEqual(arrowButton.state, .on)
+    }
+
+    func testWorkspaceFontSizeMenuUpdatesSelectedText() throws {
+        let panel = try showWorkspace(copy: { _ in true }, save: { _ in true })
+        defer {
+            closePanel(panel)
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let canvas = try XCTUnwrap(findAnnotationCanvas(in: contentView))
+        let textButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Text"))
+
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(textButton.action), to: textButton.target, from: textButton))
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 80, y: 90), panel: panel))
+        canvas.commitActiveTextForTesting("Frame")
+        let textID = try XCTUnwrap(canvas.documentForTesting.selectedElementID)
+        let originalBounds = try XCTUnwrap(canvas.documentForTesting.elements.first?.bounds)
+
+        let fontSizeButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Font Size"))
+        let fontSizeItem = try XCTUnwrap(fontSizeButton.menu?.item(withTitle: "28 pt"))
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(fontSizeItem.action), to: fontSizeItem.target, from: fontSizeItem))
+
+        let updatedText = try XCTUnwrap(canvas.documentForTesting.elements.first { $0.id == textID })
+        XCTAssertEqual(updatedText.style.fontSize, 28)
+        XCTAssertGreaterThan(updatedText.bounds.height, originalBounds.height)
+    }
+
+    func testWorkspaceUndoRedoButtonsTrackDocumentHistory() throws {
+        let panel = try showWorkspace(copy: { _ in true }, save: { _ in true })
+        defer {
+            closePanel(panel)
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let canvas = try XCTUnwrap(findAnnotationCanvas(in: contentView))
+        let undoButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Undo"))
+        let redoButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Redo"))
+
+        XCTAssertFalse(undoButton.isEnabled)
+        XCTAssertFalse(redoButton.isEnabled)
+
+        canvas.selectTool(.shape)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 120, y: 90), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 90), panel: panel))
+
+        XCTAssertTrue(undoButton.isEnabled)
+        XCTAssertFalse(redoButton.isEnabled)
+
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(undoButton.action), to: undoButton.target, from: undoButton))
+
+        XCTAssertFalse(undoButton.isEnabled)
+        XCTAssertTrue(redoButton.isEnabled)
+
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(redoButton.action), to: redoButton.target, from: redoButton))
+
+        XCTAssertTrue(undoButton.isEnabled)
+        XCTAssertFalse(redoButton.isEnabled)
+    }
+
+    func testWorkspaceOutputUsesRenderedEditsAndSaveCurrentResetsDocument() throws {
+        var copiedScreenshot: CapturedScreenshot?
+        var savedScreenshot: CapturedScreenshot?
+        var replacedScreenshot: CapturedScreenshot?
+        let panel = try showWorkspace(
+            copy: { screenshot in
+                copiedScreenshot = screenshot
+                return true
+            },
+            save: { screenshot in
+                savedScreenshot = screenshot
+                return true
+            },
+            replaceCurrent: { screenshot in
+                replacedScreenshot = screenshot
+            }
+        )
+        defer {
+            closePanel(panel)
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let canvas = try XCTUnwrap(findAnnotationCanvas(in: contentView))
+        let originalPNGData = canvas.currentScreenshotForTesting.pngData
+
+        canvas.selectTool(.shape)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 120, y: 90), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 90), panel: panel))
+
+        let saveCurrentButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Save Current"))
+        let editedContextMenu = try XCTUnwrap(contentView.menu(for: try makeRightClickEvent(windowNumber: panel.windowNumber)))
+        let editedSaveMenuItem = try XCTUnwrap(editedContextMenu.item(withTitle: "Save Current"))
+        XCTAssertTrue(saveCurrentButton.isEnabled)
+        XCTAssertEqual(saveCurrentButton.menu?.items.map(\.title), ["Replace Current", "Save As New"])
+        XCTAssertTrue(editedSaveMenuItem.isEnabled)
+        let replaceCurrentItem = try XCTUnwrap(saveCurrentButton.menu?.item(withTitle: "Replace Current"))
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(replaceCurrentItem.action), to: replaceCurrentItem.target, from: replaceCurrentItem))
+        XCTAssertTrue(panel.isVisible)
+        XCTAssertTrue(canvas.documentForTesting.elements.isEmpty)
+        XCTAssertNotEqual(canvas.currentScreenshotForTesting.pngData, originalPNGData)
+        XCTAssertEqual(replacedScreenshot?.pngData, canvas.currentScreenshotForTesting.pngData)
+        XCTAssertNil(savedScreenshot)
+        let committedContextMenu = try XCTUnwrap(contentView.menu(for: try makeRightClickEvent(windowNumber: panel.windowNumber)))
+        let committedSaveMenuItem = try XCTUnwrap(committedContextMenu.item(withTitle: "Save Current"))
+        XCTAssertFalse(committedSaveMenuItem.isEnabled)
+
+        canvas.selectTool(.shape)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 30, y: 30), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 80, y: 70), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 80, y: 70), panel: panel))
+
+        let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy"))
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(copyButton.action), to: copyButton.target, from: copyButton))
+        XCTAssertNotNil(copiedScreenshot)
+        XCTAssertNotEqual(copiedScreenshot?.pngData, canvas.currentScreenshotForTesting.pngData)
+    }
+
+    func testWorkspaceSaveCurrentMenuCanCreateNewQuickAccessPreviewWithoutClosing() throws {
+        var savedScreenshot: CapturedScreenshot?
+        var newPreviewScreenshot: CapturedScreenshot?
+        let panel = try showWorkspace(
+            copy: { _ in true },
+            save: { screenshot in
+                savedScreenshot = screenshot
+                return true
+            },
+            saveAsNew: { screenshot in
+                newPreviewScreenshot = screenshot
+                return true
+            }
+        )
+        defer {
+            closePanel(panel)
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let canvas = try XCTUnwrap(findAnnotationCanvas(in: contentView))
+        let originalPNGData = canvas.currentScreenshotForTesting.pngData
+
+        canvas.selectTool(.shape)
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 120, y: 90), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 90), panel: panel))
+
+        let saveCurrentButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Save Current"))
+        let saveAsNewItem = try XCTUnwrap(saveCurrentButton.menu?.item(withTitle: "Save As New"))
+
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(saveAsNewItem.action), to: saveAsNewItem.target, from: saveAsNewItem))
+        XCTAssertNil(savedScreenshot)
+        XCTAssertNotNil(newPreviewScreenshot)
+        XCTAssertNotEqual(newPreviewScreenshot?.pngData, originalPNGData)
+        XCTAssertTrue(panel.isVisible)
+        XCTAssertTrue(canvas.documentForTesting.hasUncommittedEdits)
+    }
+
+    func testWorkspaceCloseWithUnsavedEditsCanReplaceCurrentOrSaveAsNew() throws {
+        var replacedScreenshot: CapturedScreenshot?
+        var newPreviewScreenshot: CapturedScreenshot?
+
+        let replacePanel = try showWorkspace(
+            copy: { _ in true },
+            save: { _ in true },
+            replaceCurrent: { screenshot in
+                replacedScreenshot = screenshot
+            },
+            closeSaveChoice: { .replaceCurrent }
+        )
+        let replaceCanvas = try XCTUnwrap(findAnnotationCanvas(in: try XCTUnwrap(replacePanel.contentView)))
+        replaceCanvas.selectTool(.shape)
+        replaceCanvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: replacePanel))
+        replaceCanvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 120, y: 90), panel: replacePanel))
+        replaceCanvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 90), panel: replacePanel))
+
+        replacePanel.close()
+
+        XCTAssertFalse(replacePanel.isVisible)
+        XCTAssertNotNil(replacedScreenshot)
+        XCTAssertNil(newPreviewScreenshot)
+
+        let saveAsNewPanel = try showWorkspace(
+            copy: { _ in true },
+            save: { _ in true },
+            saveAsNew: { screenshot in
+                newPreviewScreenshot = screenshot
+                return true
+            },
+            closeSaveChoice: { .saveAsNew }
+        )
+        let saveAsNewCanvas = try XCTUnwrap(findAnnotationCanvas(in: try XCTUnwrap(saveAsNewPanel.contentView)))
+        saveAsNewCanvas.selectTool(.shape)
+        saveAsNewCanvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: saveAsNewPanel))
+        saveAsNewCanvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 120, y: 90), panel: saveAsNewPanel))
+        saveAsNewCanvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 90), panel: saveAsNewPanel))
+
+        saveAsNewPanel.close()
+
+        XCTAssertFalse(saveAsNewPanel.isVisible)
+        XCTAssertNotNil(newPreviewScreenshot)
+
+        let discardPanel = try showWorkspace(
+            copy: { _ in true },
+            save: { _ in true },
+            replaceCurrent: { screenshot in
+                replacedScreenshot = screenshot
+            },
+            saveAsNew: { screenshot in
+                newPreviewScreenshot = screenshot
+                return true
+            },
+            closeSaveChoice: { .discard }
+        )
+        let discardCanvas = try XCTUnwrap(findAnnotationCanvas(in: try XCTUnwrap(discardPanel.contentView)))
+        discardCanvas.selectTool(.shape)
+        discardCanvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: discardPanel))
+        discardCanvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 120, y: 90), panel: discardPanel))
+        discardCanvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 90), panel: discardPanel))
+
+        let replacedScreenshotBeforeDiscard = replacedScreenshot
+        let newPreviewScreenshotBeforeDiscard = newPreviewScreenshot
+
+        discardPanel.close()
+
+        XCTAssertFalse(discardPanel.isVisible)
+        XCTAssertEqual(replacedScreenshot?.id, replacedScreenshotBeforeDiscard?.id)
+        XCTAssertEqual(newPreviewScreenshot?.id, newPreviewScreenshotBeforeDiscard?.id)
+
+        let cancelPanel = try showWorkspace(
+            copy: { _ in true },
+            save: { _ in true },
+            replaceCurrent: { screenshot in
+                replacedScreenshot = screenshot
+            },
+            saveAsNew: { screenshot in
+                newPreviewScreenshot = screenshot
+                return true
+            },
+            closeSaveChoice: { .cancel }
+        )
+        defer {
+            closePanel(cancelPanel)
+        }
+        let cancelCanvas = try XCTUnwrap(findAnnotationCanvas(in: try XCTUnwrap(cancelPanel.contentView)))
+        cancelCanvas.selectTool(.shape)
+        cancelCanvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: cancelPanel))
+        cancelCanvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 120, y: 90), panel: cancelPanel))
+        cancelCanvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 90), panel: cancelPanel))
+
+        let replacedScreenshotBeforeCancel = replacedScreenshot
+        let newPreviewScreenshotBeforeCancel = newPreviewScreenshot
+
+        cancelPanel.close()
+
+        XCTAssertTrue(cancelPanel.isVisible)
+        XCTAssertEqual(replacedScreenshot?.id, replacedScreenshotBeforeCancel?.id)
+        XCTAssertEqual(newPreviewScreenshot?.id, newPreviewScreenshotBeforeCancel?.id)
+        XCTAssertTrue(cancelCanvas.documentForTesting.hasUncommittedEdits)
+    }
 
     func testTemporaryWorkspaceReusesExistingWindowForSameScreenshot() throws {
         _ = NSApplication.shared
@@ -227,11 +1665,11 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         let imageContainer = try XCTUnwrap(findView(in: contentView, accessibilityLabel: "Image Preview Container"))
         let mosaicButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Mosaic"))
         let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy"))
-        let saveButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Save"))
+        let saveButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Save Current"))
         let downloadButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Download"))
         let menu = try XCTUnwrap(contentView.menu(for: try makeRightClickEvent(windowNumber: panel.windowNumber)))
         let copyMenuItem = try XCTUnwrap(menu.item(withTitle: "Copy"))
-        let saveMenuItem = try XCTUnwrap(menu.item(withTitle: "Save"))
+        let saveMenuItem = try XCTUnwrap(menu.item(withTitle: "Save Current"))
         let downloadMenuItem = try XCTUnwrap(menu.item(withTitle: "Download"))
         let mosaicMenuItem = try XCTUnwrap(menu.item(withTitle: "Mosaic"))
 
@@ -254,11 +1692,11 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         XCTAssertEqual(toolbar.frame.midY, miniaturizeFrame.midY, accuracy: 1.5)
         XCTAssertEqual(toolbar.frame.midY, zoomFrame.midY, accuracy: 1.5)
         assertCircularHoverLayer(in: mosaicButton)
-        XCTAssertFalse(mosaicButton.isEnabled)
+        XCTAssertTrue(mosaicButton.isEnabled)
         XCTAssertFalse(saveButton.isEnabled)
         XCTAssertTrue(copyButton.isEnabled)
         XCTAssertTrue(downloadButton.isEnabled)
-        XCTAssertFalse(mosaicMenuItem.isEnabled)
+        XCTAssertTrue(mosaicMenuItem.isEnabled)
         XCTAssertFalse(saveMenuItem.isEnabled)
         XCTAssertTrue(copyMenuItem.isEnabled)
         XCTAssertTrue(downloadMenuItem.isEnabled)
@@ -370,6 +1808,62 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         XCTAssertEqual(copiedText, "Frame")
     }
 
+    func testOCRTextSelectionOverlayOnlyHitsTextWhenPointerToolIsActive() async throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = ImageWorkspacePanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeScreenshot()
+
+        XCTAssertTrue(controller.show(
+            screenshot: screenshot,
+            kind: .temporaryPreview,
+            copy: { true },
+            save: { true },
+            recognizeText: { _ in
+                RecognizedTextLayout(lines: [
+                    RecognizedTextLine(
+                        text: "Frame",
+                        bounds: NormalizedImageRect(x: 0.1, y: 0.2, width: 0.2, height: 0.1),
+                        confidence: 0.9,
+                        tokens: [
+                            RecognizedTextToken(
+                                text: "Frame",
+                                bounds: NormalizedImageRect(x: 0.1, y: 0.2, width: 0.2, height: 0.1),
+                                needsLeadingSpace: false
+                            ),
+                        ]
+                    ),
+                ])
+            },
+            copyRecognizedText: { _ in true }
+        ))
+
+        let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
+        defer {
+            closePanel(panel)
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let overlay = try XCTUnwrap(findTextSelectionOverlay(in: contentView))
+        let selectButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Select"))
+        let shapeButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Rectangle"))
+
+        for _ in 0..<10 where !overlay.hasRecognizedText {
+            await Task.yield()
+        }
+        XCTAssertTrue(overlay.hasRecognizedText)
+
+        let selectionPoint = NSPoint(x: overlay.bounds.width * 0.2, y: overlay.bounds.height * 0.25)
+        XCTAssertTrue(overlay.hitTest(selectionPoint) === overlay)
+
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(shapeButton.action), to: shapeButton.target, from: shapeButton))
+        XCTAssertNil(overlay.hitTest(selectionPoint))
+
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(selectButton.action), to: selectButton.target, from: selectButton))
+        XCTAssertTrue(overlay.hitTest(selectionPoint) === overlay)
+    }
+
     func testLiveCornerResizeKeepsInitialResizeAxisStableForPreviewAndPin() throws {
         try assertLiveCornerResizeKeepsInitialResizeAxisStable(kind: .temporaryPreview)
         try assertLiveCornerResizeKeepsInitialResizeAxisStable(kind: .pinned)
@@ -424,6 +1918,8 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
             ),
         ]))
         overlay.resetCursorRects()
+        XCTAssertTrue(overlay.hitTest(NSPoint(x: 45, y: 60)) === overlay)
+        XCTAssertNil(overlay.hitTest(NSPoint(x: 280, y: 220)))
 
         overlay.mouseDown(with: try makeMouseButtonEvent(
             type: .leftMouseDown,
@@ -529,17 +2025,114 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         )
     }
 
-    private func showWorkspace(copy: @escaping () -> Bool, save: @escaping () -> Bool) throws -> NSPanel {
+    private func makeSolidScreenshot(id: UUID = UUID(), color: NSColor, size: CGSize = CGSize(width: 64, height: 48)) throws -> CapturedScreenshot {
+        let image = NSImage(size: size)
+        image.lockFocus()
+        color.setFill()
+        NSRect(origin: .zero, size: size).fill()
+        image.unlockFocus()
+        let pngData = try XCTUnwrap(image.pngDataForTesting())
+        return CapturedScreenshot(
+            id: id,
+            pngData: pngData,
+            image: image,
+            rect: CGRect(origin: .zero, size: size)
+        )
+    }
+
+    private func makeGradientScreenshot(size: CGSize = CGSize(width: 64, height: 48)) throws -> CapturedScreenshot {
+        let image = NSImage(size: size)
+        image.lockFocus()
+        for x in 0..<Int(size.width) {
+            for y in 0..<Int(size.height) {
+                NSColor(
+                    calibratedRed: CGFloat(x) / size.width,
+                    green: CGFloat(y) / size.height,
+                    blue: 0.3,
+                    alpha: 1
+                ).setFill()
+                NSRect(x: x, y: y, width: 1, height: 1).fill()
+            }
+        }
+        image.unlockFocus()
+        let pngData = try XCTUnwrap(image.pngDataForTesting())
+        return CapturedScreenshot(
+            pngData: pngData,
+            image: image,
+            rect: CGRect(origin: .zero, size: size)
+        )
+    }
+
+    private func makeCheckerboardScreenshot(size: CGSize) throws -> CapturedScreenshot {
+        let image = NSImage(size: size)
+        image.lockFocus()
+        for x in 0..<Int(size.width) {
+            for y in 0..<Int(size.height) {
+                ((x + y).isMultiple(of: 2) ? NSColor.white : NSColor.black).setFill()
+                NSRect(x: x, y: y, width: 1, height: 1).fill()
+            }
+        }
+        image.unlockFocus()
+        let pngData = try XCTUnwrap(image.pngDataForTesting())
+        return CapturedScreenshot(
+            pngData: pngData,
+            image: image,
+            rect: CGRect(origin: .zero, size: size)
+        )
+    }
+
+    private func showWorkspace(
+        strings: AppStrings = AppStrings(language: .en),
+        editingOptionsDefaults: UserDefaults? = nil,
+        copy: @escaping () -> Bool,
+        save: @escaping () -> Bool
+    ) throws -> NSPanel {
+        try showWorkspace(
+            strings: strings,
+            editingOptionsDefaults: editingOptionsDefaults,
+            copy: { _ in copy() },
+            save: { _ in save() }
+        )
+    }
+
+    private func showWorkspace(
+        strings: AppStrings = AppStrings(language: .en),
+        editingOptionsDefaults: UserDefaults? = nil,
+        copy: @escaping (CapturedScreenshot) -> Bool,
+        save: @escaping (CapturedScreenshot) -> Bool,
+        replaceCurrent: ((CapturedScreenshot) -> Void)? = nil,
+        saveAsNew: ((CapturedScreenshot) -> Bool)? = nil,
+        closeSaveChoice: (() -> ImageWorkspaceCloseSaveChoice)? = nil
+    ) throws -> NSPanel {
         _ = NSApplication.shared
         let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
-        let controller = ImageWorkspacePanelController()
+        let controllerDefaults: UserDefaults
+        if let editingOptionsDefaults {
+            controllerDefaults = editingOptionsDefaults
+        } else {
+            let suiteName = "FrameTests.ImageWorkspaceOptions.\(UUID().uuidString)"
+            temporaryDefaultsSuiteNames.append(suiteName)
+            controllerDefaults = UserDefaults(suiteName: suiteName)!
+        }
+        let controller = ImageWorkspacePanelController(
+            editingOptionsProvider: {
+                SettingsStore.imageAnnotationEditingOptions(defaults: controllerDefaults)
+            },
+            persistEditingOptions: { options in
+                SettingsStore.setImageAnnotationEditingOptions(options, defaults: controllerDefaults)
+            }
+        )
         retainedControllers.append(controller)
 
         XCTAssertTrue(controller.show(
             screenshot: try makeScreenshot(),
             kind: .temporaryPreview,
+            strings: strings,
             copy: copy,
-            save: save
+            save: save,
+            replaceCurrent: replaceCurrent,
+            saveAsNew: saveAsNew,
+            closeSaveChoice: closeSaveChoice
         ))
 
         let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
@@ -556,6 +2149,20 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         for subview in view.subviews {
             if let button = findButton(in: subview, accessibilityLabel: accessibilityLabel) {
                 return button
+            }
+        }
+
+        return nil
+    }
+
+    private func findAnnotationCanvas(in view: NSView) -> ImageAnnotationCanvasView? {
+        if let canvas = view as? ImageAnnotationCanvasView {
+            return canvas
+        }
+
+        for subview in view.subviews {
+            if let canvas = findAnnotationCanvas(in: subview) {
+                return canvas
             }
         }
 
@@ -630,16 +2237,22 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         ))
     }
 
-    private func makeMouseButtonEvent(type: NSEvent.EventType, point: NSPoint, panel: NSPanel) throws -> NSEvent {
+    private func makeMouseButtonEvent(
+        type: NSEvent.EventType,
+        point: NSPoint,
+        panel: NSPanel,
+        clickCount: Int = 1,
+        modifiers: NSEvent.ModifierFlags = []
+    ) throws -> NSEvent {
         try XCTUnwrap(NSEvent.mouseEvent(
             with: type,
             location: point,
-            modifierFlags: [],
+            modifierFlags: modifiers,
             timestamp: 0,
             windowNumber: panel.windowNumber,
             context: nil,
             eventNumber: 0,
-            clickCount: 1,
+            clickCount: clickCount,
             pressure: type == .leftMouseUp ? 0 : 1
         ))
     }
@@ -647,7 +2260,8 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
     private func makeKeyEvent(
         _ character: String,
         modifiers: NSEvent.ModifierFlags,
-        panel: NSPanel
+        panel: NSPanel,
+        keyCode: UInt16 = 0
     ) throws -> NSEvent {
         try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown,
@@ -659,8 +2273,106 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
             characters: character,
             charactersIgnoringModifiers: character,
             isARepeat: false,
-            keyCode: 0
+            keyCode: keyCode
         ))
     }
 
+    private func pixelColor(in pngData: Data, x: Int, y: Int) throws -> [UInt8] {
+        let image = try XCTUnwrap(NSImage(data: pngData))
+        let tiffData = try XCTUnwrap(image.tiffRepresentation)
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(data: tiffData))
+        let imageRow = max(0, min(bitmap.pixelsHigh - 1, y))
+        let xScale = CGFloat(bitmap.pixelsWide) / max(1, image.size.width)
+        let yScale = CGFloat(bitmap.pixelsHigh) / max(1, image.size.height)
+        let row = bitmap.pixelsHigh - 1 - max(0, min(bitmap.pixelsHigh - 1, Int((CGFloat(imageRow) * yScale).rounded())))
+        let column = max(0, min(bitmap.pixelsWide - 1, Int((CGFloat(x) * xScale).rounded())))
+        let color = try XCTUnwrap(bitmap.colorAt(x: column, y: row)?.usingColorSpace(.deviceRGB))
+        return [
+            UInt8((color.redComponent * 255).rounded()),
+            UInt8((color.greenComponent * 255).rounded()),
+            UInt8((color.blueComponent * 255).rounded()),
+            UInt8((color.alphaComponent * 255).rounded()),
+        ]
+    }
+
+    private func pixelColor(in view: NSView, x: Int, y: Int) throws -> [UInt8] {
+        let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let row = max(0, min(bitmap.pixelsHigh - 1, y))
+        let column = max(0, min(bitmap.pixelsWide - 1, x))
+        let color = try XCTUnwrap(bitmap.colorAt(x: column, y: row)?.usingColorSpace(.deviceRGB))
+        return [
+            UInt8((color.redComponent * 255).rounded()),
+            UInt8((color.greenComponent * 255).rounded()),
+            UInt8((color.blueComponent * 255).rounded()),
+            UInt8((color.alphaComponent * 255).rounded()),
+        ]
+    }
+
+    private func isRedAnnotationPixel(_ color: [UInt8]) -> Bool {
+        Int(color[0]) > 140
+            && Int(color[0]) > Int(color[1]) + 20
+            && Int(color[0]) > Int(color[2]) + 20
+    }
+
+    private func redPixelCount(in pngData: Data, x: Int, yRange: ClosedRange<Int>) throws -> Int {
+        try yRange.filter { y in
+            try isRedAnnotationPixel(pixelColor(in: pngData, x: x, y: y))
+        }.count
+    }
+}
+
+private extension NSImage {
+    func pngDataForTesting() -> Data? {
+        guard let tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffRepresentation) else {
+            return nil
+        }
+
+        return bitmap.representation(using: .png, properties: [:])
+    }
+}
+
+private final class TIFFAccessCountingImage: NSImage {
+    private let counter = TIFFAccessCounter()
+
+    var tiffAccessCount: Int {
+        get {
+            counter.count
+        }
+        set {
+            counter.count = newValue
+        }
+    }
+
+    override var tiffRepresentation: Data? {
+        counter.count += 1
+        return super.tiffRepresentation
+    }
+
+    override func draw(
+        in dstRect: NSRect,
+        from srcRect: NSRect,
+        operation op: NSCompositingOperation,
+        fraction delta: CGFloat
+    ) {
+        NSColor.white.setFill()
+        dstRect.fill()
+    }
+
+    override func draw(
+        in dstRect: NSRect,
+        from srcRect: NSRect,
+        operation op: NSCompositingOperation,
+        fraction requestedAlpha: CGFloat,
+        respectFlipped respectContextIsFlipped: Bool,
+        hints: [NSImageRep.HintKey: Any]?
+    ) {
+        NSColor.white.setFill()
+        dstRect.fill()
+    }
+}
+
+private final class TIFFAccessCounter: @unchecked Sendable {
+    var count = 0
 }

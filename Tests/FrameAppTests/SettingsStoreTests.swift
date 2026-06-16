@@ -251,4 +251,37 @@ final class SettingsStoreTests: XCTestCase {
 
         XCTAssertEqual(SettingsStore.recordingOptions(defaults: defaults), RecordingOptions.defaults)
     }
+
+    func testImageAnnotationEditingOptionsDefaultToCoreDefaults() {
+        XCTAssertEqual(
+            SettingsStore.imageAnnotationEditingOptions(defaults: defaults),
+            ImageAnnotationEditingOptions()
+        )
+    }
+
+    func testImageAnnotationEditingOptionsPersistSelectedValues() {
+        var options = ImageAnnotationEditingOptions()
+        options.shapeKind = .arrow
+        options.mosaicMode = .brush
+        options.style.strokeColor = .blue
+        options.style.lineWidth = 24
+        options.style.fontSize = 28
+
+        SettingsStore.setImageAnnotationEditingOptions(options, defaults: defaults)
+
+        XCTAssertEqual(SettingsStore.imageAnnotationEditingOptions(defaults: defaults), options)
+    }
+
+    func testImageAnnotationEditingOptionsFallbackWhenPersistedValuesAreInvalid() {
+        defaults.set("bad-shape", forKey: SettingsStore.imageAnnotationShapeKindKey)
+        defaults.set("bad-mosaic", forKey: SettingsStore.imageAnnotationMosaicModeKey)
+        defaults.set("bad-color", forKey: SettingsStore.imageAnnotationStrokeColorKey)
+        defaults.set(99, forKey: SettingsStore.imageAnnotationLineWidthKey)
+        defaults.set(99, forKey: SettingsStore.imageAnnotationFontSizeKey)
+
+        XCTAssertEqual(
+            SettingsStore.imageAnnotationEditingOptions(defaults: defaults),
+            ImageAnnotationEditingOptions()
+        )
+    }
 }

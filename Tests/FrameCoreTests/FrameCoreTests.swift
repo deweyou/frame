@@ -120,11 +120,11 @@ final class ZFrameCoreTests: XCTestCase {
         )
     }
 
-    func testImageWorkspaceDefaultsToViewWithoutActiveTool() {
+    func testImageWorkspaceDefaultsToPointerTool() {
         let state = ImageWorkspaceState(kind: .temporaryPreview)
 
         XCTAssert(state.kind == .temporaryPreview)
-        XCTAssert(state.selectedTool == nil)
+        XCTAssert(state.selectedTool == .select)
         XCTAssert(state.closePolicy == .escapeOrExplicitClose)
     }
 
@@ -138,7 +138,7 @@ final class ZFrameCoreTests: XCTestCase {
     func testSelectingEditingToolsUpdatesWorkspaceState() {
         var state = ImageWorkspaceState(kind: .temporaryPreview)
 
-        for tool in ImageEditingTool.allCases {
+        for tool in ImageAnnotationTool.allCases {
             state.select(tool)
             XCTAssert(state.selectedTool == tool)
         }
@@ -478,5 +478,172 @@ final class ZFrameCoreTests: XCTestCase {
 
         XCTAssert(layout.rows.count == 1)
         XCTAssert(layout.rows[0].cuts.map(\.text) == ["visible"])
+    }
+
+    func testImageAnnotationDocumentDefaultsToSelectableShapeEditing() {
+        let document = ImageAnnotationDocument()
+
+        XCTAssertEqual(document.selectedTool, .select)
+        XCTAssertEqual(document.editingOptions.shapeKind, .rectangle)
+        XCTAssertEqual(document.editingOptions.mosaicMode, .rectangle)
+        XCTAssertEqual(document.editingOptions.style.strokeColor, .red)
+        XCTAssertEqual(document.editingOptions.style.lineWidth, 4)
+        XCTAssertTrue(document.elements.isEmpty)
+        XCTAssertFalse(document.canUndo)
+        XCTAssertFalse(document.canRedo)
+        XCTAssertFalse(document.hasUncommittedEdits)
+    }
+
+    func testImageAnnotationDocumentAddsSelectsMovesResizesAndDeletesElements() {
+        var document = ImageAnnotationDocument()
+        let element = ImageAnnotationElement(
+            kind: .shape(.rectangle),
+            bounds: CGRect(x: 10, y: 20, width: 80, height: 40),
+            style: .default
+        )
+
+        document.add(element)
+
+        XCTAssertEqual(document.elements.count, 1)
+        XCTAssertEqual(document.selectedElementID, element.id)
+        XCTAssertEqual(document.topmostElementID(at: CGPoint(x: 20, y: 30)), element.id)
+
+        document.moveSelected(by: CGSize(width: 5, height: -10))
+        XCTAssertEqual(document.elements[0].bounds, CGRect(x: 15, y: 10, width: 80, height: 40))
+
+        document.resizeSelected(to: CGRect(x: 15, y: 10, width: 120, height: 64))
+        XCTAssertEqual(document.elements[0].bounds, CGRect(x: 15, y: 10, width: 120, height: 64))
+
+        document.deleteSelected()
+        XCTAssertTrue(document.elements.isEmpty)
+        XCTAssertNil(document.selectedElementID)
+        XCTAssertTrue(document.canUndo)
+    }
+
+    func testImageAnnotationDocumentUndoRedoRestoresElementSnapshots() {
+        var document = ImageAnnotationDocument()
+        let first = ImageAnnotationElement(
+            kind: .shape(.ellipse),
+            bounds: CGRect(x: 10, y: 20, width: 80, height: 40),
+            style: .default
+        )
+        let second = ImageAnnotationElement(
+            kind: .text("Frame"),
+            bounds: CGRect(x: 40, y: 80, width: 120, height: 32),
+            style: .default
+        )
+
+        document.add(first)
+        document.add(second)
+        document.undo()
+
+        XCTAssertEqual(document.elements.map(\.id), [first.id])
+        XCTAssertEqual(document.selectedElementID, first.id)
+        XCTAssertTrue(document.canRedo)
+
+        document.redo()
+
+        XCTAssertEqual(document.elements.map(\.id), [first.id, second.id])
+        XCTAssertEqual(document.selectedElementID, second.id)
+    }
+
+    func testImageAnnotationDocumentGroupsContinuousGeometryEditing() {
+        var document = ImageAnnotationDocument()
+        let element = ImageAnnotationElement(
+            kind: .shape(.rectangle),
+            bounds: CGRect(x: 10, y: 20, width: 80, height: 40),
+            style: .default
+        )
+        document.add(element)
+
+        document.beginEditingSelectedElement()
+        document.moveSelected(by: CGSize(width: 5, height: 5), recordingUndo: false)
+        document.moveSelected(by: CGSize(width: 10, height: -2), recordingUndo: false)
+
+        XCTAssertEqual(document.elements[0].bounds, CGRect(x: 25, y: 23, width: 80, height: 40))
+
+        document.undo()
+
+        XCTAssertEqual(document.elements[0].bounds, CGRect(x: 10, y: 20, width: 80, height: 40))
+        document.redo()
+        XCTAssertEqual(document.elements[0].bounds, CGRect(x: 25, y: 23, width: 80, height: 40))
+    }
+
+    func testImageAnnotationDocumentUpdatesToolOptionsAndCommitsCurrentRendition() {
+        var document = ImageAnnotationDocument()
+
+        document.selectTool(.mosaic)
+        document.setShapeKind(.arrow)
+        document.setMosaicMode(.brush)
+        document.setStyle(
+            ImageAnnotationStyle(
+                strokeColor: .blue,
+                fillColor: .yellow.withAlpha(0.32),
+                lineWidth: 8,
+                fontSize: 18,
+                fontWeight: .bold,
+                mosaicBlockSize: 14,
+                mosaicStrength: 0.9
+            )
+        )
+        document.add(ImageAnnotationElement(
+            kind: .mosaic(.brush),
+            bounds: CGRect(x: 0, y: 0, width: 64, height: 64),
+            points: [CGPoint(x: 8, y: 8), CGPoint(x: 48, y: 48)],
+            style: document.editingOptions.style
+        ))
+
+        XCTAssertEqual(document.selectedTool, .mosaic)
+        XCTAssertEqual(document.editingOptions.shapeKind, .arrow)
+        XCTAssertEqual(document.editingOptions.mosaicMode, .brush)
+        XCTAssertEqual(document.editingOptions.style.strokeColor, .blue)
+        XCTAssertEqual(document.editingOptions.style.fillColor, .yellow.withAlpha(0.32))
+        XCTAssertTrue(document.hasUncommittedEdits)
+
+        document.markCurrentRenditionSaved()
+
+        XCTAssertTrue(document.elements.isEmpty)
+        XCTAssertNil(document.selectedElementID)
+        XCTAssertFalse(document.canUndo)
+        XCTAssertFalse(document.canRedo)
+        XCTAssertFalse(document.hasUncommittedEdits)
+        XCTAssertEqual(document.selectedTool, .mosaic)
+    }
+
+    func testImageAnnotationDocumentReplacesSelectedText() {
+        var document = ImageAnnotationDocument()
+        let text = ImageAnnotationElement(
+            kind: .text("Hello"),
+            bounds: CGRect(x: 10, y: 20, width: 80, height: 28),
+            style: .default
+        )
+
+        document.add(text)
+        document.replaceSelectedText("Frame")
+
+        XCTAssertEqual(document.elements.first?.kind, .text("Frame"))
+    }
+
+    func testImageAnnotationDocumentUpdatesSelectedTextStyle() {
+        var document = ImageAnnotationDocument()
+        var style = ImageAnnotationStyle.default
+        style.fontSize = 16
+        let text = ImageAnnotationElement(
+            kind: .text("Hello"),
+            bounds: CGRect(x: 10, y: 20, width: 80, height: 28),
+            style: style
+        )
+
+        document.add(text)
+        style.fontSize = 28
+        document.updateSelectedStyle(style)
+
+        XCTAssertEqual(document.elements.first?.style.fontSize, 28)
+        XCTAssertTrue(document.hasUncommittedEdits)
+        XCTAssertTrue(document.canUndo)
+
+        document.undo()
+
+        XCTAssertEqual(document.elements.first?.style.fontSize, 16)
     }
 }

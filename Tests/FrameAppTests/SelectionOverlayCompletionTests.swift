@@ -71,6 +71,22 @@ final class SelectionOverlayCompletionTests: XCTestCase {
     }
 
     @MainActor
+    func testSelectionHUDUsesDarkChromeWithWhiteIcons() throws {
+        let window = try makeOverlayWindowForTesting()
+        let chromeColors = window.hudChromeColorsForTesting()
+
+        XCTAssertLessThan(chromeColors.background.relativeLuminanceForTesting, 0.12)
+        XCTAssertGreaterThanOrEqual(chromeColors.background.relativeAlphaForTesting, 0.45)
+        XCTAssertGreaterThan(chromeColors.foreground.relativeLuminanceForTesting, 0.8)
+
+        let tintColors = window.hudButtonTintColorsForTesting()
+        for label in ["区域截图", "全屏截图", "延迟截图", "Recognize Text", "录屏"] {
+            let tintColor = try XCTUnwrap(tintColors[label])
+            XCTAssertGreaterThan(tintColor.relativeLuminanceForTesting, 0.8)
+        }
+    }
+
+    @MainActor
     func testSelectionHUDHoverBackgroundsAreCompact() throws {
         let window = try makeOverlayWindowForTesting()
         let metrics = window.hudButtonLayoutMetricsForTesting()

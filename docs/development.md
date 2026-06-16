@@ -164,27 +164,34 @@ Agents should use this stable-sign-and-replace flow whenever the user asks to ru
 20. Confirm copy places an image on the pasteboard.
 21. Confirm save writes `Frame yyyy-MM-dd HH.mm.ss.png` to the configured screenshot folder, or Desktop after reset.
 22. Double-click an eligible app window, capture it, and confirm the output uses the selected window screenshot style while region screenshots remain undecorated.
-23. Confirm the workspace action opens a movable, resizable preview workspace.
+23. Confirm the workspace action opens a movable, resizable preview/edit workspace.
 24. Resize the workspace and confirm the image preview area preserves the captured image aspect ratio without empty fill.
-25. Confirm switching focus to another app does not close the preview workspace.
-26. Click the same Quick Access workspace action again and confirm it activates the existing preview workspace instead of opening a duplicate.
-27. Confirm workspace Save is visible but disabled, while Copy and Download are enabled.
-28. Confirm workspace Copy closes the workspace and the originating Quick Access preview on success.
-29. Confirm workspace Download writes `Frame yyyy-MM-dd HH.mm.ss.png` to the configured screenshot folder, then closes the workspace and originating Quick Access preview on success.
-30. Confirm Escape closes the preview workspace.
-31. Confirm pin closes the originating Quick Access card and opens a persistent image-only pinned window.
-32. Confirm the pinned window has no toolbar or visible output buttons, keeps the image edge-to-edge, stays open after focus changes, and closes with the native red traffic-light close button.
-33. Right-click the pinned window and confirm Copy and Download work without closing it.
-34. Right-click the pinned window and confirm Edit opens or activates the preview/edit workspace without closing the pinned window.
-35. Use the screenshot shortcut again, draw a region, click the recording HUD button, and confirm the HUD switches into recording setup without closing the overlay.
-36. Record a short MP4 with cursor enabled. Confirm start shows a brief preparation/loading state instead of a countdown, then switches to elapsed-time recording controls; stop finalizes the file, restart discards the current take and records the same area again, and delete requires confirmation before discarding without Quick Access.
-37. Confirm the menu bar icon becomes a red recording dot while recording and its Stop Recording menu item stops the same active session.
-38. Confirm the completed recording appears in a bottom-left Quick Access card with Download, Copy, Preview, disabled Edit, and Close.
-39. Confirm Preview opens a playable video window and Edit remains disabled.
-40. Confirm Copy places the recording file URL on the pasteboard and Download writes `Frame yyyy-MM-dd HH.mm.ss.mp4` to the configured screenshot folder.
-41. Repeat with GIF selected and confirm `Frame yyyy-MM-dd HH.mm.ss.gif` output is produced.
-42. Select an entire single display as the recording region and confirm the recording HUD remains usable but is absent from the output.
-43. Confirm local capture history lists recordings separately, opens playable recording files, copies file URLs, saves files, and deletes cached recording records.
+25. Confirm switching focus to another app does not close the preview/edit workspace.
+26. Click the same Quick Access workspace action again and confirm it activates the existing preview/edit workspace instead of opening a duplicate.
+27. Confirm the top toolbar shows Select, Rectangle, Oval, Line, Arrow, Brush, Text, Highlight, Mosaic, shared Color, the contextual Thickness/Font Size style menu, Save Current, Copy, and Download. The Select tool should be active by default; the Color button should show the currently selected color, menus should mark the active option, and the style menu should be disabled until a drawable tool is active. Change color, thickness, font size, shape, and mosaic mode, reopen the workspace, and confirm those choices are remembered while Select is still active by default.
+28. Confirm Save Current is disabled before edits, while Copy and Download are enabled.
+29. Click each editing tool's main icon and confirm it activates the tool without opening an option menu.
+30. Confirm only Mosaic has an adjacent chevron dropdown, and that it contains Region/Brush mosaic modes. Shape, Brush, Text, and Highlight should not expose tool-option chevrons. Confirm Color is a standalone shared dropdown; selecting Shape, Brush, or Highlight should switch the style menu to Thickness with 1, 2, 4, 8, 12, 16, and 24 px stroke widths, while selecting Text should switch it to Font Size with font sizes.
+31. Draw a rectangle, oval, line, arrow, brush stroke, highlight stroke, text label, rectangle mosaic, and brush mosaic; confirm the drawn content stays on the captured image. Hold Shift while drawing rectangle/oval and confirm square/circle output; hold Shift while drawing line/arrow and confirm horizontal, vertical, or 45-degree snapping. Rectangle mosaic should show only a selection frame while dragging and apply pixelation after release.
+32. Select an edited object, move it, resize it from its resize handle, delete it, undo, and redo. Confirm Undo and Redo are disabled when their history stacks are empty.
+33. Re-select a text label, edit the text, then change Font Size while the text is selected and confirm the selected text updates immediately.
+34. Confirm Save Current becomes enabled after an edit and opens Replace Current / Save As New choices. Replace Current should update the current in-memory screenshot, refresh the still-visible Quick Access preview, clear the pending annotation selection, and keep the workspace open; Save As New should add another Quick Access preview and keep the workspace open without writing a local file directly.
+35. Confirm workspace Copy includes rendered edits, then closes the workspace and the originating Quick Access preview on success.
+36. Confirm workspace Download writes a rendered edited `Frame yyyy-MM-dd HH.mm.ss.png` to the configured screenshot folder, then closes the workspace and originating Quick Access preview on success.
+37. Confirm Escape or the native close button asks whether to Replace Current, Save As New, Don't Save, or Cancel when unsaved edits exist. Replace Current and Save As New close after the chosen save action succeeds; Don't Save closes without creating or replacing a screenshot; Cancel leaves the workspace open with edits intact.
+38. Confirm pin closes the originating Quick Access card and opens a persistent image-only pinned window.
+39. Confirm the pinned window has no toolbar or visible output buttons, keeps the image edge-to-edge, stays open after focus changes, and closes with the native red traffic-light close button.
+40. Right-click the pinned window and confirm Copy and Download work without closing it.
+41. Right-click the pinned window and confirm Edit opens or activates the preview/edit workspace without closing the pinned window.
+42. Use the screenshot shortcut again, draw a region, click the recording HUD button, and confirm the HUD switches into recording setup without closing the overlay.
+43. Record a short MP4 with cursor enabled. Confirm start shows a brief preparation/loading state instead of a countdown, then switches to elapsed-time recording controls; stop finalizes the file, restart discards the current take and records the same area again, and delete requires confirmation before discarding without Quick Access.
+44. Confirm the menu bar icon becomes a red recording dot while recording and its Stop Recording menu item stops the same active session.
+45. Confirm the completed recording appears in a bottom-left Quick Access card with Download, Copy, Preview, disabled Edit, and Close.
+46. Confirm Preview opens a playable video window and Edit remains disabled.
+47. Confirm Copy places the recording file URL on the pasteboard and Download writes `Frame yyyy-MM-dd HH.mm.ss.mp4` to the configured screenshot folder.
+48. Repeat with GIF selected and confirm `Frame yyyy-MM-dd HH.mm.ss.gif` output is produced.
+49. Select an entire single display as the recording region and confirm the recording HUD remains usable but is absent from the output.
+50. Confirm local capture history lists recordings separately, opens playable recording files, copies file URLs, saves files, and deletes cached recording records.
 
 Keep using the same `FRAME_CODESIGN_IDENTITY` and the same `~/Applications/Frame.app` path while iterating. Changing either one can make macOS ask for Screen Recording permission again.
 

@@ -305,6 +305,37 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         XCTAssertTrue(panels.allSatisfy { $0.frame.size == expectedSize })
     }
 
+    func testScreenshotQuickAccessPreviewUpdatesForReplacedCurrentRendition() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        let screenshotID = UUID()
+        let originalScreenshot = try makeSolidScreenshot(id: screenshotID, color: .red)
+        let updatedScreenshot = try makeSolidScreenshot(id: screenshotID, color: .blue)
+
+        controller.show(
+            for: originalScreenshot,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .en),
+            copy: { true },
+            save: { true },
+            recognizeText: { true },
+            openWorkspace: { true },
+            pin: { true },
+            close: {}
+        )
+
+        let panel = try XCTUnwrap(newPreviewPanels(excluding: windowsBeforeShow).first)
+        defer {
+            panel.close()
+        }
+
+        XCTAssertEqual(controller.screenshotPreviewPNGDataForTesting(for: originalScreenshot), originalScreenshot.pngData)
+        XCTAssertTrue(controller.updatePreview(for: updatedScreenshot))
+        XCTAssertEqual(controller.screenshotPreviewPNGDataForTesting(for: updatedScreenshot), updatedScreenshot.pngData)
+    }
+
     func testHoveringQuickAccessCardShowsRightSidePreviewAfterDelay() throws {
         _ = NSApplication.shared
         let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
@@ -534,6 +565,21 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         return try XCTUnwrap(bitmap?.representation(using: .png, properties: [:]))
     }
 
+    private func makeSolidScreenshot(id: UUID, color: NSColor) throws -> CapturedScreenshot {
+        let image = NSImage(size: NSSize(width: 2, height: 2))
+        image.lockFocus()
+        color.setFill()
+        NSRect(x: 0, y: 0, width: 2, height: 2).fill()
+        image.unlockFocus()
+
+        return CapturedScreenshot(
+            id: id,
+            pngData: try XCTUnwrap(image.pngDataForTesting()),
+            image: image,
+            rect: CGRect(x: 0, y: 0, width: 2, height: 2)
+        )
+    }
+
     private func findButton(in view: NSView, accessibilityLabel: String) -> NSButton? {
         if let button = view as? NSButton,
            button.accessibilityLabel() == accessibilityLabel {
@@ -571,5 +617,16 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         NSApp.windows.compactMap { window -> NSPanel? in
             windowsBeforeShow.contains(ObjectIdentifier(window)) ? nil : window as? NSPanel
         }
+    }
+}
+
+private extension NSImage {
+    func pngDataForTesting() -> Data? {
+        guard let tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffRepresentation) else {
+            return nil
+        }
+
+        return bitmap.representation(using: .png, properties: [:])
     }
 }

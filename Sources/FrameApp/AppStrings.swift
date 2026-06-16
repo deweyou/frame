@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import FrameCore
 
@@ -491,6 +492,202 @@ struct AppStrings {
         switch language {
         case .zhHans: "固定到预览窗口"
         case .en: "Pin to Preview Window"
+        }
+    }
+
+    var workspaceUndo: String {
+        switch language {
+        case .zhHans: "撤销"
+        case .en: "Undo"
+        }
+    }
+
+    var workspaceRedo: String {
+        switch language {
+        case .zhHans: "重做"
+        case .en: "Redo"
+        }
+    }
+
+    var workspaceSaveCurrent: String {
+        switch language {
+        case .zhHans: "保存当前稿"
+        case .en: "Save Current"
+        }
+    }
+
+    var workspaceReplaceCurrent: String {
+        switch language {
+        case .zhHans: "替换当前图"
+        case .en: "Replace Current"
+        }
+    }
+
+    var workspaceSaveAsNew: String {
+        switch language {
+        case .zhHans: "另存新图"
+        case .en: "Save As New"
+        }
+    }
+
+    var workspaceDiscardEdits: String {
+        switch language {
+        case .zhHans: "不保存"
+        case .en: "Don't Save"
+        }
+    }
+
+    var workspaceUnsavedChangesTitle: String {
+        switch language {
+        case .zhHans: "保存编辑？"
+        case .en: "Save edits?"
+        }
+    }
+
+    var workspaceUnsavedChangesMessage: String {
+        switch language {
+        case .zhHans: "关闭前选择替换当前图、保存为一张新的 Quick Access 预览、不保存并关闭，或取消并继续编辑。"
+        case .en: "Before closing, replace the current image, save a new Quick Access preview, close without saving, or cancel and keep editing."
+        }
+    }
+
+    var workspaceCopy: String {
+        switch language {
+        case .zhHans: "复制"
+        case .en: "Copy"
+        }
+    }
+
+    var workspaceDownload: String {
+        switch language {
+        case .zhHans: "下载"
+        case .en: "Download"
+        }
+    }
+
+    var workspaceEdit: String {
+        switch language {
+        case .zhHans: "编辑"
+        case .en: "Edit"
+        }
+    }
+
+    var workspaceColorOptions: String {
+        switch language {
+        case .zhHans: "颜色"
+        case .en: "Color"
+        }
+    }
+
+    var workspaceThicknessOptions: String {
+        switch language {
+        case .zhHans: "粗细"
+        case .en: "Thickness"
+        }
+    }
+
+    var workspaceFontSizeOptions: String {
+        switch language {
+        case .zhHans: "字号"
+        case .en: "Font Size"
+        }
+    }
+
+    func workspaceToolTitle(_ tool: ImageAnnotationTool) -> String {
+        switch (language, tool) {
+        case (.zhHans, .select): "选择"
+        case (.en, .select): "Select"
+        case (.zhHans, .mosaic): "马赛克"
+        case (.en, .mosaic): "Mosaic"
+        case (.zhHans, .shape): "形状"
+        case (.en, .shape): "Shape"
+        case (.zhHans, .brush): "画笔"
+        case (.en, .brush): "Brush"
+        case (.zhHans, .text): "文本"
+        case (.en, .text): "Text"
+        case (.zhHans, .highlight): "高亮"
+        case (.en, .highlight): "Highlight"
+        }
+    }
+
+    func workspaceToolOptionsTitle(_ tool: ImageAnnotationTool) -> String {
+        switch language {
+        case .zhHans: "\(workspaceToolTitle(tool))选项"
+        case .en: "\(workspaceToolTitle(tool)) Options"
+        }
+    }
+
+    func workspaceShapeKindTitle(_ shapeKind: ImageAnnotationShapeKind) -> String {
+        switch (language, shapeKind) {
+        case (.zhHans, .rectangle): "矩形"
+        case (.en, .rectangle): "Rectangle"
+        case (.zhHans, .ellipse): "椭圆"
+        case (.en, .ellipse): "Oval"
+        case (.zhHans, .line): "直线"
+        case (.en, .line): "Line"
+        case (.zhHans, .arrow): "箭头"
+        case (.en, .arrow): "Arrow"
+        }
+    }
+
+    func workspaceMosaicModeTitle(_ mosaicMode: ImageAnnotationMosaicMode) -> String {
+        switch (language, mosaicMode) {
+        case (.zhHans, .rectangle): "区域"
+        case (.en, .rectangle): "Region"
+        case (.zhHans, .brush): "画笔"
+        case (.en, .brush): "Brush"
+        }
+    }
+
+    func workspaceColorTitle(_ color: ImageAnnotationColor) -> String {
+        if color == .red {
+            switch language {
+            case .zhHans: return "红色"
+            case .en: return "Red"
+            }
+        }
+
+        if color == .yellow {
+            switch language {
+            case .zhHans: return "黄色"
+            case .en: return "Yellow"
+            }
+        }
+
+        if color == .blue {
+            switch language {
+            case .zhHans: return "蓝色"
+            case .en: return "Blue"
+            }
+        }
+
+        if color == .green {
+            switch language {
+            case .zhHans: return "绿色"
+            case .en: return "Green"
+            }
+        }
+
+        switch language {
+        case .zhHans: return "颜色"
+        case .en: return "Color"
+        }
+    }
+
+    func workspaceLineWidth(_ width: CGFloat) -> String {
+        "\(Int(width)) px"
+    }
+
+    func workspaceFontSize(_ size: CGFloat) -> String {
+        "\(Int(size)) pt"
+    }
+
+    func workspaceFontWeightTitle(_ weight: ImageAnnotationFontWeight) -> String {
+        switch (language, weight) {
+        case (.zhHans, .regular): "常规"
+        case (.en, .regular): "Regular"
+        case (.zhHans, .bold): "粗体"
+        case (.en, .bold): "Bold"
         }
     }
 

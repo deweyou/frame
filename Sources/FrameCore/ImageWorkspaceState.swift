@@ -21,9 +21,9 @@ public enum ImageEditingTool: CaseIterable, Sendable, Equatable {
 
 public struct ImageWorkspaceState: Sendable, Equatable {
     public let kind: ImageWorkspaceKind
-    public private(set) var selectedTool: ImageEditingTool?
+    public private(set) var selectedTool: ImageAnnotationTool?
 
-    public init(kind: ImageWorkspaceKind, selectedTool: ImageEditingTool? = nil) {
+    public init(kind: ImageWorkspaceKind, selectedTool: ImageAnnotationTool? = .select) {
         self.kind = kind
         self.selectedTool = selectedTool
     }
@@ -37,7 +37,7 @@ public struct ImageWorkspaceState: Sendable, Equatable {
         }
     }
 
-    public mutating func select(_ tool: ImageEditingTool) {
+    public mutating func select(_ tool: ImageAnnotationTool) {
         selectedTool = tool
     }
 }

@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var captureHistoryWindowController: CaptureHistoryWindowController?
     private var strings = AppStrings.current()
     private var activeQuickAccessScreenshotIDs: Set<UUID> = []
+    private var activeQuickAccessScreenshots: [UUID: CapturedScreenshot] = [:]
     private var recognizingScreenshotIDs: Set<UUID> = []
     private var recognizedTextLayouts: [UUID: RecognizedTextLayout] = [:]
     private var activeRecordingSession: RecordingSessionControlling?
@@ -290,6 +291,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showQuickAccess(for screenshot: CapturedScreenshot, anchor: CGRect?) {
         activeQuickAccessScreenshotIDs.insert(screenshot.id)
+        activeQuickAccessScreenshots[screenshot.id] = screenshot
         quickAccessPanelController.show(
             for: screenshot,
             preferredAnchor: anchor,
@@ -299,7 +301,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return false
                 }
 
-                let didCopy = self.copyToClipboard(screenshot)
+                let currentScreenshot = self.currentQuickAccessScreenshot(for: screenshot)
+                let didCopy = self.copyToClipboard(currentScreenshot)
                 if didCopy {
                     self.endQuickAccessLifecycle(for: screenshot)
                 }
@@ -311,7 +314,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return false
                 }
 
-                let didSave = self.saveToDesktop(screenshot)
+                let currentScreenshot = self.currentQuickAccessScreenshot(for: screenshot)
+                let didSave = self.saveToDesktop(currentScreenshot)
                 if didSave {
                     self.endQuickAccessLifecycle(for: screenshot)
                 }
@@ -319,17 +323,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return didSave
             },
             recognizeText: { [weak self] in
-                self?.recognizeText(in: screenshot) ?? false
+                guard let self else {
+                    return false
+                }
+
+                return self.recognizeText(in: self.currentQuickAccessScreenshot(for: screenshot))
             },
             openWorkspace: { [weak self] in
-                self?.openWorkspace(screenshot, kind: .temporaryPreview) ?? false
+                guard let self else {
+                    return false
+                }
+
+                return self.openWorkspace(self.currentQuickAccessScreenshot(for: screenshot), kind: .temporaryPreview)
             },
             pin: { [weak self] in
                 guard let self else {
                     return false
                 }
 
-                let didOpen = self.openWorkspace(screenshot, kind: .pinned)
+                let didOpen = self.openWorkspace(self.currentQuickAccessScreenshot(for: screenshot), kind: .pinned)
                 if didOpen {
                     self.endQuickAccessLifecycle(for: screenshot)
                 }
@@ -837,9 +849,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         imageWorkspacePanelController.show(
             screenshot: screenshot,
             kind: kind,
-            copy: { [weak self] in
+            strings: strings,
+            copy: { [weak self] editedScreenshot in
                 guard let self,
-                      self.copyToClipboard(screenshot) else {
+                      self.copyToClipboard(editedScreenshot) else {
                     return false
                 }
 
@@ -847,9 +860,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.endQuickAccessLifecycle(for: screenshot)
                 return true
             },
-            save: { [weak self] in
+            save: { [weak self] editedScreenshot in
                 guard let self,
-                      self.saveToDesktop(screenshot) else {
+                      self.saveToDesktop(editedScreenshot) else {
                     return false
                 }
 
@@ -866,6 +879,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             copyRecognizedText: { [weak self] text in
                 self?.copyRecognizedText(text) ?? false
+            },
+            replaceCurrent: { [weak self] editedScreenshot in
+                guard let self else {
+                    return
+                }
+
+                guard self.activeQuickAccessScreenshotIDs.contains(editedScreenshot.id) else {
+                    return
+                }
+
+                self.activeQuickAccessScreenshots[editedScreenshot.id] = editedScreenshot
+                self.quickAccessPanelController.updatePreview(for: editedScreenshot)
+            },
+            saveAsNew: { [weak self] editedScreenshot in
+                guard let self else {
+                    return false
+                }
+
+                self.showQuickAccess(for: editedScreenshot, anchor: editedScreenshot.rect)
+                return true
             }
         )
     }
@@ -971,9 +1004,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func endQuickAccessLifecycle(for screenshot: CapturedScreenshot) {
         activeQuickAccessScreenshotIDs.remove(screenshot.id)
+        activeQuickAccessScreenshots.removeValue(forKey: screenshot.id)
         recognizingScreenshotIDs.remove(screenshot.id)
         recognizedTextLayouts.removeValue(forKey: screenshot.id)
         _ = ocrTextPanelController.closePanel(for: screenshot)
+    }
+
+    private func currentQuickAccessScreenshot(for screenshot: CapturedScreenshot) -> CapturedScreenshot {
+        activeQuickAccessScreenshots[screenshot.id] ?? screenshot
     }
 
     private func copyToClipboard(_ screenshot: CapturedScreenshot) -> Bool {

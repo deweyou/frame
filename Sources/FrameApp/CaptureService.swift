@@ -4,10 +4,17 @@ import FrameCore
 @preconcurrency import ScreenCaptureKit
 
 struct CapturedScreenshot {
-    let id = UUID()
+    let id: UUID
     let pngData: Data
     let image: NSImage
     let rect: CGRect
+
+    init(id: UUID = UUID(), pngData: Data, image: NSImage, rect: CGRect) {
+        self.id = id
+        self.pngData = pngData
+        self.image = image
+        self.rect = rect
+    }
 }
 
 @MainActor

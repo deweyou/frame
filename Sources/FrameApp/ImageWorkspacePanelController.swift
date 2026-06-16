@@ -4,14 +4,59 @@ import FrameCore
 @MainActor
 final class ImageWorkspacePanelController: NSObject {
     private var workspaceItems: [ImageWorkspaceItem] = []
+    private let editingOptionsProvider: () -> ImageAnnotationEditingOptions
+    private let persistEditingOptions: (ImageAnnotationEditingOptions) -> Void
+
+    init(
+        editingOptionsProvider: @escaping () -> ImageAnnotationEditingOptions = {
+            SettingsStore.imageAnnotationEditingOptions()
+        },
+        persistEditingOptions: @escaping (ImageAnnotationEditingOptions) -> Void = {
+            SettingsStore.setImageAnnotationEditingOptions($0)
+        }
+    ) {
+        self.editingOptionsProvider = editingOptionsProvider
+        self.persistEditingOptions = persistEditingOptions
+        super.init()
+    }
 
     func show(
         screenshot: CapturedScreenshot,
         kind: ImageWorkspaceKind,
+        strings: AppStrings = AppStrings(language: .en),
         copy: @escaping () -> Bool,
         save: @escaping () -> Bool,
         recognizeText: ((CapturedScreenshot) async throws -> RecognizedTextLayout)? = nil,
-        copyRecognizedText: ((String) -> Bool)? = nil
+        copyRecognizedText: ((String) -> Bool)? = nil,
+        replaceCurrent: ((CapturedScreenshot) -> Void)? = nil,
+        saveAsNew: ((CapturedScreenshot) -> Bool)? = nil,
+        closeSaveChoice: (() -> ImageWorkspaceCloseSaveChoice)? = nil
+    ) -> Bool {
+        show(
+            screenshot: screenshot,
+            kind: kind,
+            strings: strings,
+            copy: { _ in copy() },
+            save: { _ in save() },
+            recognizeText: recognizeText,
+            copyRecognizedText: copyRecognizedText,
+            replaceCurrent: replaceCurrent,
+            saveAsNew: saveAsNew,
+            closeSaveChoice: closeSaveChoice
+        )
+    }
+
+    func show(
+        screenshot: CapturedScreenshot,
+        kind: ImageWorkspaceKind,
+        strings: AppStrings = AppStrings(language: .en),
+        copy: @escaping (CapturedScreenshot) -> Bool,
+        save: @escaping (CapturedScreenshot) -> Bool,
+        recognizeText: ((CapturedScreenshot) async throws -> RecognizedTextLayout)? = nil,
+        copyRecognizedText: ((String) -> Bool)? = nil,
+        replaceCurrent: ((CapturedScreenshot) -> Void)? = nil,
+        saveAsNew: ((CapturedScreenshot) -> Bool)? = nil,
+        closeSaveChoice: (() -> ImageWorkspaceCloseSaveChoice)? = nil
     ) -> Bool {
         if kind == .temporaryPreview,
            let existingItem = workspaceItem(for: screenshot, kind: kind) {
@@ -24,10 +69,14 @@ final class ImageWorkspacePanelController: NSObject {
             state: ImageWorkspaceState(kind: kind),
             panel: panel,
             screenshot: screenshot,
+            strings: strings,
             copy: copy,
             save: save,
             recognizeText: recognizeText,
-            copyRecognizedText: copyRecognizedText
+            copyRecognizedText: copyRecognizedText,
+            replaceCurrent: replaceCurrent,
+            saveAsNew: saveAsNew,
+            closeSaveChoice: closeSaveChoice
         )
 
         panel.contentView = makeContentView(for: item)
@@ -155,9 +204,20 @@ final class ImageWorkspacePanelController: NSObject {
         imageContainer.menuProvider = contextMenuProvider
         imageContainer.setAccessibilityLabel("Image Preview Container")
 
-        let imageView = ImageWorkspaceImageView(image: item.screenshot.image)
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        imageView.menuProvider = contextMenuProvider
+        let annotationCanvas = ImageAnnotationCanvasView(
+            image: item.screenshot.image,
+            document: ImageAnnotationDocument(editingOptions: editingOptionsProvider())
+        ) { [weak self, weak item] document in
+            guard let item else {
+                return
+            }
+
+            self?.updateDocumentControls(for: item, document: document)
+        }
+        annotationCanvas.translatesAutoresizingMaskIntoConstraints = false
+        annotationCanvas.menuProvider = contextMenuProvider
+        annotationCanvas.setBaseScreenshot(item.screenshot)
+        item.annotationCanvas = annotationCanvas
 
         let textSelectionOverlay = ImageWorkspaceTextSelectionOverlayView(
             imageSize: item.screenshot.image.size,
@@ -182,49 +242,124 @@ final class ImageWorkspacePanelController: NSObject {
         let toolStack = NSStackView()
         toolStack.orientation = .horizontal
         toolStack.alignment = .centerY
-        toolStack.distribution = .fillEqually
+        toolStack.distribution = .fill
         toolStack.spacing = ImageWorkspaceLayout.editingToolSpacing
         toolStack.translatesAutoresizingMaskIntoConstraints = false
 
-        for tool in ImageEditingTool.allCases {
-            let button = makeIconButton(
-                title: title(for: tool),
-                symbolName: symbolName(for: tool),
-                action: #selector(toolButtonClicked),
-                buttonType: .toggle
-            )
-            button.tag = tag(for: tool)
+        let undoButton = makeIconButton(
+            title: item.strings.workspaceUndo,
+            symbolName: "arrow.uturn.backward",
+            action: #selector(undoButtonClicked),
+            buttonType: .momentaryPushIn
+        )
+        let redoButton = makeIconButton(
+            title: item.strings.workspaceRedo,
+            symbolName: "arrow.uturn.forward",
+            action: #selector(redoButtonClicked),
+            buttonType: .momentaryPushIn
+        )
+        for button in [undoButton, redoButton] {
             button.isEnabled = false
             button.contentTintColor = .disabledControlTextColor
             button.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
             button.heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
             toolStack.addArrangedSubview(button)
-            item.toolButtons.append((tool: tool, button: button))
+        }
+        item.undoButton = undoButton
+        item.redoButton = redoButton
+
+        for toolbarItem in ImageWorkspaceToolbarToolOrder.items {
+            let button = makeIconButton(
+                title: title(for: toolbarItem, strings: item.strings),
+                symbolName: symbolName(for: toolbarItem),
+                action: action(for: toolbarItem),
+                buttonType: .toggle
+            )
+            button.tag = tag(for: toolbarItem)
+            button.isEnabled = true
+            button.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
+            button.heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
+            switch toolbarItem {
+            case let .tool(tool):
+                item.toolButtons.append((tool: tool, button: button))
+            case let .shape(shapeKind):
+                item.shapeKindButtons.append((shapeKind: shapeKind, button: button))
+            }
+
+            guard let optionsMenu = makeToolOptionsMenu(for: toolbarItem, item: item) else {
+                toolStack.addArrangedSubview(button)
+                continue
+            }
+
+            let optionsButton = makeIconButton(
+                title: optionsTitle(for: toolbarItem, strings: item.strings),
+                symbolName: "chevron.down",
+                action: #selector(toolOptionsButtonClicked),
+                buttonType: .momentaryPushIn
+            )
+            optionsButton.tag = tag(for: toolbarItem)
+            optionsButton.isEnabled = true
+            optionsButton.menu = optionsMenu
+            optionsButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 8, weight: .semibold)
+            optionsButton.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.toolOptionsButtonWidth).isActive = true
+            optionsButton.heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
+
+            let splitControl = NSStackView(views: [button, optionsButton])
+            splitControl.orientation = .horizontal
+            splitControl.alignment = .centerY
+            splitControl.distribution = .fill
+            splitControl.spacing = 0
+            splitControl.translatesAutoresizingMaskIntoConstraints = false
+            toolStack.addArrangedSubview(splitControl)
+        }
+
+        let colorButton = makeIconButton(
+            title: item.strings.workspaceColorOptions,
+            symbolName: "circle.fill",
+            action: #selector(toolbarMenuButtonClicked),
+            buttonType: .momentaryPushIn
+        )
+        colorButton.menu = makeColorOptionsMenu(for: item)
+        item.colorButton = colorButton
+        let sizeButton = makeIconButton(
+            title: item.strings.workspaceThicknessOptions,
+            symbolName: "lineweight",
+            action: #selector(toolbarMenuButtonClicked),
+            buttonType: .momentaryPushIn
+        )
+        sizeButton.menu = makeThicknessOptionsMenu(for: item)
+        item.styleButton = sizeButton
+        for button in [colorButton, sizeButton] {
+            button.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
+            button.heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
+            toolStack.addArrangedSubview(button)
         }
 
         let spacer = NSView()
         spacer.translatesAutoresizingMaskIntoConstraints = false
 
         let saveEditedButton = makeIconButton(
-            title: "Save",
+            title: item.strings.workspaceSaveCurrent,
             symbolName: "checkmark.circle",
             action: #selector(saveEditedButtonClicked),
             buttonType: .momentaryPushIn
         )
         let copyButton = makeIconButton(
-            title: "Copy",
+            title: item.strings.workspaceCopy,
             symbolName: "doc.on.doc",
             action: #selector(copyButtonClicked),
             buttonType: .momentaryPushIn
         )
         let downloadButton = makeIconButton(
-            title: "Download",
+            title: item.strings.workspaceDownload,
             symbolName: "square.and.arrow.down",
             action: #selector(downloadButtonClicked),
             buttonType: .momentaryPushIn
         )
         saveEditedButton.isEnabled = false
         saveEditedButton.contentTintColor = .disabledControlTextColor
+        saveEditedButton.menu = makeSaveCurrentMenu(for: item)
+        item.saveCurrentButton = saveEditedButton
         saveEditedButton.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.outputButtonWidth).isActive = true
         saveEditedButton.heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
         copyButton.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.outputButtonWidth).isActive = true
@@ -234,7 +369,7 @@ final class ImageWorkspacePanelController: NSObject {
 
         contentView.addSubview(imageContainer)
         contentView.addSubview(toolbar)
-        imageContainer.addSubview(imageView)
+        imageContainer.addSubview(annotationCanvas)
         imageContainer.addSubview(textSelectionOverlay)
         toolbar.addSubview(toolbarStack)
         toolbarStack.addArrangedSubview(toolStack)
@@ -249,10 +384,10 @@ final class ImageWorkspacePanelController: NSObject {
             imageContainer.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: ImageWorkspaceLayout.imageTopSpacing),
             imageContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -ImageWorkspaceLayout.imageBottomInset),
 
-            imageView.leadingAnchor.constraint(equalTo: imageContainer.leadingAnchor),
-            imageView.trailingAnchor.constraint(equalTo: imageContainer.trailingAnchor),
-            imageView.topAnchor.constraint(equalTo: imageContainer.topAnchor),
-            imageView.bottomAnchor.constraint(equalTo: imageContainer.bottomAnchor),
+            annotationCanvas.leadingAnchor.constraint(equalTo: imageContainer.leadingAnchor),
+            annotationCanvas.trailingAnchor.constraint(equalTo: imageContainer.trailingAnchor),
+            annotationCanvas.topAnchor.constraint(equalTo: imageContainer.topAnchor),
+            annotationCanvas.bottomAnchor.constraint(equalTo: imageContainer.bottomAnchor),
 
             textSelectionOverlay.leadingAnchor.constraint(equalTo: imageContainer.leadingAnchor),
             textSelectionOverlay.trailingAnchor.constraint(equalTo: imageContainer.trailingAnchor),
@@ -271,6 +406,12 @@ final class ImageWorkspacePanelController: NSObject {
 
             spacer.widthAnchor.constraint(greaterThanOrEqualToConstant: ImageWorkspaceLayout.minimumSpacerWidth),
         ])
+
+        if let selectedTool = item.state.selectedTool {
+            select(selectedTool, in: item)
+        }
+        updatePrimaryToolButtons(for: item)
+        updateDocumentControls(for: item, document: annotationCanvas.documentForTesting)
 
         return contentView
     }
@@ -329,10 +470,7 @@ final class ImageWorkspacePanelController: NSObject {
         action: Selector,
         buttonType: NSButton.ButtonType
     ) -> NSButton {
-        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: title)
-            ?? NSImage(systemSymbolName: "circle", accessibilityDescription: title)
-            ?? NSImage()
-        let button = ImageWorkspaceToolbarButton(image: image, target: self, action: action)
+        let button = ImageWorkspaceToolbarButton(image: toolbarImage(symbolName: symbolName, title: title), target: self, action: action)
         button.toolTip = title
         button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
         button.contentTintColor = .labelColor
@@ -342,7 +480,45 @@ final class ImageWorkspacePanelController: NSObject {
         return button
     }
 
+    private func toolbarImage(symbolName: String, title: String) -> NSImage {
+        NSImage(systemSymbolName: symbolName, accessibilityDescription: title)
+            ?? NSImage(systemSymbolName: "circle", accessibilityDescription: title)
+            ?? NSImage()
+    }
+
+    private func menuImage(symbolName: String, title: String) -> NSImage {
+        let image = toolbarImage(symbolName: symbolName, title: title)
+        image.size = NSSize(width: 14, height: 14)
+        return image
+    }
+
+    private func colorSwatchImage(color: ImageAnnotationColor, title: String) -> NSImage {
+        let image = NSImage(size: NSSize(width: 14, height: 14))
+        image.lockFocus()
+        NSColor.clear.setFill()
+        NSRect(origin: .zero, size: image.size).fill()
+
+        let swatchPath = NSBezierPath(ovalIn: NSRect(x: 2, y: 2, width: 10, height: 10))
+        color.nsColor.setFill()
+        swatchPath.fill()
+        NSColor.separatorColor.withAlphaComponent(0.65).setStroke()
+        swatchPath.lineWidth = 1
+        swatchPath.stroke()
+
+        image.unlockFocus()
+        image.isTemplate = false
+        return image
+    }
+
     private func installLifecycleCallbacks(for item: ImageWorkspaceItem) {
+        item.panel.shouldClose = { [weak self, weak item] in
+            guard let self,
+                  let item else {
+                return true
+            }
+
+            return self.shouldCloseWorkspace(item)
+        }
         item.panel.onClose = { [weak self, weak item] in
             guard let item else {
                 return
@@ -386,26 +562,23 @@ final class ImageWorkspacePanelController: NSObject {
 
     private func makeContextMenu(for item: ImageWorkspaceItem) -> NSMenu {
         let menu = NSMenu()
-        menu.addItem(makeMenuItem(title: "Copy", action: #selector(copyMenuItemClicked), representedObject: item))
-        menu.addItem(makeMenuItem(title: "Download", action: #selector(downloadMenuItemClicked), representedObject: item))
-        let saveEditedMenuItem = makeMenuItem(
-            title: "Save",
-            action: #selector(saveEditedMenuItemClicked),
-            representedObject: item
-        )
-        saveEditedMenuItem.isEnabled = false
+        menu.addItem(makeMenuItem(title: item.strings.workspaceCopy, action: #selector(copyMenuItemClicked), representedObject: item))
+        menu.addItem(makeMenuItem(title: item.strings.workspaceDownload, action: #selector(downloadMenuItemClicked), representedObject: item))
+        let saveEditedMenuItem = NSMenuItem(title: item.strings.workspaceSaveCurrent, action: nil, keyEquivalent: "")
+        saveEditedMenuItem.submenu = makeSaveCurrentMenu(for: item)
+        saveEditedMenuItem.isEnabled = item.annotationCanvas?.documentForTesting.hasUncommittedEdits ?? false
         menu.addItem(saveEditedMenuItem)
         menu.addItem(.separator())
 
-        for tool in ImageEditingTool.allCases {
+        for tool in ImageWorkspaceToolbarToolOrder.tools {
             let selection = ImageWorkspaceToolMenuSelection(item: item, tool: tool)
             let menuItem = makeMenuItem(
-                title: title(for: tool),
+                title: item.strings.workspaceToolTitle(tool),
                 action: #selector(toolMenuItemClicked),
                 representedObject: selection
             )
             menuItem.state = item.state.selectedTool == tool ? .on : .off
-            menuItem.isEnabled = false
+            menuItem.isEnabled = true
             menu.addItem(menuItem)
         }
 
@@ -414,10 +587,10 @@ final class ImageWorkspacePanelController: NSObject {
 
     private func makePinnedContextMenu(for item: ImageWorkspaceItem) -> NSMenu {
         let menu = NSMenu()
-        menu.addItem(makeMenuItem(title: "Copy", action: #selector(copyMenuItemClicked), representedObject: item))
-        menu.addItem(makeMenuItem(title: "Download", action: #selector(downloadMenuItemClicked), representedObject: item))
+        menu.addItem(makeMenuItem(title: item.strings.workspaceCopy, action: #selector(copyMenuItemClicked), representedObject: item))
+        menu.addItem(makeMenuItem(title: item.strings.workspaceDownload, action: #selector(downloadMenuItemClicked), representedObject: item))
         menu.addItem(.separator())
-        menu.addItem(makeMenuItem(title: "Edit", action: #selector(editMenuItemClicked), representedObject: item))
+        menu.addItem(makeMenuItem(title: item.strings.workspaceEdit, action: #selector(editMenuItemClicked), representedObject: item))
         return menu
     }
 
@@ -426,6 +599,155 @@ final class ImageWorkspacePanelController: NSObject {
         item.target = self
         item.representedObject = representedObject
         return item
+    }
+
+    private func makeToolOptionsMenu(for toolbarItem: ImageWorkspaceToolbarItem, item: ImageWorkspaceItem) -> NSMenu? {
+        switch toolbarItem {
+        case .tool(.mosaic):
+            makeMosaicOptionsMenu(for: item)
+        case .tool, .shape:
+            nil
+        }
+    }
+
+    private func makeMosaicOptionsMenu(for item: ImageWorkspaceItem) -> NSMenu {
+        let menu = NSMenu()
+        menu.addItem(makeToolOptionItem(
+            item.strings.workspaceMosaicModeTitle(.rectangle),
+            item: item,
+            option: .mosaicMode(.rectangle),
+            symbolName: symbolName(for: ImageAnnotationMosaicMode.rectangle)
+        ))
+        menu.addItem(makeToolOptionItem(
+            item.strings.workspaceMosaicModeTitle(.brush),
+            item: item,
+            option: .mosaicMode(.brush),
+            symbolName: symbolName(for: ImageAnnotationMosaicMode.brush)
+        ))
+        updateMenuStates(menu, for: item)
+        return menu
+    }
+
+    private func makeColorOptionsMenu(for item: ImageWorkspaceItem) -> NSMenu {
+        let menu = NSMenu()
+        addColorItems(to: menu, item: item)
+        updateMenuStates(menu, for: item)
+        return menu
+    }
+
+    private func makeThicknessOptionsMenu(for item: ImageWorkspaceItem) -> NSMenu {
+        let menu = NSMenu()
+        addLineWidthItems(to: menu, item: item)
+        updateMenuStates(menu, for: item)
+        return menu
+    }
+
+    private func makeFontSizeOptionsMenu(for item: ImageWorkspaceItem) -> NSMenu {
+        let menu = NSMenu()
+        addFontSizeItems(to: menu, item: item)
+        updateMenuStates(menu, for: item)
+        return menu
+    }
+
+    private func addColorItems(to menu: NSMenu, item: ImageWorkspaceItem) {
+        for color in Self.annotationColors {
+            let title = item.strings.workspaceColorTitle(color)
+            let menuItem = makeMenuItem(
+                title: title,
+                action: #selector(toolOptionMenuItemClicked),
+                representedObject: ImageWorkspaceToolOption(item: item, option: .strokeColor(color))
+            )
+            menuItem.image = colorSwatchImage(color: color, title: title)
+            menu.addItem(menuItem)
+        }
+    }
+
+    private func addLineWidthItems(to menu: NSMenu, item: ImageWorkspaceItem) {
+        for lineWidth in Self.annotationLineWidths {
+            menu.addItem(makeToolOptionItem(
+                item.strings.workspaceLineWidth(lineWidth),
+                item: item,
+                option: .lineWidth(lineWidth),
+                symbolName: "line.diagonal"
+            ))
+        }
+    }
+
+    private func addFontSizeItems(to menu: NSMenu, item: ImageWorkspaceItem) {
+        for fontSize in Self.textFontSizes {
+            menu.addItem(makeToolOptionItem(item.strings.workspaceFontSize(fontSize), item: item, option: .fontSize(fontSize), symbolName: "textformat.size"))
+        }
+    }
+
+    private func makeToolOptionItem(
+        _ title: String,
+        item: ImageWorkspaceItem,
+        option: ImageWorkspaceToolOptionKind,
+        symbolName: String
+    ) -> NSMenuItem {
+        let menuItem = makeMenuItem(
+            title: title,
+            action: #selector(toolOptionMenuItemClicked),
+            representedObject: ImageWorkspaceToolOption(item: item, option: option)
+        )
+        menuItem.image = menuImage(symbolName: symbolName, title: title)
+        return menuItem
+    }
+
+    private func updateOptionMenuStates(for item: ImageWorkspaceItem) {
+        updateMenuStates(item.colorButton?.menu, for: item)
+        updateMenuStates(item.styleButton?.menu, for: item)
+    }
+
+    private func updateMenuStates(_ menu: NSMenu?, for item: ImageWorkspaceItem) {
+        guard let menu,
+              let document = item.annotationCanvas?.documentForTesting else {
+            return
+        }
+
+        for menuItem in menu.items {
+            guard let option = (menuItem.representedObject as? ImageWorkspaceToolOption)?.option else {
+                continue
+            }
+
+            menuItem.state = isOptionSelected(option, in: document) ? .on : .off
+        }
+    }
+
+    private func isOptionSelected(_ option: ImageWorkspaceToolOptionKind, in document: ImageAnnotationDocument) -> Bool {
+        switch option {
+        case let .shapeKind(shapeKind):
+            document.editingOptions.shapeKind == shapeKind
+        case let .mosaicMode(mosaicMode):
+            document.editingOptions.mosaicMode == mosaicMode
+        case let .strokeColor(color):
+            document.editingOptions.style.strokeColor == color
+        case let .lineWidth(lineWidth):
+            abs(document.editingOptions.style.lineWidth - lineWidth) < 0.01
+        case let .fontSize(fontSize):
+            abs(document.editingOptions.style.fontSize - fontSize) < 0.01
+        case let .fontWeight(fontWeight):
+            document.editingOptions.style.fontWeight == fontWeight
+        }
+    }
+
+    private func makeSaveCurrentMenu(for item: ImageWorkspaceItem) -> NSMenu {
+        let menu = NSMenu()
+        let replaceItem = makeMenuItem(
+            title: item.strings.workspaceReplaceCurrent,
+            action: #selector(replaceCurrentMenuItemClicked),
+            representedObject: item
+        )
+        replaceItem.image = menuImage(symbolName: "arrow.triangle.2.circlepath", title: item.strings.workspaceReplaceCurrent)
+        let saveAsNewItem = makeMenuItem(
+            title: item.strings.workspaceSaveAsNew,
+            action: #selector(saveAsNewMenuItemClicked),
+            representedObject: item
+        )
+        saveAsNewItem.image = menuImage(symbolName: "square.and.arrow.down", title: item.strings.workspaceSaveAsNew)
+        menu.addItem(replaceItem)
+        menu.addItem(saveAsNewItem)
+        return menu
     }
 
     @objc private func copyButtonClicked(_ sender: NSButton) {
@@ -448,6 +770,33 @@ final class ImageWorkspacePanelController: NSObject {
         guard sender.isEnabled else {
             return
         }
+
+        guard let menu = sender.menu else {
+            return
+        }
+
+        menu.popUp(
+            positioning: nil,
+            at: NSPoint(x: sender.bounds.minX, y: sender.bounds.maxY + 4),
+            in: sender
+        )
+    }
+
+    @objc private func toolbarMenuButtonClicked(_ sender: NSButton) {
+        guard sender.isEnabled,
+              let menu = sender.menu else {
+            return
+        }
+
+        if let item = workspaceItem(for: sender.window) {
+            updateMenuStates(menu, for: item)
+        }
+
+        menu.popUp(
+            positioning: nil,
+            at: NSPoint(x: sender.bounds.minX, y: sender.bounds.maxY + 4),
+            in: sender
+        )
     }
 
     @objc private func toolButtonClicked(_ sender: NSButton) {
@@ -461,6 +810,41 @@ final class ImageWorkspacePanelController: NSObject {
         }
 
         select(tool, in: item)
+    }
+
+    @objc private func shapeToolButtonClicked(_ sender: NSButton) {
+        guard sender.isEnabled else {
+            return
+        }
+
+        guard let item = workspaceItem(for: sender.window),
+              let shapeKind = shapeKind(for: sender.tag),
+              let canvas = item.annotationCanvas else {
+            return
+        }
+
+        canvas.setShapeKind(shapeKind)
+        saveEditingOptions(for: item)
+        select(.shape, in: item)
+    }
+
+    @objc private func toolOptionsButtonClicked(_ sender: NSButton) {
+        guard sender.isEnabled,
+              let menu = sender.menu else {
+            return
+        }
+
+        if let item = workspaceItem(for: sender.window),
+           let tool = tool(for: sender.tag) {
+            select(tool, in: item)
+            updateMenuStates(menu, for: item)
+        }
+
+        menu.popUp(
+            positioning: nil,
+            at: NSPoint(x: sender.bounds.minX, y: sender.bounds.maxY + 4),
+            in: sender
+        )
     }
 
     @objc private func copyMenuItemClicked(_ sender: NSMenuItem) {
@@ -488,6 +872,7 @@ final class ImageWorkspacePanelController: NSObject {
         _ = show(
             screenshot: item.screenshot,
             kind: .temporaryPreview,
+            strings: item.strings,
             copy: item.copy,
             save: item.save
         )
@@ -497,6 +882,81 @@ final class ImageWorkspacePanelController: NSObject {
         guard sender.isEnabled else {
             return
         }
+
+        guard let item = sender.representedObject as? ImageWorkspaceItem else {
+            return
+        }
+
+        saveCurrentRendition(for: item)
+    }
+
+    @objc private func replaceCurrentMenuItemClicked(_ sender: NSMenuItem) {
+        guard let item = sender.representedObject as? ImageWorkspaceItem else {
+            return
+        }
+
+        saveCurrentRendition(for: item)
+    }
+
+    @objc private func saveAsNewMenuItemClicked(_ sender: NSMenuItem) {
+        guard let item = sender.representedObject as? ImageWorkspaceItem else {
+            return
+        }
+
+        _ = saveAsNewRendition(for: item)
+    }
+
+    @objc private func undoButtonClicked(_ sender: NSButton) {
+        guard sender.isEnabled else {
+            return
+        }
+
+        workspaceItem(for: sender.window)?.annotationCanvas?.undo()
+    }
+
+    @objc private func redoButtonClicked(_ sender: NSButton) {
+        guard sender.isEnabled else {
+            return
+        }
+
+        workspaceItem(for: sender.window)?.annotationCanvas?.redo()
+    }
+
+    @objc private func toolOptionMenuItemClicked(_ sender: NSMenuItem) {
+        guard let option = sender.representedObject as? ImageWorkspaceToolOption,
+              let item = option.item,
+              let canvas = item.annotationCanvas else {
+            return
+        }
+
+        var style = canvas.documentForTesting.editingOptions.style
+        switch option.option {
+        case let .shapeKind(shapeKind):
+            canvas.setShapeKind(shapeKind)
+            select(.shape, in: item)
+            updatePrimaryToolButtons(for: item)
+        case let .mosaicMode(mosaicMode):
+            canvas.setMosaicMode(mosaicMode)
+            select(.mosaic, in: item)
+            updatePrimaryToolButtons(for: item)
+        case let .strokeColor(color):
+            style.strokeColor = color
+            canvas.setStyle(style)
+            updatePrimaryToolButtons(for: item)
+        case let .lineWidth(lineWidth):
+            style.lineWidth = lineWidth
+            canvas.setStyle(style)
+        case let .fontSize(fontSize):
+            style.fontSize = fontSize
+            canvas.setStyle(style)
+        case let .fontWeight(fontWeight):
+            style.fontWeight = fontWeight
+            canvas.setStyle(style)
+        }
+
+        saveEditingOptions(for: item)
+        updateMenuStates(sender.menu, for: item)
+        updateOptionMenuStates(for: item)
     }
 
     @objc private func toolMenuItemClicked(_ sender: NSMenuItem) {
@@ -511,39 +971,258 @@ final class ImageWorkspacePanelController: NSObject {
         select(selection.tool, in: selection.item)
     }
 
-    private func select(_ tool: ImageEditingTool, in item: ImageWorkspaceItem) {
+    private func select(_ tool: ImageAnnotationTool, in item: ImageWorkspaceItem) {
         item.state.select(tool)
+        item.annotationCanvas?.selectTool(tool)
+        item.textSelectionOverlay?.setTextSelectionEnabled(tool == .select)
+        updatePrimaryToolButtons(for: item)
+        updateSelectionStates(for: item)
+    }
+
+    private func saveEditingOptions(for item: ImageWorkspaceItem) {
+        guard let options = item.annotationCanvas?.documentForTesting.editingOptions else {
+            return
+        }
+
+        persistEditingOptions(options)
+    }
+
+    private func updateSelectionStates(for item: ImageWorkspaceItem) {
+        let selectedTool = item.state.selectedTool
+        let selectedShapeKind = item.annotationCanvas?.documentForTesting.editingOptions.shapeKind
         for toolButton in item.toolButtons {
-            let isSelected = toolButton.tool == tool
-            toolButton.button.state = isSelected ? .on : .off
-            toolButton.button.contentTintColor = isSelected ? .controlAccentColor : .labelColor
-            if let toolbarButton = toolButton.button as? ImageWorkspaceToolbarButton {
-                toolbarButton.isWorkspaceSelected = isSelected
-            }
+            updateSelectionState(
+                for: toolButton.button,
+                isSelected: toolButton.tool == selectedTool
+            )
+        }
+        for shapeButton in item.shapeKindButtons {
+            updateSelectionState(
+                for: shapeButton.button,
+                isSelected: selectedTool == .shape && shapeButton.shapeKind == selectedShapeKind
+            )
         }
     }
 
+    private func updateSelectionState(for button: NSButton, isSelected: Bool) {
+        button.state = isSelected ? .on : .off
+        button.contentTintColor = isSelected ? .controlAccentColor : .labelColor
+        if let toolbarButton = button as? ImageWorkspaceToolbarButton {
+            toolbarButton.isWorkspaceSelected = isSelected
+        }
+    }
+
+    private func updatePrimaryToolButtons(for item: ImageWorkspaceItem) {
+        guard let document = item.annotationCanvas?.documentForTesting else {
+            return
+        }
+
+        if let mosaicButton = toolButton(for: .mosaic, in: item) {
+            let title = item.strings.workspaceMosaicModeTitle(document.editingOptions.mosaicMode)
+            updatePrimaryToolButton(
+                mosaicButton,
+                symbolName: symbolName(for: document.editingOptions.mosaicMode),
+                title: title
+            )
+        }
+
+        updateColorButton(for: item, color: document.editingOptions.style.strokeColor)
+        updateStyleButton(for: item)
+    }
+
+    private func updatePrimaryToolButton(_ button: NSButton, symbolName: String, title: String) {
+        button.image = toolbarImage(symbolName: symbolName, title: title)
+        button.toolTip = title
+        button.setAccessibilityHelp(title)
+    }
+
+    private func updateColorButton(for item: ImageWorkspaceItem, color: ImageAnnotationColor) {
+        guard let colorButton = item.colorButton else {
+            return
+        }
+
+        let title = item.strings.workspaceColorTitle(color)
+        colorButton.image = colorSwatchImage(color: color, title: title)
+        colorButton.contentTintColor = nil
+        colorButton.toolTip = title
+        colorButton.setAccessibilityHelp(title)
+    }
+
+    private func updateStyleButton(for item: ImageWorkspaceItem) {
+        guard let styleButton = item.styleButton else {
+            return
+        }
+
+        switch item.state.selectedTool {
+        case .text:
+            updateMenuButton(
+                styleButton,
+                title: item.strings.workspaceFontSizeOptions,
+                symbolName: "textformat.size",
+                menu: makeFontSizeOptionsMenu(for: item),
+                isEnabled: true
+            )
+        case .shape, .brush, .highlight:
+            updateMenuButton(
+                styleButton,
+                title: item.strings.workspaceThicknessOptions,
+                symbolName: "lineweight",
+                menu: makeThicknessOptionsMenu(for: item),
+                isEnabled: true
+            )
+        case .select, .mosaic, nil:
+            updateMenuButton(
+                styleButton,
+                title: item.strings.workspaceThicknessOptions,
+                symbolName: "lineweight",
+                menu: makeThicknessOptionsMenu(for: item),
+                isEnabled: false
+            )
+        }
+    }
+
+    private func updateMenuButton(
+        _ button: NSButton,
+        title: String,
+        symbolName: String,
+        menu: NSMenu,
+        isEnabled: Bool
+    ) {
+        button.image = toolbarImage(symbolName: symbolName, title: title)
+        button.menu = menu
+        button.isEnabled = isEnabled
+        button.contentTintColor = isEnabled ? .labelColor : .disabledControlTextColor
+        button.toolTip = title
+        button.setAccessibilityLabel(title)
+        button.setAccessibilityHelp(title)
+    }
+
+    private func updateDocumentControls(for item: ImageWorkspaceItem, document: ImageAnnotationDocument) {
+        item.saveCurrentButton?.isEnabled = document.hasUncommittedEdits
+        item.saveCurrentButton?.contentTintColor = document.hasUncommittedEdits ? .labelColor : .disabledControlTextColor
+        updateHistoryButton(item.undoButton, isEnabled: document.canUndo)
+        updateHistoryButton(item.redoButton, isEnabled: document.canRedo)
+    }
+
+    private func updateHistoryButton(_ button: NSButton?, isEnabled: Bool) {
+        button?.isEnabled = isEnabled
+        button?.contentTintColor = isEnabled ? .labelColor : .disabledControlTextColor
+    }
+
+    private func toolButton(for tool: ImageAnnotationTool, in item: ImageWorkspaceItem) -> NSButton? {
+        item.toolButtons.first { $0.tool == tool }?.button
+    }
+
     private func copyOutput(for item: ImageWorkspaceItem) {
-        guard item.copy() else {
+        guard let screenshot = renderedScreenshot(for: item),
+              item.copy(screenshot) else {
             return
         }
 
         if item.state.kind == .temporaryPreview {
-            closeWorkspace(item)
+            closeWorkspace(item, prompting: false)
         }
     }
 
     private func downloadOutput(for item: ImageWorkspaceItem) {
-        guard item.save() else {
+        guard let screenshot = renderedScreenshot(for: item),
+              item.save(screenshot) else {
             return
         }
 
         if item.state.kind == .temporaryPreview {
-            closeWorkspace(item)
+            closeWorkspace(item, prompting: false)
         }
     }
 
-    private func closeWorkspace(_ item: ImageWorkspaceItem) {
+    @discardableResult
+    private func saveCurrentRendition(for item: ImageWorkspaceItem) -> Bool {
+        guard let screenshot = renderedScreenshot(for: item) else {
+            return false
+        }
+
+        item.screenshot = screenshot
+        item.annotationCanvas?.setBaseScreenshot(screenshot)
+        item.annotationCanvas?.markCurrentRenditionSaved()
+        item.replaceCurrent?(screenshot)
+        item.saveCurrentButton?.isEnabled = false
+        item.saveCurrentButton?.contentTintColor = .disabledControlTextColor
+        updateDocumentControls(for: item, document: item.annotationCanvas?.documentForTesting ?? ImageAnnotationDocument())
+        return true
+    }
+
+    @discardableResult
+    private func saveAsNewRendition(for item: ImageWorkspaceItem) -> Bool {
+        guard let screenshot = renderedScreenshot(for: item, preservingID: false) else {
+            return false
+        }
+
+        if let saveAsNew = item.saveAsNew {
+            return saveAsNew(screenshot)
+        }
+
+        return item.save(screenshot)
+    }
+
+    private func renderedScreenshot(for item: ImageWorkspaceItem, preservingID: Bool = true) -> CapturedScreenshot? {
+        guard let canvas = item.annotationCanvas else {
+            return item.screenshot
+        }
+
+        do {
+            return try ImageAnnotationRenderer().render(
+                screenshot: item.screenshot,
+                document: canvas.documentForTesting,
+                preservingID: preservingID
+            )
+        } catch {
+            NSLog("Frame 编辑截图渲染失败: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func shouldCloseWorkspace(_ item: ImageWorkspaceItem) -> Bool {
+        guard item.state.kind == .temporaryPreview,
+              item.annotationCanvas?.documentForTesting.hasUncommittedEdits == true else {
+            return true
+        }
+
+        switch item.closeSaveChoice?() ?? presentCloseSaveChoice(for: item) {
+        case .replaceCurrent:
+            return saveCurrentRendition(for: item)
+        case .saveAsNew:
+            return saveAsNewRendition(for: item)
+        case .discard:
+            return true
+        case .cancel:
+            return false
+        }
+    }
+
+    private func presentCloseSaveChoice(for item: ImageWorkspaceItem) -> ImageWorkspaceCloseSaveChoice {
+        let alert = NSAlert()
+        alert.messageText = item.strings.workspaceUnsavedChangesTitle
+        alert.informativeText = item.strings.workspaceUnsavedChangesMessage
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: item.strings.workspaceReplaceCurrent)
+        alert.addButton(withTitle: item.strings.workspaceSaveAsNew)
+        alert.addButton(withTitle: item.strings.workspaceDiscardEdits)
+        alert.addButton(withTitle: item.strings.cancel)
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            return .replaceCurrent
+        case .alertSecondButtonReturn:
+            return .saveAsNew
+        case .alertThirdButtonReturn:
+            return .discard
+        default:
+            return .cancel
+        }
+    }
+
+    private func closeWorkspace(_ item: ImageWorkspaceItem, prompting: Bool = true) {
+        item.panel.suppressesClosePrompt = !prompting
         item.panel.close()
     }
 
@@ -574,87 +1253,180 @@ final class ImageWorkspacePanelController: NSObject {
         }
     }
 
-    private func title(for tool: ImageEditingTool) -> String {
-        switch tool {
-        case .mosaic:
-            "Mosaic"
-        case .shapeBox:
-            "Shape Box"
-        case .brush:
-            "Brush"
-        case .text:
-            "Text"
-        case .arrow:
-            "Arrow"
-        case .highlight:
-            "Highlight"
+    private func title(for toolbarItem: ImageWorkspaceToolbarItem, strings: AppStrings) -> String {
+        switch toolbarItem {
+        case let .tool(tool):
+            strings.workspaceToolTitle(tool)
+        case let .shape(shapeKind):
+            strings.workspaceShapeKindTitle(shapeKind)
         }
     }
 
-    private func symbolName(for tool: ImageEditingTool) -> String {
+    private func optionsTitle(for toolbarItem: ImageWorkspaceToolbarItem, strings: AppStrings) -> String {
+        switch toolbarItem {
+        case let .tool(tool):
+            strings.workspaceToolOptionsTitle(tool)
+        case let .shape(shapeKind):
+            "\(strings.workspaceShapeKindTitle(shapeKind)) Options"
+        }
+    }
+
+    private func action(for toolbarItem: ImageWorkspaceToolbarItem) -> Selector {
+        switch toolbarItem {
+        case .tool:
+            #selector(toolButtonClicked)
+        case .shape:
+            #selector(shapeToolButtonClicked)
+        }
+    }
+
+    private func symbolName(for toolbarItem: ImageWorkspaceToolbarItem) -> String {
+        switch toolbarItem {
+        case let .tool(tool):
+            symbolName(for: tool)
+        case let .shape(shapeKind):
+            symbolName(for: shapeKind)
+        }
+    }
+
+    private func symbolName(for tool: ImageAnnotationTool) -> String {
         switch tool {
+        case .select:
+            "cursorarrow"
         case .mosaic:
-            "square.grid.3x3.fill"
-        case .shapeBox:
-            "rectangle"
+            symbolName(for: ImageAnnotationMosaicMode.rectangle)
+        case .shape:
+            symbolName(for: ImageAnnotationShapeKind.rectangle)
         case .brush:
-            "paintbrush"
+            "pencil"
         case .text:
             "textformat"
-        case .arrow:
-            "arrow.up.right"
         case .highlight:
             "highlighter"
         }
     }
 
-    private func tag(for tool: ImageEditingTool) -> Int {
-        switch tool {
-        case .mosaic:
-            1
-        case .shapeBox:
-            2
-        case .brush:
-            3
-        case .text:
-            4
+    private func symbolName(for shapeKind: ImageAnnotationShapeKind) -> String {
+        switch shapeKind {
+        case .rectangle:
+            "rectangle"
+        case .ellipse:
+            "circle"
+        case .line:
+            "line.diagonal"
         case .arrow:
+            "arrow.up.right"
+        }
+    }
+
+    private func symbolName(for mosaicMode: ImageAnnotationMosaicMode) -> String {
+        switch mosaicMode {
+        case .rectangle:
+            "checkerboard.rectangle"
+        case .brush:
+            "paintbrush.pointed.fill"
+        }
+    }
+
+    private func tag(for tool: ImageAnnotationTool) -> Int {
+        switch tool {
+        case .select:
+            1
+        case .mosaic:
+            2
+        case .shape:
+            3
+        case .brush:
+            4
+        case .text:
             5
         case .highlight:
             6
         }
     }
 
-    private func tool(for tag: Int) -> ImageEditingTool? {
+    private func tag(for shapeKind: ImageAnnotationShapeKind) -> Int {
+        switch shapeKind {
+        case .rectangle:
+            101
+        case .ellipse:
+            102
+        case .line:
+            103
+        case .arrow:
+            104
+        }
+    }
+
+    private func tag(for toolbarItem: ImageWorkspaceToolbarItem) -> Int {
+        switch toolbarItem {
+        case let .tool(tool):
+            tag(for: tool)
+        case let .shape(shapeKind):
+            tag(for: shapeKind)
+        }
+    }
+
+    private func tool(for tag: Int) -> ImageAnnotationTool? {
         switch tag {
         case 1:
-            .mosaic
+            .select
         case 2:
-            .shapeBox
+            .mosaic
         case 3:
-            .brush
+            .shape
         case 4:
-            .text
+            .brush
         case 5:
-            .arrow
+            .text
         case 6:
             .highlight
         default:
             nil
         }
     }
+
+    private func shapeKind(for tag: Int) -> ImageAnnotationShapeKind? {
+        switch tag {
+        case 101:
+            .rectangle
+        case 102:
+            .ellipse
+        case 103:
+            .line
+        case 104:
+            .arrow
+        default:
+            nil
+        }
+    }
+
+    private static let annotationLineWidths: [CGFloat] = [1, 2, 4, 8, 12, 16, 24]
+    private static let textFontSizes: [CGFloat] = [12, 14, 16, 18, 22, 28, 36, 48]
+    private static let annotationColors: [ImageAnnotationColor] = [.red, .yellow, .blue, .green]
 }
 
 private final class ImageWorkspaceItem {
     var state: ImageWorkspaceState
     let panel: ImageWorkspacePanel
-    let screenshot: CapturedScreenshot
-    let copy: () -> Bool
-    let save: () -> Bool
+    var screenshot: CapturedScreenshot
+    let strings: AppStrings
+    let copy: (CapturedScreenshot) -> Bool
+    let save: (CapturedScreenshot) -> Bool
     let recognizeText: ((CapturedScreenshot) async throws -> RecognizedTextLayout)?
     let copyRecognizedText: ((String) -> Bool)?
+    let replaceCurrent: ((CapturedScreenshot) -> Void)?
+    let saveAsNew: ((CapturedScreenshot) -> Bool)?
+    let closeSaveChoice: (() -> ImageWorkspaceCloseSaveChoice)?
     var notificationObservers: [NSObjectProtocol] = []
-    var toolButtons: [(tool: ImageEditingTool, button: NSButton)] = []
+    var toolButtons: [(tool: ImageAnnotationTool, button: NSButton)] = []
+    var shapeKindButtons: [(shapeKind: ImageAnnotationShapeKind, button: NSButton)] = []
+    weak var annotationCanvas: ImageAnnotationCanvasView?
+    weak var saveCurrentButton: NSButton?
+    weak var colorButton: NSButton?
+    weak var styleButton: NSButton?
+    weak var undoButton: NSButton?
+    weak var redoButton: NSButton?
     weak var textSelectionOverlay: ImageWorkspaceTextSelectionOverlayView?
     var ocrTask: Task<Void, Never>?
 
@@ -662,29 +1434,84 @@ private final class ImageWorkspaceItem {
         state: ImageWorkspaceState,
         panel: ImageWorkspacePanel,
         screenshot: CapturedScreenshot,
-        copy: @escaping () -> Bool,
-        save: @escaping () -> Bool,
+        strings: AppStrings,
+        copy: @escaping (CapturedScreenshot) -> Bool,
+        save: @escaping (CapturedScreenshot) -> Bool,
         recognizeText: ((CapturedScreenshot) async throws -> RecognizedTextLayout)?,
-        copyRecognizedText: ((String) -> Bool)?
+        copyRecognizedText: ((String) -> Bool)?,
+        replaceCurrent: ((CapturedScreenshot) -> Void)?,
+        saveAsNew: ((CapturedScreenshot) -> Bool)?,
+        closeSaveChoice: (() -> ImageWorkspaceCloseSaveChoice)?
     ) {
         self.state = state
         self.panel = panel
         self.screenshot = screenshot
+        self.strings = strings
         self.copy = copy
         self.save = save
         self.recognizeText = recognizeText
         self.copyRecognizedText = copyRecognizedText
+        self.replaceCurrent = replaceCurrent
+        self.saveAsNew = saveAsNew
+        self.closeSaveChoice = closeSaveChoice
     }
+}
+
+enum ImageWorkspaceCloseSaveChoice {
+    case replaceCurrent
+    case saveAsNew
+    case discard
+    case cancel
 }
 
 private final class ImageWorkspaceToolMenuSelection: NSObject {
     let item: ImageWorkspaceItem
-    let tool: ImageEditingTool
+    let tool: ImageAnnotationTool
 
-    init(item: ImageWorkspaceItem, tool: ImageEditingTool) {
+    init(item: ImageWorkspaceItem, tool: ImageAnnotationTool) {
         self.item = item
         self.tool = tool
     }
+}
+
+private enum ImageWorkspaceToolbarItem: Equatable {
+    case tool(ImageAnnotationTool)
+    case shape(ImageAnnotationShapeKind)
+}
+
+private enum ImageWorkspaceToolbarToolOrder {
+    static let items: [ImageWorkspaceToolbarItem] = [
+        .tool(.select),
+        .shape(.rectangle),
+        .shape(.ellipse),
+        .shape(.line),
+        .shape(.arrow),
+        .tool(.brush),
+        .tool(.text),
+        .tool(.highlight),
+        .tool(.mosaic),
+    ]
+
+    static let tools: [ImageAnnotationTool] = [.select, .shape, .brush, .text, .highlight, .mosaic]
+}
+
+private final class ImageWorkspaceToolOption: NSObject {
+    weak var item: ImageWorkspaceItem?
+    let option: ImageWorkspaceToolOptionKind
+
+    init(item: ImageWorkspaceItem, option: ImageWorkspaceToolOptionKind) {
+        self.item = item
+        self.option = option
+    }
+}
+
+private enum ImageWorkspaceToolOptionKind {
+    case shapeKind(ImageAnnotationShapeKind)
+    case mosaicMode(ImageAnnotationMosaicMode)
+    case strokeColor(ImageAnnotationColor)
+    case lineWidth(CGFloat)
+    case fontSize(CGFloat)
+    case fontWeight(ImageAnnotationFontWeight)
 }
 
 private enum ImageWorkspaceLayout {
@@ -699,6 +1526,7 @@ private enum ImageWorkspaceLayout {
     static let imageTopSpacing: CGFloat = 6
     static let imageBottomInset: CGFloat = 0
     static let editingToolSize: CGFloat = 24
+    static let toolOptionsButtonWidth: CGFloat = 14
     static let editingToolSpacing: CGFloat = 4
     static let outputButtonWidth: CGFloat = 26
     static let minimumSpacerWidth: CGFloat = 12
@@ -732,9 +1560,15 @@ private enum ImageWorkspaceLayout {
     }
 
     private static var minimumToolbarWidth: CGFloat {
-        let toolCount = CGFloat(ImageEditingTool.allCases.count)
-        let editingToolsWidth = editingToolSize * toolCount + editingToolSpacing * max(0, toolCount - 1)
-        let arrangedSubviewSpacing = toolbarStackSpacing * 3
+        let splitToolCount: CGFloat = 1
+        let toolbarItemCount = CGFloat(ImageWorkspaceToolbarToolOrder.items.count)
+        let globalOptionButtonCount: CGFloat = 2
+        let undoRedoButtonCount: CGFloat = 2
+        let toolButtonCount = undoRedoButtonCount + toolbarItemCount + globalOptionButtonCount
+        let editingToolsWidth = editingToolSize * toolButtonCount
+            + toolOptionsButtonWidth * splitToolCount
+            + editingToolSpacing * max(0, toolButtonCount - 1)
+        let arrangedSubviewSpacing = toolbarStackSpacing * 4
         return toolbarStackLeadingInset
             + toolbarStackTrailingInset
             + editingToolsWidth
@@ -766,6 +1600,8 @@ private enum ImageWorkspaceResizeAxis {
 private final class ImageWorkspacePanel: NSPanel, NSWindowDelegate {
     var onEscape: (() -> Void)?
     var onClose: (() -> Void)?
+    var shouldClose: (() -> Bool)?
+    var suppressesClosePrompt = false
     private var imageAspectRatio: CGFloat?
     private var isLiveAspectResize = false
     private var liveResizeAxis: ImageWorkspaceResizeAxis?
@@ -798,10 +1634,18 @@ private final class ImageWorkspacePanel: NSPanel, NSWindowDelegate {
     }
 
     override func close() {
+        if contentView != nil,
+           !suppressesClosePrompt,
+           shouldClose?() == false {
+            return
+        }
+
         let closeHandler = onClose
         onClose = nil
+        shouldClose = nil
         closeHandler?()
         super.close()
+        suppressesClosePrompt = false
     }
 
     override func keyDown(with event: NSEvent) {

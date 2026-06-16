@@ -46,6 +46,16 @@ final class SelectionOverlayChromeTests: XCTestCase {
         XCTAssertEqual(ScreenLuminanceSampler.estimatedBackgroundLuminance(from: samples), 0.88)
     }
 
+    func testHUDBackgroundEstimateKeepsLightBackgroundWithSubstantialDarkForegroundLight() {
+        let samples = Array(repeating: CGFloat(0.88), count: 92)
+            + Array(repeating: CGFloat(0.08), count: 36)
+
+        let luminance = ScreenLuminanceSampler.estimatedBackgroundLuminance(from: samples)
+
+        XCTAssertEqual(luminance, 0.88)
+        XCTAssertTrue(ScreenLuminanceSampler.prefersLightHUDContent(backgroundLuminance: luminance ?? 0))
+    }
+
     func testHUDBackgroundEstimateKeepsMostlyDarkBackgroundDark() {
         let samples = Array(repeating: CGFloat(0.14), count: 80)
             + Array(repeating: CGFloat(0.78), count: 20)
@@ -60,9 +70,10 @@ final class SelectionOverlayChromeTests: XCTestCase {
         XCTAssertEqual(ScreenLuminanceSampler.estimatedBackgroundLuminance(from: samples), 0.46)
     }
 
-    func testHUDThemeKeepsLightContentOnMiddleGrayBackgrounds() {
+    func testHUDThemeAlwaysUsesLightContentForWhiteIcons() {
+        XCTAssertTrue(ScreenLuminanceSampler.prefersLightHUDContent(backgroundLuminance: 0.10))
         XCTAssertTrue(ScreenLuminanceSampler.prefersLightHUDContent(backgroundLuminance: 0.54))
-        XCTAssertFalse(ScreenLuminanceSampler.prefersLightHUDContent(backgroundLuminance: 0.70))
+        XCTAssertTrue(ScreenLuminanceSampler.prefersLightHUDContent(backgroundLuminance: 0.70))
     }
 }
 

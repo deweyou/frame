@@ -49,6 +49,7 @@ final class QuickAccessPanelController: NSObject {
                 ocrButton: content.ocrButton,
                 ocrProgressIndicator: content.ocrProgressIndicator,
                 statusLabel: content.statusLabel,
+                screenshotImageView: content.imageView,
                 copy: copy,
                 save: save,
                 recognizeText: recognizeText,
@@ -102,6 +103,7 @@ final class QuickAccessPanelController: NSObject {
                 ocrButton: nil,
                 ocrProgressIndicator: nil,
                 statusLabel: nil,
+                screenshotImageView: nil,
                 copy: nil,
                 save: nil,
                 recognizeText: nil,
@@ -128,6 +130,20 @@ final class QuickAccessPanelController: NSObject {
         }
 
         closePreview(item, notify: notify)
+        return true
+    }
+
+    @discardableResult
+    func updatePreview(for screenshot: CapturedScreenshot) -> Bool {
+        guard let item = previewItems.first(where: { $0.screenshotID == screenshot.id }) else {
+            return false
+        }
+
+        item.screenshotImageView?.setImage(screenshot.image)
+        item.hoverPreviewMedia = .image(screenshot.image)
+        item.hoverPreviewWorkItem?.cancel()
+        item.hoverPreviewWorkItem = nil
+        hoverPreviewController.close()
         return true
     }
 
@@ -418,6 +434,7 @@ final class QuickAccessPanelController: NSObject {
 
         return QuickAccessContent(
             view: contentView,
+            imageView: imageView,
             ocrButton: ocrButton,
             ocrProgressIndicator: ocrProgressIndicator,
             statusLabel: statusLabel
@@ -663,6 +680,12 @@ final class QuickAccessPanelController: NSObject {
 
     func hoverPreviewBubbleMetricsForTesting() -> QuickAccessHoverPreviewMetricsForTesting? {
         hoverPreviewController.bubbleMetricsForTesting()
+    }
+
+    func screenshotPreviewPNGDataForTesting(for screenshot: CapturedScreenshot) -> Data? {
+        previewItems.first { $0.screenshotID == screenshot.id }?
+            .screenshotImageView?
+            .pngDataForTesting()
     }
 
     private func scheduleHoverPreview(for window: NSWindow?) {
@@ -936,6 +959,7 @@ enum QuickAccessOCRStatus: Equatable {
 
 private struct QuickAccessContent {
     let view: NSView
+    let imageView: AspectFillImageView
     let ocrButton: NSButton
     let ocrProgressIndicator: NSProgressIndicator
     let statusLabel: NSTextField
@@ -953,6 +977,7 @@ private final class QuickAccessPreviewItem {
     let ocrButton: NSButton?
     let ocrProgressIndicator: NSProgressIndicator?
     let statusLabel: NSTextField?
+    weak var screenshotImageView: AspectFillImageView?
     let copy: (() -> Bool)?
     let save: (() -> Bool)?
     let recognizeText: (() -> Bool)?
@@ -961,7 +986,7 @@ private final class QuickAccessPreviewItem {
     let downloadRecording: (() -> Bool)?
     let copyRecording: (() -> Bool)?
     let previewRecording: (() -> Bool)?
-    let hoverPreviewMedia: QuickAccessHoverPreviewMedia
+    var hoverPreviewMedia: QuickAccessHoverPreviewMedia
     let close: () -> Void
     var isTemporarilyHidden = false
     var statusResetWorkItem: DispatchWorkItem?
@@ -974,6 +999,7 @@ private final class QuickAccessPreviewItem {
         ocrButton: NSButton?,
         ocrProgressIndicator: NSProgressIndicator?,
         statusLabel: NSTextField?,
+        screenshotImageView: AspectFillImageView?,
         copy: (() -> Bool)?,
         save: (() -> Bool)?,
         recognizeText: (() -> Bool)?,
@@ -991,6 +1017,7 @@ private final class QuickAccessPreviewItem {
         self.ocrButton = ocrButton
         self.ocrProgressIndicator = ocrProgressIndicator
         self.statusLabel = statusLabel
+        self.screenshotImageView = screenshotImageView
         self.copy = copy
         self.save = save
         self.recognizeText = recognizeText
@@ -1670,7 +1697,7 @@ private final class PointingHandButton: NSButton {
 }
 
 private final class AspectFillImageView: NSView {
-    private let image: NSImage
+    private var image: NSImage
 
     init(image: NSImage) {
         self.image = image
@@ -1682,6 +1709,15 @@ private final class AspectFillImageView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         nil
+    }
+
+    func setImage(_ image: NSImage) {
+        self.image = image
+        needsDisplay = true
+    }
+
+    func pngDataForTesting() -> Data? {
+        image.pngData()
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -1790,5 +1826,16 @@ private final class RecordingThumbnailImageView: NSView, RecordingThumbnailDrawa
             imageSize: sourceSize,
             in: bounds
         )
+    }
+}
+
+private extension NSImage {
+    func pngData() -> Data? {
+        guard let tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffRepresentation) else {
+            return nil
+        }
+
+        return bitmap.representation(using: .png, properties: [:])
     }
 }
