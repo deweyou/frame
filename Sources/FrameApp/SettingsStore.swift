@@ -17,6 +17,11 @@ enum SettingsStore {
     static let recordingShowsKeyboardHintsKey = "recordingShowsKeyboardHints"
     static let recordingAudioSourceKey = "recordingAudioSource"
     static let recordingMouseHintColorKey = "recordingMouseHintColor"
+    static let imageAnnotationShapeKindKey = "imageAnnotationShapeKind"
+    static let imageAnnotationMosaicModeKey = "imageAnnotationMosaicMode"
+    static let imageAnnotationStrokeColorKey = "imageAnnotationStrokeColor"
+    static let imageAnnotationLineWidthKey = "imageAnnotationLineWidth"
+    static let imageAnnotationFontSizeKey = "imageAnnotationFontSize"
 
     static func screenshotShortcut(defaults: UserDefaults = .standard) -> ScreenshotShortcut {
         ScreenshotShortcut.persistedValue(for: defaults.string(forKey: screenshotShortcutKey))
@@ -186,6 +191,125 @@ enum SettingsStore {
         defaults.set(options.showsKeyboardHints, forKey: recordingShowsKeyboardHintsKey)
         defaults.set(options.audioSource.rawValue, forKey: recordingAudioSourceKey)
         defaults.set(options.mouseHintColor.storageValue, forKey: recordingMouseHintColorKey)
+    }
+
+    static func imageAnnotationEditingOptions(defaults: UserDefaults = .standard) -> ImageAnnotationEditingOptions {
+        var options = ImageAnnotationEditingOptions()
+        options.shapeKind = ImageAnnotationShapeKind(storageValue: defaults.string(forKey: imageAnnotationShapeKindKey))
+            ?? options.shapeKind
+        options.mosaicMode = ImageAnnotationMosaicMode(storageValue: defaults.string(forKey: imageAnnotationMosaicModeKey))
+            ?? options.mosaicMode
+        options.style.strokeColor = ImageAnnotationColor(storageValue: defaults.string(forKey: imageAnnotationStrokeColorKey))
+            ?? options.style.strokeColor
+
+        let lineWidth = CGFloat(defaults.double(forKey: imageAnnotationLineWidthKey))
+        if Self.imageAnnotationLineWidths.contains(lineWidth) {
+            options.style.lineWidth = lineWidth
+        }
+
+        let fontSize = CGFloat(defaults.double(forKey: imageAnnotationFontSizeKey))
+        if [12, 14, 16, 18, 22, 28, 36, 48].contains(fontSize) {
+            options.style.fontSize = fontSize
+        }
+
+        return options
+    }
+
+    static func setImageAnnotationEditingOptions(
+        _ options: ImageAnnotationEditingOptions,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(options.shapeKind.storageValue, forKey: imageAnnotationShapeKindKey)
+        defaults.set(options.mosaicMode.storageValue, forKey: imageAnnotationMosaicModeKey)
+        defaults.set(options.style.strokeColor.storageValue, forKey: imageAnnotationStrokeColorKey)
+        defaults.set(Double(options.style.lineWidth), forKey: imageAnnotationLineWidthKey)
+        defaults.set(Double(options.style.fontSize), forKey: imageAnnotationFontSizeKey)
+    }
+
+    private static let imageAnnotationLineWidths: [CGFloat] = [1, 2, 4, 8, 12, 16, 24]
+}
+
+private extension ImageAnnotationShapeKind {
+    init?(storageValue: String?) {
+        switch storageValue {
+        case "rectangle":
+            self = .rectangle
+        case "ellipse":
+            self = .ellipse
+        case "line":
+            self = .line
+        case "arrow":
+            self = .arrow
+        default:
+            return nil
+        }
+    }
+
+    var storageValue: String {
+        switch self {
+        case .rectangle:
+            "rectangle"
+        case .ellipse:
+            "ellipse"
+        case .line:
+            "line"
+        case .arrow:
+            "arrow"
+        }
+    }
+}
+
+private extension ImageAnnotationMosaicMode {
+    init?(storageValue: String?) {
+        switch storageValue {
+        case "rectangle":
+            self = .rectangle
+        case "brush":
+            self = .brush
+        default:
+            return nil
+        }
+    }
+
+    var storageValue: String {
+        switch self {
+        case .rectangle:
+            "rectangle"
+        case .brush:
+            "brush"
+        }
+    }
+}
+
+private extension ImageAnnotationColor {
+    init?(storageValue: String?) {
+        switch storageValue {
+        case "red":
+            self = .red
+        case "yellow":
+            self = .yellow
+        case "blue":
+            self = .blue
+        case "green":
+            self = .green
+        default:
+            return nil
+        }
+    }
+
+    var storageValue: String {
+        switch self {
+        case .red:
+            "red"
+        case .yellow:
+            "yellow"
+        case .blue:
+            "blue"
+        case .green:
+            "green"
+        default:
+            "red"
+        }
     }
 }
 

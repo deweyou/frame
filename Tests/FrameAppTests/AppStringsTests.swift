@@ -124,6 +124,51 @@ final class AppStringsTests: XCTestCase {
         XCTAssertEqual(chinese.ocrCopySelected, "复制")
     }
 
+    func testWorkspaceAnnotationStringsAreLocalized() {
+        let english = AppStrings(language: .en)
+        XCTAssertEqual(english.workspaceToolTitle(.select), "Select")
+        XCTAssertEqual(english.workspaceToolTitle(.shape), "Shape")
+        XCTAssertEqual(english.workspaceToolOptionsTitle(.shape), "Shape Options")
+        XCTAssertEqual(english.workspaceShapeKindTitle(.arrow), "Arrow")
+        XCTAssertEqual(english.workspaceMosaicModeTitle(.rectangle), "Region")
+        XCTAssertEqual(english.workspaceMosaicModeTitle(.brush), "Brush")
+        XCTAssertEqual(english.workspaceColorTitle(.red), "Red")
+        XCTAssertEqual(english.workspaceColorOptions, "Color")
+        XCTAssertEqual(english.workspaceThicknessOptions, "Thickness")
+        XCTAssertEqual(english.workspaceFontSizeOptions, "Font Size")
+        XCTAssertEqual(english.workspaceSaveCurrent, "Save Current")
+        XCTAssertEqual(english.workspaceReplaceCurrent, "Replace Current")
+        XCTAssertEqual(english.workspaceSaveAsNew, "Save As New")
+        XCTAssertEqual(english.workspaceDiscardEdits, "Don't Save")
+        XCTAssertEqual(english.workspaceUnsavedChangesTitle, "Save edits?")
+        XCTAssertEqual(
+            english.workspaceUnsavedChangesMessage,
+            "Before closing, replace the current image, save a new Quick Access preview, close without saving, or cancel and keep editing."
+        )
+        XCTAssertEqual(english.cancel, "Cancel")
+
+        let chinese = AppStrings(language: .zhHans)
+        XCTAssertEqual(chinese.workspaceToolTitle(.select), "选择")
+        XCTAssertEqual(chinese.workspaceToolTitle(.shape), "形状")
+        XCTAssertEqual(chinese.workspaceToolOptionsTitle(.shape), "形状选项")
+        XCTAssertEqual(chinese.workspaceShapeKindTitle(.arrow), "箭头")
+        XCTAssertEqual(chinese.workspaceMosaicModeTitle(.rectangle), "区域")
+        XCTAssertEqual(chinese.workspaceMosaicModeTitle(.brush), "画笔")
+        XCTAssertEqual(chinese.workspaceColorTitle(.red), "红色")
+        XCTAssertEqual(chinese.workspaceColorOptions, "颜色")
+        XCTAssertEqual(chinese.workspaceThicknessOptions, "粗细")
+        XCTAssertEqual(chinese.workspaceFontSizeOptions, "字号")
+        XCTAssertEqual(chinese.workspaceSaveCurrent, "保存当前稿")
+        XCTAssertEqual(chinese.workspaceReplaceCurrent, "替换当前图")
+        XCTAssertEqual(chinese.workspaceSaveAsNew, "另存新图")
+        XCTAssertEqual(chinese.workspaceDiscardEdits, "不保存")
+        XCTAssertEqual(
+            chinese.workspaceUnsavedChangesMessage,
+            "关闭前选择替换当前图、保存为一张新的 Quick Access 预览、不保存并关闭，或取消并继续编辑。"
+        )
+        XCTAssertEqual(chinese.cancel, "取消")
+    }
+
     func testSystemChineseResolvesToSimplifiedChinese() {
         XCTAssertEqual(
             AppStrings.resolvedLanguage(for: .system, preferredLanguages: ["zh-Hans-CN"]),

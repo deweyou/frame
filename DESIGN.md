@@ -70,7 +70,7 @@ system tool, not a branded dashboard.
   `NSVisualEffectView` with a HUD-appropriate material before drawing custom
   backgrounds. In future SwiftUI surfaces, prefer Liquid Glass APIs such as
   `glassEffect` and glass button styles when the deployment target allows them.
-- The HUD is a transparent hub, not a solid toolbar.
+- The HUD is a compact dark glass hub, not a heavy solid toolbar.
 - Keep the HUD small and low-priority. It should not compete with the selected
   content.
 - Keep HUD width stable while users edit size, toggle ratio lock, or open ratio
@@ -94,8 +94,9 @@ system tool, not a branded dashboard.
 - Tooltips should be delayed and owned above the overlay/HUD layer. Default
   placement is below the hovered control, flipping above only when there is not
   enough space.
-- Adapt HUD content contrast to the background below it. Use light content on
-  dark backgrounds and dark content on light backgrounds.
+- HUD icon content stays white on a deliberately dark translucent background.
+  Do not reintroduce background-aware black/white icon switching for the
+  capture HUD.
 - Delay screenshot countdowns are passive: after the user starts the countdown,
   keep a prominent semi-transparent red countdown near the current screen's
   bottom center while letting underlying apps receive mouse interaction. Avoid a
@@ -104,7 +105,8 @@ system tool, not a branded dashboard.
 ## Recording HUD
 
 - Recording HUD states inherit the screenshot HUD chrome: native glass, compact
-  buttons, stable sizing, delayed tooltips, and background-aware contrast.
+  buttons, stable sizing, delayed tooltips, dark chrome, and white icon
+  contrast.
 - The screenshot HUD may switch into recording setup without closing the
   selection overlay. Setup controls stay compact and cover start recording,
   MP4/GIF format, cursor visibility, and keyboard hint visibility. The MP4/GIF
@@ -144,6 +146,9 @@ system tool, not a branded dashboard.
 - Glass containers use HUD material, a fine translucent border, and capsule
   geometry when the control row is short. For fixed-height toolbars, the left
   and right ends should read as large rounded caps rather than square panels.
+- Capture and recording HUD rows use a dark translucent fill under that
+  material so white icons stay readable in both light and dark macOS
+  appearances.
 - Icon buttons are icon-only except for compact state toggles such as the
   MP4/GIF recording format control. Their default state is quiet; hover shows a
   circular background behind the icon instead of changing the whole toolbar or
@@ -191,13 +196,41 @@ system tool, not a branded dashboard.
 - Dragging the preview image outputs image content to targets that accept PNG
   pasteboard drags.
 - Workspace opens a movable preview/edit window that stays open across focus
-  changes and closes through Escape or the native close control; pin behavior is
-  handled separately as an image-only pinned window.
+  changes. If there are unsaved edits, Escape or the native close control asks
+  whether to Replace Current, Save As New, Don't Save, or Cancel and continue
+  editing; pin behavior is handled separately as an image-only pinned window.
 - Opening workspace again for the same captured screenshot activates the existing
   preview/edit window instead of creating duplicates.
 - Workspace Copy and Download are active output actions. On success they close
-  the workspace and the originating Quick Access preview. Workspace Save is a
-  separate disabled action reserved for future edited-image persistence.
+  the workspace and the originating Quick Access preview. The checkmark Save
+  Current action opens a choice between replacing the current in-memory edited
+  screenshot and creating a new Quick Access preview; replacing keeps the
+  workspace open, refreshes any still-active Quick Access preview, and must not
+  overwrite a user-saved external file. Save As New keeps the workspace open and
+  adds another Quick Access preview instead of writing a file directly.
+- Screenshot editing controls stay in the top workspace toolbar. Shape tools
+  are flat top-level buttons for rectangle, oval, line, and arrow. Only mosaic
+  uses a split button: the main icon activates the current mosaic mode, and the
+  adjacent chevron opens Region/Brush mosaic options. Color is a standalone
+  toolbar dropdown that shows the current color as its icon. The adjacent style
+  dropdown is contextual: stroke Thickness for shape, brush, and highlight, and
+  Font Size for text. Text does not expose a separate tool dropdown. The editor
+  opens with the pointer/select tool active, while remembering the last selected
+  color, thickness, font size, mosaic mode, and shape type. Thickness options
+  include 1, 2, 4, 8, 12, 16, and 24 px. Dropdown menus mark the active option
+  with the native menu selected state. The mosaic primary icon follows its
+  selected subtool. Do not use a persistent side inspector or a floating property
+  bar over the screenshot.
+- Editing is object-based: annotations can be selected, moved, resized, deleted,
+  undone, and redone. Selection handles should remain small and high-contrast.
+- Text annotations support re-entering text edit mode after creation.
+- Shape annotations include rectangle, oval, line, and arrow. Arrows should be
+  straight-edged filled wedge arrows that grow from a fine tail into a wider
+  body and filled head instead of stroked line arrows. Holding Shift while
+  drawing constrains rectangles/ovals to squares/circles and line/arrow angles
+  to horizontal, vertical, or 45 degrees. Mosaic supports both
+  rectangular regions and brush strokes; rectangular mosaic should show a
+  lightweight selection frame while dragging and apply pixelation after release.
 - It should stay lightweight and dismissible, without blocking normal system
   usage.
 - Starting a recording temporarily hides existing Quick Access cards; it must

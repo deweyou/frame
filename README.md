@@ -4,7 +4,7 @@
 
 Frame is a native macOS capture utility for a faster local screenshot and recording loop: press a shortcut, select an area, then copy, save, preview, or recover the result locally.
 
-It is intentionally small. Frame is not a full screenshot workspace, a cloud library, or an annotation suite. Its first job is to make the everyday screenshot path feel short, reliable, and quiet.
+It is intentionally small. Frame is not a cloud library or a heavyweight media suite. Its first job is to make the everyday screenshot path feel short, reliable, and quiet.
 
 ## Why Frame
 
@@ -27,6 +27,17 @@ Screenshots are often a tiny step inside a larger workflow: explaining an idea, 
 - PNG output: saved files use the `Frame yyyy-MM-dd HH.mm.ss.png` filename format.
 - Clipboard copy: copy the captured image for pasting into chat, docs, or other apps.
 - Save location: save PNG files to the configured screenshot folder, defaulting to Desktop.
+- Screenshot editing: open the Image Workspace from Quick Access to add text,
+  shapes, brush strokes, highlight, and mosaic annotations. The toolbar opens in
+  pointer mode, lays shape tools out directly, keeps only mosaic behind a tool
+  dropdown, and uses shared color plus contextual Thickness or Font Size menus.
+  Menus mark the current choice and remember the last color, thickness, font
+  size, mosaic mode, and shape type while reopening in pointer mode. Shift
+  constrains rectangles/ovals to squares/circles and lines/arrows to horizontal,
+  vertical, or 45-degree angles. Edited screenshots can update the current
+  workspace image and its active Quick Access preview, or create another Quick
+  Access preview without closing the editor; closing with unsaved edits can
+  replace, save new, close without saving, or be cancelled to keep editing.
 - Selection recording: use the recording shortcut or switch the selection HUD
   into recording mode, choose MP4 or GIF, show or hide mouse cursor and click
   highlights together, customize mouse hint color in Settings, record held-key
@@ -53,7 +64,6 @@ If macOS says Frame can directly access screen content, that is the standard sys
 Frame currently does not include:
 
 - audio recording
-- annotation tools
 - cloud sync or share links
 - scrolling capture
 

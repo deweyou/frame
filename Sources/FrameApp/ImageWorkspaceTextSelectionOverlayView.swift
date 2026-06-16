@@ -11,6 +11,7 @@ final class ImageWorkspaceTextSelectionOverlayView: NSView {
     private var selectedCutIDs: Set<UUID> = []
     private var selectionAnchorCutID: UUID?
     private var isDraggingSelection = false
+    private var isTextSelectionEnabled = true
     private var trackingArea: NSTrackingArea?
     var menuProvider: (() -> NSMenu)?
 
@@ -18,6 +19,7 @@ final class ImageWorkspaceTextSelectionOverlayView: NSView {
         self.imageSize = imageSize
         self.copyText = copyText
         super.init(frame: .zero)
+        isHidden = true
         setAccessibilityLabel("Image Text Selection Overlay")
     }
 
@@ -32,6 +34,16 @@ final class ImageWorkspaceTextSelectionOverlayView: NSView {
 
     override var mouseDownCanMoveWindow: Bool {
         false
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHidden,
+              isTextSelectionEnabled,
+              cut(at: point) != nil else {
+            return nil
+        }
+
+        return super.hitTest(point)
     }
 
     override func updateTrackingAreas() {
@@ -57,6 +69,10 @@ final class ImageWorkspaceTextSelectionOverlayView: NSView {
             return
         }
 
+        guard isTextSelectionEnabled else {
+            return
+        }
+
         for cut in cutLayout.rows.flatMap(\.cuts) {
             addCursorRect(viewRect(for: cut.bounds).insetBy(dx: -3, dy: -3), cursor: .iBeam)
         }
@@ -64,7 +80,7 @@ final class ImageWorkspaceTextSelectionOverlayView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if cut(at: point) == nil {
+        if !isTextSelectionEnabled || cut(at: point) == nil {
             NSCursor.arrow.set()
         } else {
             NSCursor.iBeam.set()
@@ -87,9 +103,22 @@ final class ImageWorkspaceTextSelectionOverlayView: NSView {
         self.cutLayout = cutLayout
         selectedCutIDs = []
         selectionAnchorCutID = nil
-        isHidden = !hasRecognizedText
+        updateVisibility()
         window?.invalidateCursorRects(for: self)
         needsDisplay = true
+    }
+
+    func setTextSelectionEnabled(_ isEnabled: Bool) {
+        guard isTextSelectionEnabled != isEnabled else {
+            return
+        }
+
+        isTextSelectionEnabled = isEnabled
+        if !isEnabled {
+            clearSelection()
+        }
+        updateVisibility()
+        window?.invalidateCursorRects(for: self)
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
@@ -104,6 +133,10 @@ final class ImageWorkspaceTextSelectionOverlayView: NSView {
         selectedCutIDs = []
         selectionAnchorCutID = nil
         needsDisplay = true
+    }
+
+    private func updateVisibility() {
+        isHidden = !(isTextSelectionEnabled && hasRecognizedText)
     }
 
     override func draw(_ dirtyRect: NSRect) {

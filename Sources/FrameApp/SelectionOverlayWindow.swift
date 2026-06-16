@@ -104,6 +104,19 @@ final class SelectionOverlayWindow {
         overlayView.hudButtonIconPointSizesForTesting()
     }
 
+    func hudChromeColorsForTesting() -> (
+        foreground: NSColor,
+        background: NSColor,
+        border: NSColor,
+        hover: NSColor
+    ) {
+        overlayView.hudChromeColorsForTesting()
+    }
+
+    func hudButtonTintColorsForTesting() -> [String: NSColor] {
+        overlayView.hudButtonTintColorsForTesting()
+    }
+
     func hudButtonLayoutMetricsForTesting() -> (buttonWidth: CGFloat, hoverDiameter: CGFloat, screenshotModeWidth: CGFloat) {
         overlayView.hudButtonLayoutMetricsForTesting()
     }
@@ -1547,6 +1560,34 @@ private final class SelectionOverlayView: NSView {
         )
     }
 
+    func hudChromeColorsForTesting() -> (
+        foreground: NSColor,
+        background: NSColor,
+        border: NSColor,
+        hover: NSColor
+    ) {
+        (
+            foreground: hudTheme.foregroundColor,
+            background: NSColor(cgColor: modeView.layer?.backgroundColor ?? NSColor.clear.cgColor) ?? .clear,
+            border: NSColor(cgColor: modeView.layer?.borderColor ?? NSColor.clear.cgColor) ?? .clear,
+            hover: hudTheme.hoverColor
+        )
+    }
+
+    func hudButtonTintColorsForTesting() -> [String: NSColor] {
+        Dictionary(
+            uniqueKeysWithValues: modeView.subviews
+                .compactMap { $0 as? HUDIconButton }
+                .compactMap { button in
+                    guard let label = button.accessibilityLabel() else {
+                        return nil
+                    }
+
+                    return (label, button.contentTintColor ?? .clear)
+                }
+        )
+    }
+
     func hudButtonLayoutMetricsForTesting() -> (buttonWidth: CGFloat, hoverDiameter: CGFloat, screenshotModeWidth: CGFloat) {
         (
             buttonWidth: buttonWidth,
@@ -1830,17 +1871,7 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func updateHUDTheme() {
-        let visibleControlFrame = hudStackView.isHidden ? placeholderView.frame : hudStackView.frame
-        let sampleRect = globalRect(fromLocalRect: visibleControlFrame.insetBy(dx: -10, dy: -10))
-        guard let luminance = ScreenLuminanceSampler.estimatedBackgroundLuminance(in: sampleRect) else {
-            return
-        }
-
-        applyHUDTheme(
-            ScreenLuminanceSampler.prefersLightHUDContent(backgroundLuminance: luminance)
-                ? .lightContent
-                : .darkContent
-        )
+        applyHUDTheme(.lightContent)
     }
 
     private func updateVisibleHUDTheme() {
@@ -2759,7 +2790,7 @@ private enum HUDTheme {
     var foregroundColor: NSColor {
         switch self {
         case .lightContent:
-            .white.withAlphaComponent(0.92)
+            .white.withAlphaComponent(0.94)
         case .darkContent:
             .labelColor.withAlphaComponent(0.86)
         }
@@ -2768,7 +2799,7 @@ private enum HUDTheme {
     var backgroundColor: NSColor {
         switch self {
         case .lightContent:
-            .black.withAlphaComponent(0.10)
+            .black.withAlphaComponent(0.52)
         case .darkContent:
             .white.withAlphaComponent(0.04)
         }
@@ -2838,18 +2869,19 @@ enum ScreenLuminanceSampler {
         }
 
         let sortedSamples = samples.sorted()
-        let lowerQuartileIndex = max(0, Int((CGFloat(sortedSamples.count - 1) * 0.25).rounded()))
-        let lowerQuartile = sortedSamples[lowerQuartileIndex]
-        if lowerQuartile < 0.58 {
-            return lowerQuartile
+        let maximumIndex = sortedSamples.count - 1
+        let lowerMedianIndex = max(0, Int(floor(CGFloat(maximumIndex) * 0.5)))
+        let lowerMedian = sortedSamples[lowerMedianIndex]
+        if lowerMedian >= 0.58 {
+            return lowerMedian
         }
 
-        let upperQuartileIndex = min(sortedSamples.count - 1, Int((CGFloat(sortedSamples.count - 1) * 0.75).rounded()))
-        return sortedSamples[upperQuartileIndex]
+        let lowerQuartileIndex = max(0, Int(floor(CGFloat(maximumIndex) * 0.25)))
+        return sortedSamples[lowerQuartileIndex]
     }
 
     static func prefersLightHUDContent(backgroundLuminance: CGFloat) -> Bool {
-        backgroundLuminance < 0.58
+        true
     }
 
     private static func quartzCaptureRect(for cocoaRect: CGRect) -> CGRect {

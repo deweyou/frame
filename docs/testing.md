@@ -28,6 +28,7 @@ New HUD or interactive AppKit features should add component E2E coverage for the
 - button or menu-trigger callbacks that must commit active input first
 - locked-ratio or preset behavior at the component boundary when it does not require a modal menu
 - recording HUD mode changes and callback routing that do not require Screen Recording permission
+- screenshot annotation canvas interactions for create, select, move, resize, delete, undo/redo, text re-editing, and rendered copy/download output
 
 Do not call modal menu presentation such as `NSMenu.popUp` from CI tests. Prefer testing the callback seam or the control state before presentation; keep a manual smoke note for the actual popover/menu if needed.
 
@@ -60,4 +61,4 @@ Component E2E tests must remain deterministic without Screen Recording permissio
 When a new requirement changes an interactive AppKit behavior, update the matching component E2E tests in the same change. If the behavior cannot be automated safely, document the reason and add the smallest stable lower-level coverage instead.
 
 ---
-*Last updated: 2026-06-03 | Reason: document live recording manual smoke boundary*
+*Last updated: 2026-06-14 | Reason: document screenshot annotation component coverage*
