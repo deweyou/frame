@@ -563,6 +563,27 @@ struct AppStrings {
         }
     }
 
+    var videoUnsavedChangesMessage: String {
+        switch language {
+        case .zhHans: "关闭前选择替换当前录屏、保存为一条新的 Quick Access 录屏、不保存并关闭，或取消并继续编辑。"
+        case .en: "Before closing, replace the current recording, save a new Quick Access recording, close without saving, or cancel and keep editing."
+        }
+    }
+
+    var videoReplaceCurrent: String {
+        switch language {
+        case .zhHans: "替换当前录屏"
+        case .en: "Replace Current"
+        }
+    }
+
+    var videoSaveAsNew: String {
+        switch language {
+        case .zhHans: "另存新录屏"
+        case .en: "Save As New"
+        }
+    }
+
     var workspaceCopy: String {
         switch language {
         case .zhHans: "复制"

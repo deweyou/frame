@@ -696,7 +696,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.openVideoPreview(recording) ?? false
             },
             edit: { [weak self] in
-                self?.openVideoPreview(recording) ?? false
+                self?.openVideoPreview(recording, focusEditor: true) ?? false
             },
             close: {
                 NSLog("Frame 录屏快速操作已关闭")
@@ -704,7 +704,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func openVideoPreview(_ recording: CapturedRecording) -> Bool {
+    private func openVideoPreview(_ recording: CapturedRecording, focusEditor: Bool = false) -> Bool {
         videoPreviewWindowController.show(
             recording: recording,
             strings: strings,
@@ -714,11 +714,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             download: { [weak self] in
                 self?.downloadRecording(recording) ?? false
             },
-            saveCurrent: { _, _ in
-                false
-            }
+            saveCurrent: { [weak self] recording, editingState, choice in
+                self?.saveEditedRecording(recording, editingState: editingState, choice: choice) ?? false
+            },
+            focusEditor: focusEditor
         )
         return true
+    }
+
+    private func saveEditedRecording(
+        _ recording: CapturedRecording,
+        editingState: VideoEditingState,
+        choice: VideoPreviewSaveChoice
+    ) -> Bool {
+        showQuickAccessFailedAlert(
+            title: strings.saveFailedTitle,
+            error: VideoEditingExportError.exportFailed("录屏编辑导出尚未连接。")
+        )
+        return false
     }
 
     private func showCaptureHistory() {

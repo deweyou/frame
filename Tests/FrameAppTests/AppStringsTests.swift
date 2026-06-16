@@ -149,6 +149,12 @@ final class AppStringsTests: XCTestCase {
             english.workspaceUnsavedChangesMessage,
             "Before closing, replace the current image, save a new Quick Access preview, close without saving, or cancel and keep editing."
         )
+        XCTAssertEqual(
+            english.videoUnsavedChangesMessage,
+            "Before closing, replace the current recording, save a new Quick Access recording, close without saving, or cancel and keep editing."
+        )
+        XCTAssertEqual(english.videoReplaceCurrent, "Replace Current")
+        XCTAssertEqual(english.videoSaveAsNew, "Save As New")
         XCTAssertEqual(english.cancel, "Cancel")
 
         let chinese = AppStrings(language: .zhHans)
@@ -170,6 +176,12 @@ final class AppStringsTests: XCTestCase {
             chinese.workspaceUnsavedChangesMessage,
             "关闭前选择替换当前图、保存为一张新的 Quick Access 预览、不保存并关闭，或取消并继续编辑。"
         )
+        XCTAssertEqual(
+            chinese.videoUnsavedChangesMessage,
+            "关闭前选择替换当前录屏、保存为一条新的 Quick Access 录屏、不保存并关闭，或取消并继续编辑。"
+        )
+        XCTAssertEqual(chinese.videoReplaceCurrent, "替换当前录屏")
+        XCTAssertEqual(chinese.videoSaveAsNew, "另存新录屏")
         XCTAssertEqual(chinese.cancel, "取消")
     }
 

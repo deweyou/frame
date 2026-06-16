@@ -22,7 +22,7 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
             strings: AppStrings(language: .en),
             copy: { true },
             download: { true },
-            saveCurrent: { _, _ in true }
+            saveCurrent: { _, _, _ in true }
         )
 
         XCTAssertTrue(controller.isEditingEnabledForTesting(recordingID: recording.id))
@@ -49,7 +49,7 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
             strings: AppStrings(language: .en),
             copy: { true },
             download: { true },
-            saveCurrent: { _, _ in true }
+            saveCurrent: { _, _, _ in true }
         )
 
         XCTAssertFalse(controller.isEditingEnabledForTesting(recordingID: recording.id))
@@ -75,7 +75,7 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
             strings: AppStrings(language: .en),
             copy: { true },
             download: { true },
-            saveCurrent: { _, _ in true }
+            saveCurrent: { _, _, _ in true }
         )
 
         let window = try XCTUnwrap(controller.windowForTesting(recordingID: recording.id))
@@ -93,7 +93,7 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
             strings: AppStrings(language: .en),
             copy: { true },
             download: { true },
-            saveCurrent: { _, _ in true }
+            saveCurrent: { _, _, _ in true }
         )
 
         try controller.setTrimRangeForTesting(recordingID: recording.id, start: 3.274, end: 18.636)
@@ -112,7 +112,7 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
             strings: AppStrings(language: .en),
             copy: { true },
             download: { true },
-            saveCurrent: { _, _ in true }
+            saveCurrent: { _, _, _ in true }
         )
 
         try controller.setTrimRangeForTesting(recordingID: recording.id, start: 3, end: 8)
@@ -130,7 +130,7 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
             strings: AppStrings(language: .en),
             copy: { true },
             download: { true },
-            saveCurrent: { _, _ in true }
+            saveCurrent: { _, _, _ in true }
         )
 
         try controller.setSpeedForTesting(recordingID: recording.id, speed: .octuple)
@@ -139,6 +139,62 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
         XCTAssertEqual(state.speed, .octuple)
         XCTAssertEqual(state.outputDuration, 3, accuracy: 0.0001)
         XCTAssertTrue(controller.hasUnsavedEditsForTesting(recordingID: recording.id))
+    }
+
+    func testSaveCurrentMenuRoutesReplaceAndSaveAsNew() throws {
+        let recording = makeMP4Recording(duration: 24)
+        let controller = VideoPreviewWindowController()
+        var calls: [(CapturedRecording, VideoEditingState, VideoPreviewSaveChoice)] = []
+        controller.show(
+            recording: recording,
+            strings: AppStrings(language: .en),
+            copy: { true },
+            download: { true },
+            saveCurrent: {
+                calls.append(($0, $1, $2))
+                return true
+            }
+        )
+        try controller.setTrimRangeForTesting(recordingID: recording.id, start: 1, end: 2)
+
+        XCTAssertTrue(controller.performSaveCurrentForTesting(recordingID: recording.id, choice: .replaceCurrent))
+        XCTAssertTrue(controller.performSaveCurrentForTesting(recordingID: recording.id, choice: .saveAsNew))
+        XCTAssertEqual(calls.map(\.2), [.replaceCurrent, .saveAsNew])
+    }
+
+    func testClosingDirtyMP4CanCancel() throws {
+        let recording = makeMP4Recording(duration: 24)
+        let controller = VideoPreviewWindowController(closeChoiceProvider: { _, _, _ in .cancel })
+        controller.show(
+            recording: recording,
+            strings: AppStrings(language: .en),
+            copy: { true },
+            download: { true },
+            saveCurrent: { _, _, _ in true }
+        )
+        try controller.setTrimRangeForTesting(recordingID: recording.id, start: 1, end: 2)
+
+        XCTAssertFalse(controller.windowShouldCloseForTesting(recordingID: recording.id))
+    }
+
+    func testClosingDirtyMP4RoutesReplaceChoice() throws {
+        let recording = makeMP4Recording(duration: 24)
+        let controller = VideoPreviewWindowController(closeChoiceProvider: { _, _, _ in .replaceCurrent })
+        var calls: [VideoPreviewSaveChoice] = []
+        controller.show(
+            recording: recording,
+            strings: AppStrings(language: .en),
+            copy: { true },
+            download: { true },
+            saveCurrent: { _, _, choice in
+                calls.append(choice)
+                return true
+            }
+        )
+        try controller.setTrimRangeForTesting(recordingID: recording.id, start: 1, end: 2)
+
+        XCTAssertTrue(controller.windowShouldCloseForTesting(recordingID: recording.id))
+        XCTAssertEqual(calls, [.replaceCurrent])
     }
 
     private func findSubview<T: NSView>(of type: T.Type, in view: NSView) -> T? {

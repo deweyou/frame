@@ -2,16 +2,36 @@ import AppKit
 import AVKit
 import FrameCore
 
+enum VideoPreviewSaveChoice: Equatable {
+    case replaceCurrent
+    case saveAsNew
+}
+
+enum VideoPreviewCloseChoice: Equatable {
+    case replaceCurrent
+    case saveAsNew
+    case discard
+    case cancel
+}
+
 @MainActor
-final class VideoPreviewWindowController {
+final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
     private var items: [UUID: VideoPreviewItem] = [:]
+    private let closeChoiceProvider: @MainActor (AppStrings, CapturedRecording, VideoEditingState) -> VideoPreviewCloseChoice
+
+    init(
+        closeChoiceProvider: @escaping @MainActor (AppStrings, CapturedRecording, VideoEditingState) -> VideoPreviewCloseChoice = VideoPreviewWindowController.presentCloseChoice
+    ) {
+        self.closeChoiceProvider = closeChoiceProvider
+        super.init()
+    }
 
     func show(
         recording: CapturedRecording,
         strings: AppStrings,
         copy: @escaping () -> Bool,
         download: @escaping () -> Bool,
-        saveCurrent: @escaping (CapturedRecording, VideoEditingState) -> Bool,
+        saveCurrent: @escaping (CapturedRecording, VideoEditingState, VideoPreviewSaveChoice) -> Bool,
         focusEditor: Bool = false
     ) {
         if let item = items[recording.id] {
@@ -28,6 +48,7 @@ final class VideoPreviewWindowController {
         window.title = recording.fileURL.lastPathComponent
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.isReleasedWhenClosed = false
+        window.delegate = self
         window.center()
 
         let media = makeMediaView(for: recording)
@@ -57,7 +78,21 @@ final class VideoPreviewWindowController {
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         toolbar.addArrangedSubview(makeButton(title: strings.videoQuickAccessCopy, symbolName: "doc.on.doc", action: copy))
         toolbar.addArrangedSubview(makeButton(title: strings.videoQuickAccessDownload, symbolName: "tray.and.arrow.down", action: download))
-        toolbar.addArrangedSubview(makeDisabledButton(title: strings.videoQuickAccessEdit, symbolName: "slider.horizontal.3"))
+        if editingState != nil {
+            toolbar.addArrangedSubview(
+                makeSaveCurrentButton(
+                    title: strings.workspaceSaveCurrent,
+                    symbolName: "checkmark.circle",
+                    replaceTitle: strings.videoReplaceCurrent,
+                    saveAsNewTitle: strings.videoSaveAsNew,
+                    action: { [weak self] choice in
+                        self?.performSaveCurrent(recordingID: recording.id, choice: choice) ?? false
+                    }
+                )
+            )
+        } else {
+            toolbar.addArrangedSubview(makeDisabledButton(title: strings.videoQuickAccessEdit, symbolName: "slider.horizontal.3"))
+        }
 
         let root = NSView()
         root.addSubview(toolbar)
@@ -88,6 +123,7 @@ final class VideoPreviewWindowController {
         window.contentView = root
         items[recording.id] = VideoPreviewItem(
             recording: recording,
+            strings: strings,
             window: window,
             editingState: editingState,
             editorBar: editorBar,
@@ -148,6 +184,46 @@ final class VideoPreviewWindowController {
             start: CMTime(seconds: state.startTime, preferredTimescale: 600),
             end: CMTime(seconds: state.endTime, preferredTimescale: 600)
         )
+    }
+
+    func performSaveCurrentForTesting(recordingID: UUID, choice: VideoPreviewSaveChoice) -> Bool {
+        performSaveCurrent(recordingID: recordingID, choice: choice)
+    }
+
+    func windowShouldCloseForTesting(recordingID: UUID) -> Bool {
+        guard let window = items[recordingID]?.window else {
+            return true
+        }
+
+        return windowShouldClose(window)
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard let item = item(for: sender),
+              let state = item.editingState,
+              state.isDirty else {
+            return true
+        }
+
+        switch closeChoiceProvider(item.strings, item.recording, state) {
+        case .replaceCurrent:
+            return item.saveCurrent(item.recording, state, .replaceCurrent)
+        case .saveAsNew:
+            return item.saveCurrent(item.recording, state, .saveAsNew)
+        case .discard:
+            return true
+        case .cancel:
+            return false
+        }
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              let item = item(for: window) else {
+            return
+        }
+
+        items.removeValue(forKey: item.recording.id)
     }
 
     private func makeMediaView(for recording: CapturedRecording) -> (view: NSView, player: AVPlayer?) {
@@ -243,29 +319,88 @@ final class VideoPreviewWindowController {
         button.contentTintColor = .disabledControlTextColor
         return button
     }
+
+    private func makeSaveCurrentButton(
+        title: String,
+        symbolName: String,
+        replaceTitle: String,
+        saveAsNewTitle: String,
+        action: @escaping (VideoPreviewSaveChoice) -> Bool
+    ) -> NSButton {
+        let button = VideoPreviewSaveButton(
+            title: title,
+            symbolName: symbolName,
+            replaceTitle: replaceTitle,
+            saveAsNewTitle: saveAsNewTitle,
+            action: action
+        )
+        return button
+    }
+
+    private func performSaveCurrent(recordingID: UUID, choice: VideoPreviewSaveChoice) -> Bool {
+        guard let item = items[recordingID],
+              let state = item.editingState,
+              state.isDirty else {
+            return false
+        }
+
+        return item.saveCurrent(item.recording, state, choice)
+    }
+
+    private func item(for window: NSWindow) -> VideoPreviewItem? {
+        items.values.first { $0.window === window }
+    }
+
+    private static func presentCloseChoice(
+        strings: AppStrings,
+        recording: CapturedRecording,
+        state: VideoEditingState
+    ) -> VideoPreviewCloseChoice {
+        let alert = NSAlert()
+        alert.messageText = strings.workspaceUnsavedChangesTitle
+        alert.informativeText = strings.videoUnsavedChangesMessage
+        alert.addButton(withTitle: strings.videoReplaceCurrent)
+        alert.addButton(withTitle: strings.videoSaveAsNew)
+        alert.addButton(withTitle: strings.workspaceDiscardEdits)
+        alert.addButton(withTitle: strings.cancel)
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            return .replaceCurrent
+        case .alertSecondButtonReturn:
+            return .saveAsNew
+        case .alertThirdButtonReturn:
+            return .discard
+        default:
+            return .cancel
+        }
+    }
 }
 
 private final class VideoPreviewItem {
     let recording: CapturedRecording
+    let strings: AppStrings
     let window: NSWindow
     var editingState: VideoEditingState?
     weak var editorBar: VideoEditorBarView?
     let player: AVPlayer?
     let playerTimeObserver: Any?
-    let saveCurrent: (CapturedRecording, VideoEditingState) -> Bool
+    let saveCurrent: (CapturedRecording, VideoEditingState, VideoPreviewSaveChoice) -> Bool
     let isEditingEnabled: Bool
 
     init(
         recording: CapturedRecording,
+        strings: AppStrings,
         window: NSWindow,
         editingState: VideoEditingState?,
         editorBar: VideoEditorBarView?,
         player: AVPlayer?,
         playerTimeObserver: Any?,
-        saveCurrent: @escaping (CapturedRecording, VideoEditingState) -> Bool,
+        saveCurrent: @escaping (CapturedRecording, VideoEditingState, VideoPreviewSaveChoice) -> Bool,
         isEditingEnabled: Bool
     ) {
         self.recording = recording
+        self.strings = strings
         self.window = window
         self.editingState = editingState
         self.editorBar = editorBar
@@ -299,5 +434,56 @@ private final class VideoPreviewActionButton: NSButton {
 
     @objc private func performAction(_ sender: NSButton) {
         _ = handler()
+    }
+}
+
+private final class VideoPreviewSaveButton: NSButton {
+    private let replaceTitle: String
+    private let saveAsNewTitle: String
+    private let handler: (VideoPreviewSaveChoice) -> Bool
+
+    init(
+        title: String,
+        symbolName: String,
+        replaceTitle: String,
+        saveAsNewTitle: String,
+        action: @escaping (VideoPreviewSaveChoice) -> Bool
+    ) {
+        self.replaceTitle = replaceTitle
+        self.saveAsNewTitle = saveAsNewTitle
+        self.handler = action
+        super.init(frame: .zero)
+        image = NSImage(systemSymbolName: symbolName, accessibilityDescription: title)
+        self.title = ""
+        imagePosition = .imageOnly
+        isBordered = false
+        toolTip = title
+        setAccessibilityLabel(title)
+        target = self
+        self.action = #selector(showMenu(_:))
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    @objc private func showMenu(_ sender: NSButton) {
+        let menu = NSMenu()
+        menu.addItem(makeItem(title: replaceTitle, choice: .replaceCurrent))
+        menu.addItem(makeItem(title: saveAsNewTitle, choice: .saveAsNew))
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: bounds.height + 4), in: self)
+    }
+
+    @objc private func chooseMenuItem(_ sender: NSMenuItem) {
+        let choice: VideoPreviewSaveChoice = sender.tag == 0 ? .replaceCurrent : .saveAsNew
+        _ = handler(choice)
+    }
+
+    private func makeItem(title: String, choice: VideoPreviewSaveChoice) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(chooseMenuItem(_:)), keyEquivalent: "")
+        item.target = self
+        item.tag = choice == .replaceCurrent ? 0 : 1
+        return item
     }
 }
