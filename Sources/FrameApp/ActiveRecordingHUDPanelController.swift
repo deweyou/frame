@@ -3,7 +3,8 @@ import AppKit
 @MainActor
 final class ActiveRecordingHUDPanelController {
     static let recordingAccentColor = NSColor.systemRed
-    private static let panelSize = CGSize(width: 172, height: 42)
+    private static let horizontalPadding: CGFloat = 3
+    private static let panelSize = CGSize(width: 175, height: 42)
     private static let buttonGroupWidth: CGFloat = 108
 
     private let panel = NSPanel(
@@ -113,12 +114,20 @@ final class ActiveRecordingHUDPanelController {
         panel.hasShadow
     }
 
+    func chromeColorsForTesting() -> (background: NSColor, border: NSColor) {
+        RecordingHUDChromeView.colorsForTesting()
+    }
+
     func rootViewFrameForTesting() -> CGRect {
         rootView.frame
     }
 
     func chromeViewFrameForTesting() -> CGRect {
         chromeView.frame
+    }
+
+    func horizontalPaddingForTesting() -> CGFloat {
+        Self.horizontalPadding
     }
 
     func buttonObjectIDsForTesting() -> [ObjectIdentifier] {
@@ -202,7 +211,7 @@ final class ActiveRecordingHUDPanelController {
             chromeView.widthAnchor.constraint(equalToConstant: Self.panelSize.width),
             chromeView.heightAnchor.constraint(equalToConstant: Self.panelSize.height),
 
-            buttonStackView.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor),
+            buttonStackView.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor, constant: Self.horizontalPadding),
             buttonStackView.topAnchor.constraint(equalTo: chromeView.topAnchor),
             buttonStackView.bottomAnchor.constraint(equalTo: chromeView.bottomAnchor),
             buttonStackView.widthAnchor.constraint(equalToConstant: Self.buttonGroupWidth),
@@ -242,7 +251,7 @@ final class ActiveRecordingHUDPanelController {
             symbolName: "trash",
             action: #selector(deleteClicked)
         )
-        deleteButton.contentTintColor = .labelColor
+        deleteButton.contentTintColor = HUDChromePalette.deepGlassForegroundColor
         buttonStackView.addArrangedSubview(deleteButton)
     }
 
@@ -274,7 +283,7 @@ final class ActiveRecordingHUDPanelController {
         button.imagePosition = .imageOnly
         button.imageScaling = .scaleNone
         button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
-        button.contentTintColor = .labelColor
+        button.contentTintColor = HUDChromePalette.deepGlassForegroundColor
         button.toolTip = title
         button.setAccessibilityLabel(title)
         return button
@@ -355,6 +364,10 @@ private final class RecordingHUDChromeView: NSView {
         false
     }
 
+    static func colorsForTesting() -> (background: NSColor, border: NSColor) {
+        (HUDChromePalette.deepGlassBackgroundColor, HUDChromePalette.deepGlassBorderColor)
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
@@ -363,9 +376,9 @@ private final class RecordingHUDChromeView: NSView {
             xRadius: 20.5,
             yRadius: 20.5
         )
-        NSColor.windowBackgroundColor.withAlphaComponent(0.78).setFill()
+        HUDChromePalette.deepGlassBackgroundColor.setFill()
         path.fill()
-        NSColor.white.withAlphaComponent(0.38).setStroke()
+        HUDChromePalette.deepGlassBorderColor.setStroke()
         path.lineWidth = 0.5
         path.stroke()
     }

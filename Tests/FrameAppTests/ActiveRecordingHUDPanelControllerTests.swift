@@ -20,18 +20,31 @@ final class ActiveRecordingHUDPanelControllerTests: XCTestCase {
 
         XCTAssertEqual(controller.buttonLabelsForTesting(), ["停止录制", "重新开始", "删除录制"])
         XCTAssertEqual(controller.elapsedTextForTesting(), "00:24")
-        XCTAssertEqual(controller.panelSizeForTesting(), CGSize(width: 172, height: 42))
-        XCTAssertEqual(controller.rootViewFrameForTesting(), CGRect(origin: .zero, size: CGSize(width: 172, height: 42)))
-        XCTAssertEqual(controller.chromeViewFrameForTesting(), CGRect(origin: .zero, size: CGSize(width: 172, height: 42)))
-        XCTAssertEqual(controller.panelSizeLimitsForTesting().minSize, CGSize(width: 172, height: 42))
-        XCTAssertEqual(controller.panelSizeLimitsForTesting().maxSize, CGSize(width: 172, height: 42))
-        XCTAssertEqual(controller.panelSizeLimitsForTesting().contentMinSize, CGSize(width: 172, height: 42))
-        XCTAssertEqual(controller.panelSizeLimitsForTesting().contentMaxSize, CGSize(width: 172, height: 42))
+        XCTAssertEqual(controller.panelSizeForTesting(), CGSize(width: 175, height: 42))
+        XCTAssertEqual(controller.rootViewFrameForTesting(), CGRect(origin: .zero, size: CGSize(width: 175, height: 42)))
+        XCTAssertEqual(controller.chromeViewFrameForTesting(), CGRect(origin: .zero, size: CGSize(width: 175, height: 42)))
+        XCTAssertEqual(controller.panelSizeLimitsForTesting().minSize, CGSize(width: 175, height: 42))
+        XCTAssertEqual(controller.panelSizeLimitsForTesting().maxSize, CGSize(width: 175, height: 42))
+        XCTAssertEqual(controller.panelSizeLimitsForTesting().contentMinSize, CGSize(width: 175, height: 42))
+        XCTAssertEqual(controller.panelSizeLimitsForTesting().contentMaxSize, CGSize(width: 175, height: 42))
+        XCTAssertEqual(controller.horizontalPaddingForTesting(), 3)
         XCTAssertFalse(controller.panelHasSystemShadowForTesting())
         XCTAssertEqual(controller.elapsedTextColorForTesting(), ActiveRecordingHUDPanelController.recordingAccentColor)
+        XCTAssertLessThan(controller.chromeColorsForTesting().background.relativeLuminanceForTesting, 0.08)
+        XCTAssertGreaterThanOrEqual(controller.chromeColorsForTesting().background.relativeAlphaForTesting, 0.88)
+        XCTAssertGreaterThan(controller.chromeColorsForTesting().border.relativeLuminanceForTesting, 0.8)
+        XCTAssertGreaterThanOrEqual(controller.chromeColorsForTesting().border.relativeAlphaForTesting, 0.28)
         XCTAssertEqual(
             controller.buttonTintColorForTesting(accessibilityLabel: "停止录制"),
             ActiveRecordingHUDPanelController.recordingAccentColor
+        )
+        XCTAssertGreaterThan(
+            controller.buttonTintColorForTesting(accessibilityLabel: "重新开始")?.relativeLuminanceForTesting ?? 0,
+            0.8
+        )
+        XCTAssertGreaterThan(
+            controller.buttonTintColorForTesting(accessibilityLabel: "删除录制")?.relativeLuminanceForTesting ?? 0,
+            0.8
         )
     }
 
@@ -69,7 +82,7 @@ final class ActiveRecordingHUDPanelControllerTests: XCTestCase {
             delete: {}
         )
 
-        XCTAssertEqual(controller.panelSizeForTesting(), CGSize(width: 172, height: 42))
+        XCTAssertEqual(controller.panelSizeForTesting(), CGSize(width: 175, height: 42))
     }
 
     func testElapsedUpdatesDoNotRecreateButtons() {
@@ -140,5 +153,18 @@ final class ActiveRecordingHUDPanelControllerTests: XCTestCase {
         XCTAssertTrue(controller.performButtonActionForTesting(accessibilityLabel: "删除录制"))
         XCTAssertTrue(didDelete)
         XCTAssertEqual(controller.buttonLabelsForTesting(), ["停止录制", "重新开始", "删除录制"])
+    }
+}
+
+private extension NSColor {
+    var relativeLuminanceForTesting: CGFloat {
+        let color = usingColorSpace(.deviceRGB) ?? self
+        return 0.2126 * color.redComponent
+            + 0.7152 * color.greenComponent
+            + 0.0722 * color.blueComponent
+    }
+
+    var relativeAlphaForTesting: CGFloat {
+        (usingColorSpace(.deviceRGB) ?? self).alphaComponent
     }
 }

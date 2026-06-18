@@ -94,9 +94,11 @@ system tool, not a branded dashboard.
 - Tooltips should be delayed and owned above the overlay/HUD layer. Default
   placement is below the hovered control, flipping above only when there is not
   enough space.
-- HUD icon content stays white on a deliberately dark translucent background.
-  Do not reintroduce background-aware black/white icon switching for the
-  capture HUD.
+- HUD icon content uses fixed white on a deliberately deep glass background.
+  Do not reintroduce background-aware black/white icon switching or
+  appearance-dependent dynamic icon colors for the capture HUD; keep contrast
+  stable with a dark glass fill that is less transparent than system chrome, a
+  quiet hairline border, and subtle hover fill instead.
 - Delay screenshot countdowns are passive: after the user starts the countdown,
   keep a prominent semi-transparent red countdown near the current screen's
   bottom center while letting underlying apps receive mouse interaction. Avoid a
@@ -105,8 +107,8 @@ system tool, not a branded dashboard.
 ## Recording HUD
 
 - Recording HUD states inherit the screenshot HUD chrome: native glass, compact
-  buttons, stable sizing, delayed tooltips, dark chrome, and white icon
-  contrast.
+  buttons, stable sizing, delayed tooltips, less-transparent dark glass chrome,
+  white icon contrast, and a quiet boundary.
 - The screenshot HUD may switch into recording setup without closing the
   selection overlay. Setup controls stay compact and cover start recording,
   MP4/GIF format, cursor visibility, and keyboard hint visibility. The MP4/GIF
@@ -143,12 +145,12 @@ system tool, not a branded dashboard.
 
 - HUD-like controls share one visual language across capture, Quick Access, and
   Image Workspace surfaces.
-- Glass containers use HUD material, a fine translucent border, and capsule
+- Glass containers use HUD material, a quiet translucent border, and capsule
   geometry when the control row is short. For fixed-height toolbars, the left
   and right ends should read as large rounded caps rather than square panels.
-- Capture and recording HUD rows use a dark translucent fill under that
-  material so white icons stay readable in both light and dark macOS
-  appearances.
+- Capture and recording HUD rows use a darker, less-transparent glass fill under
+  that material so white icons stay readable without relying on background
+  luminance detection.
 - Icon buttons are icon-only except for compact state toggles such as the
   MP4/GIF recording format control. Their default state is quiet; hover shows a
   circular background behind the icon instead of changing the whole toolbar or
