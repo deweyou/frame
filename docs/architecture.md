@@ -36,8 +36,9 @@ Frame is a native macOS menu bar app. AppKit owns the runtime because the produc
 
 ## Runtime Flow
 
-See `DESIGN.md` for interface principles, including the native dark glass HUD,
-white icon contrast, and direct-manipulation capture behavior.
+See `DESIGN.md` for interface principles, including the native deep glass HUD,
+white icon contrast, quiet HUD boundaries, and direct-manipulation capture
+behavior.
 
 1. `FrameApplication` starts `NSApplication` with accessory activation policy.
 2. `AppDelegate` creates the menu bar item, hotkey controller, overlay controller, capture and recording services, active-screen resolver, preview controllers, and output writers. It rejects new capture shortcut entries while selection, recording countdown, active recording, paused recording, or recording finalization is already in progress.

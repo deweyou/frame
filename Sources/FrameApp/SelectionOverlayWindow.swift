@@ -117,6 +117,10 @@ final class SelectionOverlayWindow {
         overlayView.hudButtonTintColorsForTesting()
     }
 
+    func hudHasDrawnChromeFillForTesting() -> Bool {
+        overlayView.hudHasDrawnChromeFillForTesting()
+    }
+
     func hudButtonLayoutMetricsForTesting() -> (buttonWidth: CGFloat, hoverDiameter: CGFloat, screenshotModeWidth: CGFloat) {
         overlayView.hudButtonLayoutMetricsForTesting()
     }
@@ -258,6 +262,7 @@ private final class SelectionOverlayView: NSView {
     private let buttonWidth: CGFloat = 36
     private let defaultHUDSpacing: CGFloat = 7
     private let activeRecordingHUDSpacing: CGFloat = 4
+    private let modeViewHorizontalPadding: CGFloat = 3
     private let setupPrimaryButtonWidth: CGFloat = 92
     private let sizeViewWidth: CGFloat = 127
     private let activeRecordingElapsedWidth: CGFloat = 56
@@ -607,7 +612,7 @@ private final class SelectionOverlayView: NSView {
     private var modeViewWidth: CGFloat {
         modeView.subviews
             .compactMap { $0 as? HUDIconButton }
-            .reduce(0) { $0 + $1.preferredHUDWidth }
+            .reduce(modeViewHorizontalPadding * 2) { $0 + $1.preferredHUDWidth }
     }
 
     private var currentHUDSpacing: CGFloat {
@@ -635,7 +640,9 @@ private final class SelectionOverlayView: NSView {
     private func installModeButtons(_ buttons: [HUDIconButton]) {
         NSLayoutConstraint.deactivate(modeButtonConstraints)
         modeButtonConstraints.removeAll()
-        modeView.subviews.forEach { $0.removeFromSuperview() }
+        modeView.subviews
+            .compactMap { $0 as? HUDIconButton }
+            .forEach { $0.removeFromSuperview() }
 
         var previousButton: HUDIconButton?
         for button in buttons {
@@ -650,10 +657,18 @@ private final class SelectionOverlayView: NSView {
             if let previousButton {
                 modeButtonConstraints.append(button.leadingAnchor.constraint(equalTo: previousButton.trailingAnchor))
             } else {
-                modeButtonConstraints.append(button.leadingAnchor.constraint(equalTo: modeView.leadingAnchor))
+                modeButtonConstraints.append(
+                    button.leadingAnchor.constraint(equalTo: modeView.leadingAnchor, constant: modeViewHorizontalPadding)
+                )
             }
 
             previousButton = button
+        }
+
+        if let previousButton {
+            modeButtonConstraints.append(
+                previousButton.trailingAnchor.constraint(equalTo: modeView.trailingAnchor, constant: -modeViewHorizontalPadding)
+            )
         }
 
         NSLayoutConstraint.activate(modeButtonConstraints)
@@ -707,9 +722,15 @@ private final class SelectionOverlayView: NSView {
         view.layer?.cornerRadius = cornerRadius
         view.layer?.cornerCurve = .continuous
         view.layer?.masksToBounds = true
+        view.layer?.shadowOpacity = 0
+        view.layer?.shadowPath = nil
         view.layer?.borderWidth = 0.5
-        view.layer?.borderColor = NSColor.white.withAlphaComponent(0.38).cgColor
-        view.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.04).cgColor
+        view.layer?.borderColor = HUDChromePalette.deepGlassBorderColor.cgColor
+        view.layer?.backgroundColor = HUDChromePalette.deepGlassBackgroundColor.cgColor
+        let fillView = HUDChromeFillView(cornerRadius: cornerRadius)
+        fillView.frame = view.bounds
+        fillView.autoresizingMask = [.width, .height]
+        view.addSubview(fillView, positioned: .below, relativeTo: nil)
     }
 
     private func makeScreenshotModeButtons() -> [HUDIconButton] {
@@ -984,9 +1005,15 @@ private final class SelectionOverlayView: NSView {
         [modeView, sizeView].forEach { view in
             view.layer?.borderColor = theme.borderColor.cgColor
             view.layer?.backgroundColor = theme.backgroundColor.cgColor
+            view.subviews
+                .compactMap { $0 as? HUDChromeFillView }
+                .forEach { $0.applyTheme(theme) }
         }
         placeholderView.layer?.borderColor = theme.borderColor.cgColor
         placeholderView.layer?.backgroundColor = theme.backgroundColor.cgColor
+        placeholderView.subviews
+            .compactMap { $0 as? HUDChromeFillView }
+            .forEach { $0.applyTheme(theme) }
         placeholderLabel.textColor = theme.foregroundColor
         for button in modeView.subviews.compactMap({ $0 as? HUDIconButton }) {
             let tintColor = hudTintColor(for: button, theme: theme)
@@ -1574,6 +1601,11 @@ private final class SelectionOverlayView: NSView {
         )
     }
 
+    func hudHasDrawnChromeFillForTesting() -> Bool {
+        modeView.subviews.contains { $0 is HUDChromeFillView }
+            && sizeView.subviews.contains { $0 is HUDChromeFillView }
+    }
+
     func hudButtonTintColorsForTesting() -> [String: NSColor] {
         Dictionary(
             uniqueKeysWithValues: modeView.subviews
@@ -1592,7 +1624,7 @@ private final class SelectionOverlayView: NSView {
         (
             buttonWidth: buttonWidth,
             hoverDiameter: HUDIconButton.hoverDiameter,
-            screenshotModeWidth: CGFloat(makeScreenshotModeButtons().count) * buttonWidth
+            screenshotModeWidth: CGFloat(makeScreenshotModeButtons().count) * buttonWidth + modeViewHorizontalPadding * 2
         )
     }
 
@@ -2790,37 +2822,77 @@ private enum HUDTheme {
     var foregroundColor: NSColor {
         switch self {
         case .lightContent:
-            .white.withAlphaComponent(0.94)
+            HUDChromePalette.deepGlassForegroundColor
         case .darkContent:
-            .labelColor.withAlphaComponent(0.86)
+            .init(calibratedWhite: 0.06, alpha: 0.86)
         }
     }
 
     var backgroundColor: NSColor {
         switch self {
         case .lightContent:
-            .black.withAlphaComponent(0.52)
+            HUDChromePalette.deepGlassBackgroundColor
         case .darkContent:
-            .white.withAlphaComponent(0.04)
+            .white.withAlphaComponent(0.96)
         }
     }
 
     var borderColor: NSColor {
         switch self {
         case .lightContent:
-            .white.withAlphaComponent(0.22)
+            HUDChromePalette.deepGlassBorderColor
         case .darkContent:
-            .white.withAlphaComponent(0.38)
+            .init(calibratedWhite: 0.06, alpha: 0.18)
         }
     }
 
     var hoverColor: NSColor {
         switch self {
         case .lightContent:
-            .white.withAlphaComponent(0.14)
+            HUDChromePalette.deepGlassHoverColor
         case .darkContent:
-            .labelColor.withAlphaComponent(0.08)
+            .init(calibratedWhite: 0.06, alpha: 0.08)
         }
+    }
+}
+
+private final class HUDChromeFillView: NSView {
+    private let cornerRadius: CGFloat
+    private var fillColor = HUDChromePalette.deepGlassBackgroundColor
+
+    init(cornerRadius: CGFloat) {
+        self.cornerRadius = cornerRadius
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var isOpaque: Bool {
+        false
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
+    func applyTheme(_ theme: HUDTheme) {
+        fillColor = theme.backgroundColor
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        let path = NSBezierPath(
+            roundedRect: bounds,
+            xRadius: cornerRadius,
+            yRadius: cornerRadius
+        )
+        fillColor.setFill()
+        path.fill()
     }
 }
 
@@ -2881,7 +2953,7 @@ enum ScreenLuminanceSampler {
     }
 
     static func prefersLightHUDContent(backgroundLuminance: CGFloat) -> Bool {
-        true
+        false
     }
 
     private static func quartzCaptureRect(for cocoaRect: CGRect) -> CGRect {

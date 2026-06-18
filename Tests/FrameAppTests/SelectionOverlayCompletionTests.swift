@@ -71,13 +71,50 @@ final class SelectionOverlayCompletionTests: XCTestCase {
     }
 
     @MainActor
-    func testSelectionHUDUsesDarkChromeWithWhiteIcons() throws {
+    func testSelectionHUDUsesDeepGlassChromeWithWhiteIcons() throws {
         let window = try makeOverlayWindowForTesting()
         let chromeColors = window.hudChromeColorsForTesting()
 
-        XCTAssertLessThan(chromeColors.background.relativeLuminanceForTesting, 0.12)
-        XCTAssertGreaterThanOrEqual(chromeColors.background.relativeAlphaForTesting, 0.45)
+        XCTAssertTrue(window.hudHasDrawnChromeFillForTesting())
+        XCTAssertLessThan(chromeColors.background.relativeLuminanceForTesting, 0.08)
+        XCTAssertGreaterThanOrEqual(chromeColors.background.relativeAlphaForTesting, 0.88)
         XCTAssertGreaterThan(chromeColors.foreground.relativeLuminanceForTesting, 0.8)
+        XCTAssertGreaterThan(chromeColors.border.relativeLuminanceForTesting, 0.8)
+        XCTAssertGreaterThanOrEqual(chromeColors.border.relativeAlphaForTesting, 0.28)
+        XCTAssertGreaterThan(chromeColors.hover.relativeLuminanceForTesting, 0.8)
+        XCTAssertLessThanOrEqual(chromeColors.hover.relativeAlphaForTesting, 0.16)
+
+        let tintColors = window.hudButtonTintColorsForTesting()
+        for label in ["区域截图", "全屏截图", "延迟截图", "Recognize Text", "录屏"] {
+            let tintColor = try XCTUnwrap(tintColors[label])
+            XCTAssertGreaterThan(tintColor.relativeLuminanceForTesting, 0.8)
+        }
+    }
+
+    @MainActor
+    func testSelectionHUDUsesSameDeepGlassChromeInDarkAppearance() throws {
+        let darkAppearance = try XCTUnwrap(NSAppearance(named: .darkAqua))
+        var darkAppearanceWindow: SelectionOverlayWindow?
+        var creationError: Error?
+        darkAppearance.performAsCurrentDrawingAppearance {
+            do {
+                darkAppearanceWindow = try makeOverlayWindowForTesting()
+            } catch {
+                creationError = error
+            }
+        }
+        if let creationError {
+            throw creationError
+        }
+        let window = try XCTUnwrap(darkAppearanceWindow)
+        let chromeColors = window.hudChromeColorsForTesting()
+
+        XCTAssertLessThan(chromeColors.background.relativeLuminanceForTesting, 0.08)
+        XCTAssertGreaterThanOrEqual(chromeColors.background.relativeAlphaForTesting, 0.88)
+        XCTAssertGreaterThan(chromeColors.foreground.relativeLuminanceForTesting, 0.8)
+        XCTAssertGreaterThan(chromeColors.border.relativeLuminanceForTesting, 0.8)
+        XCTAssertGreaterThanOrEqual(chromeColors.border.relativeAlphaForTesting, 0.28)
+        XCTAssertGreaterThan(chromeColors.hover.relativeLuminanceForTesting, 0.8)
 
         let tintColors = window.hudButtonTintColorsForTesting()
         for label in ["区域截图", "全屏截图", "延迟截图", "Recognize Text", "录屏"] {
@@ -93,7 +130,8 @@ final class SelectionOverlayCompletionTests: XCTestCase {
 
         XCTAssertEqual(metrics.buttonWidth, 36)
         XCTAssertEqual(metrics.hoverDiameter, metrics.buttonWidth)
-        XCTAssertEqual(metrics.screenshotModeWidth, 180)
+        XCTAssertEqual(metrics.screenshotModeWidth, 186)
+        XCTAssertEqual(metrics.screenshotModeWidth - metrics.buttonWidth * 5, 6)
     }
 
     @MainActor
@@ -300,7 +338,7 @@ final class SelectionOverlayCompletionTests: XCTestCase {
         XCTAssertFalse(window.hudButtonAccessibilityLabelsForTesting().contains("暂停"))
         XCTAssertFalse(window.hudButtonAccessibilityLabelsForTesting().contains("继续"))
         XCTAssertEqual(window.recordingElapsedTextForTesting(), "00:24")
-        XCTAssertLessThanOrEqual(window.recordingHUDFrameForTesting().width, 168)
+        XCTAssertLessThanOrEqual(window.recordingHUDFrameForTesting().width, 174)
     }
 
     @MainActor
