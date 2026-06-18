@@ -500,6 +500,62 @@ struct AppStrings {
         }
     }
 
+    var videoEditorPlayPause: String {
+        switch language {
+        case .zhHans: "播放/暂停"
+        case .en: "Play/Pause"
+        }
+    }
+
+    var videoEditorStartTime: String {
+        switch language {
+        case .zhHans: "开始时间"
+        case .en: "Start time"
+        }
+    }
+
+    var videoEditorEndTime: String {
+        switch language {
+        case .zhHans: "结束时间"
+        case .en: "End time"
+        }
+    }
+
+    var videoEditorStartShort: String {
+        switch language {
+        case .zhHans: "开始"
+        case .en: "Start"
+        }
+    }
+
+    var videoEditorEndShort: String {
+        switch language {
+        case .zhHans: "结束"
+        case .en: "End"
+        }
+    }
+
+    var videoEditorPlaybackSpeed: String {
+        switch language {
+        case .zhHans: "播放速度"
+        case .en: "Playback speed"
+        }
+    }
+
+    var videoEditorSpeedShort: String {
+        switch language {
+        case .zhHans: "速度"
+        case .en: "Speed"
+        }
+    }
+
+    var videoEditorOutputDurationShort: String {
+        switch language {
+        case .zhHans: "变速后"
+        case .en: "Output"
+        }
+    }
+
     var quickAccessPin: String {
         switch language {
         case .zhHans: "固定到预览窗口"

@@ -1,3 +1,4 @@
+import AVFoundation
 import AppKit
 import XCTest
 @testable import FrameApp
@@ -5,6 +6,31 @@ import XCTest
 
 @MainActor
 final class AppDelegateRecordingTests: XCTestCase {
+    func testRestoringHistoryRecordingShowsQuickAccessPreview() async throws {
+        let store = CaptureHistoryStore(rootDirectory: makeTemporaryDirectory())
+        let delegate = AppDelegate(captureHistoryStore: store)
+        let sourceURL = try makeTemporaryTestMP4File(duration: 1.2)
+        let recordingData = try Data(contentsOf: sourceURL)
+        let record = try XCTUnwrap(try store.addRecording(
+            data: recordingData,
+            filenameExtension: RecordingFormat.mp4.fileExtension,
+            pixelSize: CGSize(width: 320, height: 240),
+            rect: CGRect(x: 10, y: 20, width: 320, height: 240),
+            configuration: .init(isEnabled: true, retention: .sevenDays, sizeLimit: .twoGB)
+        ))
+
+        await delegate.restoreHistoryRecordForTesting(record)
+
+        XCTAssertEqual(delegate.quickAccessRecordingCountForTesting(), 1)
+        let restoredRecording = try XCTUnwrap(delegate.quickAccessRecordingForTesting(id: record.id))
+        XCTAssertEqual(restoredRecording.fileURL, store.fileURL(for: record))
+        XCTAssertEqual(restoredRecording.format, .mp4)
+        XCTAssertEqual(restoredRecording.rect, record.rect)
+        XCTAssertEqual(restoredRecording.pixelSize, CGSize(width: 320, height: 240))
+        XCTAssertEqual(restoredRecording.byteSize, recordingData.count)
+        XCTAssertEqual(restoredRecording.duration, 1.2, accuracy: 0.25)
+    }
+
     func testSavingEditedRecordingAsNewShowsNewQuickAccessRecording() async throws {
         let exporter = FakeVideoEditingExporter(resultURL: try makeTemporaryMP4File())
         let delegate = AppDelegate(
@@ -87,7 +113,7 @@ final class AppDelegateRecordingTests: XCTestCase {
             options: .defaults
         )
         try await waitUntil {
-            recordingService.sessions.count == 1
+            recordingService.sessions.count == 1 && delegate.hasActiveRecordingForTesting()
         }
 
         XCTAssertFalse(delegate.startCaptureFlowForTesting())
@@ -117,7 +143,7 @@ final class AppDelegateRecordingTests: XCTestCase {
             options: .defaults
         )
         try await waitUntil {
-            recordingService.sessions.count == 1
+            recordingService.sessions.count == 1 && delegate.hasActiveRecordingForTesting()
         }
         let session = try XCTUnwrap(recordingService.sessions.first)
 
@@ -168,7 +194,7 @@ final class AppDelegateRecordingTests: XCTestCase {
         )
 
         try await waitUntil {
-            recordingService.recordedRequests.count == 1
+            recordingService.recordedRequests.count == 1 && delegate.hasActiveRecordingForTesting()
         }
 
         XCTAssertEqual(recordingService.recordedRequests.count, 1)
@@ -227,7 +253,7 @@ final class AppDelegateRecordingTests: XCTestCase {
             options: .defaults
         )
         try await waitUntil {
-            recordingService.sessions.count == 1
+            recordingService.sessions.count == 1 && delegate.hasActiveRecordingForTesting()
         }
         let session = try XCTUnwrap(recordingService.sessions.first)
 
@@ -256,7 +282,7 @@ final class AppDelegateRecordingTests: XCTestCase {
             options: .defaults
         )
         try await waitUntil {
-            recordingService.sessions.count == 1
+            recordingService.sessions.count == 1 && delegate.hasActiveRecordingForTesting()
         }
         XCTAssertTrue(delegate.activeRecordingElapsedTimerIsValidForTesting())
 
@@ -320,6 +346,79 @@ private func makeRecording(id: UUID, fileURL: URL, duration: TimeInterval = 10) 
         byteSize: 3,
         duration: duration
     )
+}
+
+private func makeTemporaryTestMP4File(duration: TimeInterval) throws -> URL {
+    let directory = makeTemporaryDirectory()
+    let url = directory.appendingPathComponent("recording-\(UUID().uuidString).mp4")
+    let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+    let size = CGSize(width: 16, height: 16)
+    let input = AVAssetWriterInput(
+        mediaType: .video,
+        outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: Int(size.width),
+            AVVideoHeightKey: Int(size.height),
+        ]
+    )
+    let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+        assetWriterInput: input,
+        sourcePixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: Int(size.width),
+            kCVPixelBufferHeightKey as String: Int(size.height),
+        ]
+    )
+    writer.add(input)
+
+    guard writer.startWriting() else {
+        throw NSError(domain: "AppDelegateRecordingTests", code: 1)
+    }
+    writer.startSession(atSourceTime: .zero)
+
+    for frameIndex in 0..<Int(duration * 10) {
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            Int(size.width),
+            Int(size.height),
+            kCVPixelFormatType_32BGRA,
+            nil,
+            &buffer
+        )
+        guard let buffer else {
+            throw NSError(domain: "AppDelegateRecordingTests", code: 2)
+        }
+
+        CVPixelBufferLockBaseAddress(buffer, [])
+        if let baseAddress = CVPixelBufferGetBaseAddress(buffer) {
+            memset(baseAddress, Int32(frameIndex % 255), CVPixelBufferGetDataSize(buffer))
+        }
+        CVPixelBufferUnlockBaseAddress(buffer, [])
+
+        while !input.isReadyForMoreMediaData {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        }
+
+        guard adaptor.append(
+            buffer,
+            withPresentationTime: CMTime(value: CMTimeValue(frameIndex), timescale: 10)
+        ) else {
+            throw NSError(domain: "AppDelegateRecordingTests", code: 3)
+        }
+    }
+
+    input.markAsFinished()
+    let expectation = XCTestExpectation(description: "finish writing test MP4")
+    writer.finishWriting {
+        expectation.fulfill()
+    }
+    XCTWaiter().wait(for: [expectation], timeout: 5)
+    guard writer.status == .completed else {
+        throw writer.error ?? NSError(domain: "AppDelegateRecordingTests", code: 4)
+    }
+
+    return url
 }
 
 private func makeTemporaryMP4File() throws -> URL {

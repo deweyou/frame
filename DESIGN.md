@@ -239,14 +239,27 @@ system tool, not a branded dashboard.
   restore them after recording completes or fails, then stack the new recording
   card with the existing previews instead of clearing the stack.
 - Screenshots and recordings share one Quick Access stack and one visual
-  language. Recording cards expose Download, Copy, Preview, Edit, and Close.
-  Edit is enabled for MP4 and disabled for GIF. Preview and Edit open the same
-  playable video window; MP4 windows show a bottom editor bar by default for
-  trim and speed. Use the first decodable recording frame as the thumbnail, with
-  a lightweight video placeholder as the fallback. Screenshots and recordings
-  should render in the same fixed card size, preserving media aspect ratio
-  inside that footprint. Keep the rendered content size asserted so the preview
-  cannot collapse into a thin strip.
+  language. Recording cards use the centered play affordance to open Preview;
+  hover actions expose Download, Copy, Edit, and Close so playback entry is not
+  duplicated. Edit is enabled for MP4 and disabled for GIF. Preview and Edit
+  open the same playable video window; MP4 windows hide the native AVPlayer
+  playback controls and titlebar filename prominence, keep Save Current, Copy,
+  and Download in the same right-aligned header row pattern as screenshot
+  editing, and show Frame's compact grouped bottom media control strip by
+  default. The strip uses a mini timeline for progress/seek, start/end trim
+  handles, and read-only start/end time labels, with time labels placed inside
+  wide selections, outside narrow selections when room allows, and clamped at
+  crowded edges. The timeline strip and trim handles use a pointing-hand cursor.
+  The bottom row stays minimal and aligned to the mini timeline's visible track:
+  a neutral circular play/pause icon button with no native focus ring or blue
+  accent fill, a current/selected duration summary that adds output duration
+  when speed is not `1x`, and a speed dropdown sized so Chinese labels and the
+  longest preset do not clip. Do not add a bottom Trim chip or make the controls
+  read as a large form. Use the first decodable recording frame as the thumbnail,
+  with a lightweight video placeholder as the fallback.
+  Screenshots and recordings should render in the same fixed card size,
+  preserving media aspect ratio inside that footprint. Keep the rendered content
+  size asserted so the preview cannot collapse into a thin strip.
 - Hovering a Quick Access card for two seconds opens a transient rounded
   right-side popover without an arrow. Image and recording previews render larger
   using the original media aspect ratio and aspect-fit scaling so the full image
@@ -265,6 +278,10 @@ system tool, not a branded dashboard.
   rather than adding a separate toolbar band.
 - History tiles follow the Quick Access visual language: rounded image preview,
   fine translucent border, compact metadata, and icon-only hover HUD actions.
+- Restoring a history tile should return the capture to the bottom-left Quick
+  Access stack instead of opening recordings directly in the system player.
+  Restored recordings must keep enough media metadata, including duration, for
+  the same Preview and Edit actions available after a fresh recording.
 - Recording history tiles should use the first decodable recording frame as the
   preview image and fall back to a lightweight video placeholder only when
   decoding fails.

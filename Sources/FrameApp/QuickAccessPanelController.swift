@@ -507,14 +507,7 @@ final class QuickAccessPanelController: NSObject {
         playImageView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 34, weight: .medium)
         playImageView.contentTintColor = .labelColor.withAlphaComponent(0.72)
 
-        let duration = NSTextField(labelWithString: formattedDuration(recording.duration))
-        duration.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
-        duration.textColor = .labelColor
-        duration.alignment = .center
-        duration.wantsLayer = true
-        duration.layer?.cornerRadius = 10
-        duration.layer?.cornerCurve = .continuous
-        duration.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
+        let duration = DurationBadgeLabel(text: formattedDuration(recording.duration))
 
         let stackView = NSStackView()
         stackView.orientation = .horizontal
@@ -534,14 +527,6 @@ final class QuickAccessPanelController: NSObject {
                 title: strings.videoQuickAccessCopy,
                 symbolName: "doc.on.doc",
                 action: #selector(copyRecordingButtonClicked),
-                style: .toolbar
-            )
-        )
-        stackView.addArrangedSubview(
-            makeIconButton(
-                title: strings.videoQuickAccessPreview,
-                symbolName: "play.rectangle",
-                action: #selector(previewRecordingButtonClicked),
                 style: .toolbar
             )
         )
@@ -916,14 +901,6 @@ final class QuickAccessPanelController: NSObject {
         }
 
         _ = item.copyRecording?()
-    }
-
-    @objc private func previewRecordingButtonClicked(_ sender: NSButton) {
-        guard let item = previewItem(for: sender.window) else {
-            return
-        }
-
-        _ = item.previewRecording?()
     }
 
     @objc private func editRecordingButtonClicked(_ sender: NSButton) {
@@ -1421,6 +1398,64 @@ private class ScreenshotPreviewView: NSView {
     }
 }
 
+final class DurationBadgeLabel: NSTextField {
+    static let badgeSize = CGSize(width: 52, height: 22)
+
+    var textDrawingRectForTesting: CGRect {
+        textDrawingRect()
+    }
+
+    init(text: String) {
+        super.init(frame: CGRect(origin: .zero, size: Self.badgeSize))
+        stringValue = text
+        font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        textColor = .labelColor
+        alignment = .center
+        isEditable = false
+        isSelectable = false
+        isBordered = false
+        drawsBackground = false
+        backgroundColor = .clear
+        focusRingType = .none
+        wantsLayer = true
+        layer?.cornerRadius = 10
+        layer?.cornerCurve = .continuous
+        layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
+        setAccessibilityLabel(text)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        attributedBadgeText.draw(with: textDrawingRect(), options: [.usesLineFragmentOrigin, .usesFontLeading])
+    }
+
+    private var attributedBadgeText: NSAttributedString {
+        NSAttributedString(
+            string: stringValue,
+            attributes: [
+                .font: font ?? NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
+                .foregroundColor: textColor ?? NSColor.labelColor,
+            ]
+        )
+    }
+
+    private func textDrawingRect() -> CGRect {
+        let textSize = attributedBadgeText.size()
+        let width = min(ceil(textSize.width), bounds.width)
+        let height = min(ceil(textSize.height), bounds.height)
+        return CGRect(
+            x: floor((bounds.width - width) / 2),
+            y: floor((bounds.height - height) / 2),
+            width: width,
+            height: height
+        )
+    }
+}
+
 private final class RecordingQuickAccessContentView: ScreenshotPreviewView {
     var hasThumbnailForTesting = false
     var onPreviewRequested: (() -> Bool)?
@@ -1443,7 +1478,10 @@ private final class RecordingQuickAccessContentView: ScreenshotPreviewView {
 
     func updateDuration(_ duration: TimeInterval) {
         let seconds = max(0, Int(duration.rounded(.down)))
-        durationLabel?.stringValue = String(format: "%02d:%02d", seconds / 60, seconds % 60)
+        let text = String(format: "%02d:%02d", seconds / 60, seconds % 60)
+        durationLabel?.stringValue = text
+        durationLabel?.setAccessibilityLabel(text)
+        durationLabel?.needsDisplay = true
     }
 
     override var intrinsicContentSize: NSSize {
@@ -1530,14 +1568,14 @@ private final class RecordingQuickAccessContentView: ScreenshotPreviewView {
             width: 34,
             height: 34
         )
-        let durationSize = CGSize(width: 52, height: 22)
+        let durationSize = DurationBadgeLabel.badgeSize
         durationLabel?.frame = CGRect(
             x: bounds.maxX - durationSize.width - 9,
             y: bounds.minY + 9,
             width: durationSize.width,
             height: durationSize.height
         )
-        let overlayWidth = min(126, max(88, bounds.width - 14))
+        let overlayWidth = min(96, max(76, bounds.width - 14))
         overlayView?.frame = CGRect(
             x: floor((bounds.width - overlayWidth) / 2),
             y: bounds.minY + 7,

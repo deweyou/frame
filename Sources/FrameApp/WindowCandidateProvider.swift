@@ -70,19 +70,17 @@ struct WindowCandidateProvider {
             return true
         }
 
-        guard let windowName = windowInfo[kCGWindowName as String] as? String else {
-            return false
+        guard let windowName = windowInfo[kCGWindowName as String] as? String,
+              !windowName.isEmpty else {
+            return true
         }
 
-        return Self.selectableCurrentProcessWindowNames.contains(windowName)
+        return !Self.transientCurrentProcessWindowNames.contains(windowName)
     }
 
-    private static let selectableCurrentProcessWindowNames: Set<String> = [
-        "Settings",
-        "设置",
-        "Capture History",
-        "捕获历史",
-        "截图历史",
+    private static let transientCurrentProcessWindowNames: Set<String> = [
+        QuickAccessPanelController.previewWindowTitle,
+        QuickAccessPanelController.hoverPreviewWindowTitle,
     ]
 
     static func cocoaRect(forWindowInfo windowInfo: [String: Any]) -> CGRect? {

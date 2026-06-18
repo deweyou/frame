@@ -1,5 +1,7 @@
+import AVFoundation
 import AppKit
 import FrameCore
+import ImageIO
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -698,6 +700,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showVideoQuickAccess(for: recording, anchor: nil)
     }
 
+    func restoreHistoryRecordForTesting(_ record: CaptureHistoryRecord) async {
+        guard record.kind == .screenshot else {
+            await restoreHistoryRecording(record)
+            return
+        }
+
+        restoreHistoryRecord(record)
+    }
+
     func quickAccessRecordingCountForTesting() -> Int {
         quickAccessPanelController.recordingCountForTesting()
     }
@@ -866,15 +877,89 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return CapturedScreenshot(pngData: data, image: image, rect: record.rect)
     }
 
+    private func recording(from record: CaptureHistoryRecord) async throws -> CapturedRecording {
+        guard let format = recordingFormat(for: record) else {
+            throw CaptureHistoryError.recordingFormatUnsupported
+        }
+
+        return CapturedRecording(
+            id: record.id,
+            fileURL: captureHistoryStore.fileURL(for: record),
+            format: format,
+            rect: record.rect,
+            pixelSize: CGSize(width: CGFloat(record.pixelWidth), height: CGFloat(record.pixelHeight)),
+            byteSize: record.byteSize,
+            duration: await recordingDuration(for: record, format: format)
+        )
+    }
+
+    private func recordingDuration(for record: CaptureHistoryRecord, format: RecordingFormat) async -> TimeInterval {
+        let fileURL = captureHistoryStore.fileURL(for: record)
+        switch format {
+        case .mp4:
+            let asset = AVURLAsset(url: fileURL)
+            guard let duration = try? await asset.load(.duration) else {
+                return 0
+            }
+
+            return normalizedRecordingDuration(duration.seconds)
+        case .gif:
+            return gifRecordingDuration(for: fileURL)
+        }
+    }
+
+    private func gifRecordingDuration(for fileURL: URL) -> TimeInterval {
+        guard let imageSource = CGImageSourceCreateWithURL(fileURL as CFURL, nil) else {
+            return 0
+        }
+
+        let frameCount = CGImageSourceGetCount(imageSource)
+        return (0..<frameCount).reduce(0) { duration, frameIndex in
+            duration + gifFrameDuration(in: imageSource, at: frameIndex)
+        }
+    }
+
+    private func gifFrameDuration(in imageSource: CGImageSource, at frameIndex: Int) -> TimeInterval {
+        guard let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, frameIndex, nil) as? [CFString: Any],
+              let gifProperties = properties[kCGImagePropertyGIFDictionary] as? [CFString: Any] else {
+            return 0
+        }
+
+        let unclampedDelay = gifProperties[kCGImagePropertyGIFUnclampedDelayTime] as? NSNumber
+        let delay = gifProperties[kCGImagePropertyGIFDelayTime] as? NSNumber
+        return normalizedRecordingDuration((unclampedDelay ?? delay)?.doubleValue ?? 0)
+    }
+
+    private func normalizedRecordingDuration(_ duration: TimeInterval) -> TimeInterval {
+        guard duration.isFinite, duration > 0 else {
+            return 0
+        }
+
+        return duration
+    }
+
     private func restoreHistoryRecord(_ record: CaptureHistoryRecord) {
         guard record.kind == .screenshot else {
-            NSWorkspace.shared.open(captureHistoryStore.fileURL(for: record))
+            Task { @MainActor in
+                await restoreHistoryRecording(record)
+            }
             return
         }
 
         do {
             showQuickAccess(
                 for: try screenshot(from: record),
+                anchor: ActiveScreenResolver.preferredQuickAccessFollowAnchor()
+            )
+        } catch {
+            showQuickAccessFailedAlert(title: strings.captureFailedTitle, error: error)
+        }
+    }
+
+    private func restoreHistoryRecording(_ record: CaptureHistoryRecord) async {
+        do {
+            showVideoQuickAccess(
+                for: try await recording(from: record),
                 anchor: ActiveScreenResolver.preferredQuickAccessFollowAnchor()
             )
         } catch {
@@ -1351,11 +1436,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 private enum CaptureHistoryError: Error, LocalizedError {
     case imageDecodeFailed
+    case recordingFormatUnsupported
 
     var errorDescription: String? {
         switch self {
         case .imageDecodeFailed:
             "Could not decode the cached capture image."
+        case .recordingFormatUnsupported:
+            "Could not restore the cached recording because its format is unsupported."
         }
     }
 }

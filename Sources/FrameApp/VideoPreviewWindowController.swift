@@ -41,11 +41,13 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
 
         let window = NSWindow(
             contentRect: CGRect(x: 0, y: 0, width: 720, height: 460),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.title = recording.fileURL.lastPathComponent
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.isReleasedWhenClosed = false
         window.delegate = self
@@ -55,7 +57,7 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
         let mediaView = media.view
         mediaView.translatesAutoresizingMaskIntoConstraints = false
         let editingState = recording.format == .mp4 ? try? VideoEditingState(sourceDuration: recording.duration) : nil
-        let editorBar = editingState.map { VideoEditorBarView(state: $0) }
+        let editorBar = editingState.map { VideoEditorBarView(state: $0, strings: strings) }
         let playerTimeObserver = media.player.map { player in
             player.addPeriodicTimeObserver(
                 forInterval: CMTime(seconds: 0.05, preferredTimescale: 600),
@@ -76,6 +78,22 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
         toolbar.alignment = .centerY
         toolbar.spacing = 8
         toolbar.translatesAutoresizingMaskIntoConstraints = false
+        let headerSpacer = NSView()
+        headerSpacer.translatesAutoresizingMaskIntoConstraints = false
+        toolbar.addArrangedSubview(headerSpacer)
+        if editingState != nil {
+            toolbar.addArrangedSubview(
+                makeSaveCurrentButton(
+                    title: strings.workspaceSaveCurrent,
+                    symbolName: "checkmark.circle",
+                    replaceTitle: strings.videoReplaceCurrent,
+                    saveAsNewTitle: strings.videoSaveAsNew,
+                    action: { [weak self] choice in
+                        self?.performSaveCurrent(recordingID: recording.id, choice: choice) ?? false
+                    }
+                )
+            )
+        }
         toolbar.addArrangedSubview(
             makeButton(
                 title: strings.videoQuickAccessCopy,
@@ -94,35 +112,29 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
                 }
             )
         )
-        if editingState != nil {
-            toolbar.addArrangedSubview(
-                makeSaveCurrentButton(
-                    title: strings.workspaceSaveCurrent,
-                    symbolName: "checkmark.circle",
-                    replaceTitle: strings.videoReplaceCurrent,
-                    saveAsNewTitle: strings.videoSaveAsNew,
-                    action: { [weak self] choice in
-                        self?.performSaveCurrent(recordingID: recording.id, choice: choice) ?? false
-                    }
-                )
-            )
-        } else {
-            toolbar.addArrangedSubview(makeDisabledButton(title: strings.videoQuickAccessEdit, symbolName: "slider.horizontal.3"))
-        }
+
+        let header = makeHeaderView()
+        header.addSubview(toolbar)
 
         let root = NSView()
-        root.addSubview(toolbar)
+        root.addSubview(header)
         root.addSubview(mediaView)
         if let editorBar {
             root.addSubview(editorBar)
         }
 
         var constraints = [
-            toolbar.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
-            toolbar.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
+            header.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            header.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            header.topAnchor.constraint(equalTo: root.topAnchor),
+            header.heightAnchor.constraint(equalToConstant: 32),
+            toolbar.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 88),
+            toolbar.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -6),
+            toolbar.topAnchor.constraint(equalTo: header.topAnchor, constant: 2),
+            toolbar.bottomAnchor.constraint(equalTo: header.bottomAnchor, constant: -2),
             mediaView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             mediaView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            mediaView.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 8),
+            mediaView.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 6),
         ]
         if let editorBar {
             constraints.append(contentsOf: [
@@ -152,6 +164,12 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
         )
         editorBar?.onStateChanged = { [weak self] state in
             self?.updateEditingState(recordingID: recording.id, state: state)
+        }
+        editorBar?.onPlayPauseRequested = { [weak self] in
+            self?.togglePlayback(recordingID: recording.id)
+        }
+        editorBar?.onSeekRequested = { [weak self] time in
+            self?.seekPlayback(recordingID: recording.id, time: time)
         }
         if focusEditor {
             editorBar?.window?.makeFirstResponder(editorBar)
@@ -266,17 +284,19 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
             let playerView = AVPlayerView()
             let player = AVPlayer(url: recording.fileURL)
             playerView.player = player
-            playerView.controlsStyle = .floating
+            playerView.controlsStyle = .none
             return (playerView, player)
         }
     }
 
     private func stopPlaybackIfNeeded(player: AVPlayer, recordingID: UUID, time: CMTime) {
-        guard let state = items[recordingID]?.editingState,
+        guard let item = items[recordingID],
+              let state = item.editingState,
               player.rate > 0 else {
             return
         }
 
+        item.editorBar?.updatePlayback(time: time.seconds, isPlaying: true)
         if time.seconds < state.startTime {
             player.seek(
                 to: CMTime(seconds: state.startTime, preferredTimescale: 600),
@@ -301,6 +321,7 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
             toleranceBefore: .zero,
             toleranceAfter: .zero
         )
+        item.editorBar?.updatePlayback(time: state.endTime, isPlaying: false)
     }
 
     private func updateEditingState(recordingID: UUID, state: VideoEditingState) {
@@ -326,6 +347,46 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
         if player.rate > 0 {
             player.rate = Float(state.speed.rate)
         }
+        item.editorBar?.updatePlayback(time: player.currentTime().seconds, isPlaying: player.rate > 0)
+    }
+
+    private func togglePlayback(recordingID: UUID) {
+        guard let item = items[recordingID],
+              let player = item.player,
+              let state = item.editingState else {
+            return
+        }
+
+        if player.rate > 0 {
+            player.pause()
+            item.editorBar?.updatePlayback(time: player.currentTime().seconds, isPlaying: false)
+            return
+        }
+
+        let currentTime = player.currentTime().seconds
+        if currentTime < state.startTime || currentTime >= state.endTime {
+            player.seek(
+                to: CMTime(seconds: state.startTime, preferredTimescale: 600),
+                toleranceBefore: .zero,
+                toleranceAfter: .zero
+            )
+            item.editorBar?.updatePlayback(time: state.startTime, isPlaying: true)
+        }
+        player.rate = Float(state.speed.rate)
+    }
+
+    private func seekPlayback(recordingID: UUID, time: TimeInterval) {
+        guard let item = items[recordingID],
+              let player = item.player else {
+            return
+        }
+
+        player.seek(
+            to: CMTime(seconds: time, preferredTimescale: 600),
+            toleranceBefore: .zero,
+            toleranceAfter: .zero
+        )
+        item.editorBar?.updatePlayback(time: time, isPlaying: player.rate > 0)
     }
 
     private func makeButton(title: String, symbolName: String, action: @escaping () -> Bool) -> NSButton {
@@ -333,10 +394,27 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
         button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: title)
         button.title = ""
         button.imagePosition = .imageOnly
-        button.isBordered = false
         button.toolTip = title
         button.setAccessibilityLabel(title)
+        configureActionButton(button)
         return button
+    }
+
+    private func makeHeaderView() -> NSVisualEffectView {
+        let header = NSVisualEffectView()
+        header.material = .hudWindow
+        header.blendingMode = .withinWindow
+        header.state = .active
+        header.alphaValue = 1
+        header.wantsLayer = true
+        header.layer?.cornerRadius = 16
+        header.layer?.cornerCurve = .continuous
+        header.layer?.masksToBounds = true
+        header.layer?.borderWidth = 0.5
+        header.layer?.borderColor = NSColor.white.withAlphaComponent(0.38).cgColor
+        header.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.04).cgColor
+        header.translatesAutoresizingMaskIntoConstraints = false
+        return header
     }
 
     private func makeDisabledButton(title: String, symbolName: String) -> NSButton {
@@ -360,7 +438,21 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
             saveAsNewTitle: saveAsNewTitle,
             action: action
         )
+        configureActionButton(button)
         return button
+    }
+
+    private func configureActionButton(_ button: NSButton) {
+        button.isBordered = false
+        button.bezelStyle = .regularSquare
+        button.imagePosition = .imageOnly
+        button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
+        button.contentTintColor = .labelColor
+        button.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 26),
+            button.heightAnchor.constraint(equalToConstant: 24),
+        ])
     }
 
     private func performSaveCurrent(recordingID: UUID, choice: VideoPreviewSaveChoice) -> Bool {

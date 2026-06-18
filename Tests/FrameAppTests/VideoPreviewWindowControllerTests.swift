@@ -29,7 +29,50 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.editingStateForTesting(recordingID: recording.id)?.endTime, 24)
         let window = try XCTUnwrap(controller.windowForTesting(recordingID: recording.id))
         let contentView = try XCTUnwrap(window.contentView)
-        XCTAssertNotNil(findSubview(of: VideoEditorBarView.self, in: contentView))
+        let editorBar = try XCTUnwrap(findSubview(of: VideoEditorBarView.self, in: contentView))
+        let playerView = try XCTUnwrap(findSubview(of: AVPlayerView.self, in: contentView))
+        XCTAssertEqual(playerView.controlsStyle, .none)
+        XCTAssertTrue(editorBar.hasTimelineForTesting)
+        XCTAssertTrue(editorBar.hasSpeedDropdownForTesting)
+    }
+
+    func testMP4PreviewUsesWorkspaceStyleHeaderRow() throws {
+        let recording = makeMP4Recording(duration: 24)
+        let controller = VideoPreviewWindowController()
+
+        controller.show(
+            recording: recording,
+            strings: AppStrings(language: .en),
+            copy: { _, _ in true },
+            download: { _, _ in true },
+            saveCurrent: { _, _, _ in true }
+        )
+
+        let window = try XCTUnwrap(controller.windowForTesting(recordingID: recording.id))
+        XCTAssertTrue(window.styleMask.contains(.fullSizeContentView))
+        XCTAssertTrue(window.titlebarAppearsTransparent)
+
+        let contentView = try XCTUnwrap(window.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let playerView = try XCTUnwrap(findSubview(of: AVPlayerView.self, in: contentView))
+        let topConstraint = try XCTUnwrap(contentView.constraints.first {
+            $0.firstItem === playerView && $0.firstAttribute == .top
+        })
+        let header = try XCTUnwrap(topConstraint.secondItem as? NSVisualEffectView)
+        XCTAssertEqual(topConstraint.secondAttribute, .bottom)
+        XCTAssertEqual(topConstraint.constant, 6)
+
+        let closeButton = try XCTUnwrap(window.standardWindowButton(.closeButton))
+        let miniaturizeButton = try XCTUnwrap(window.standardWindowButton(.miniaturizeButton))
+        let zoomButton = try XCTUnwrap(window.standardWindowButton(.zoomButton))
+        let headerFrame = header.convert(header.bounds, to: contentView)
+        let closeFrame = closeButton.convert(closeButton.bounds, to: contentView)
+        let miniaturizeFrame = miniaturizeButton.convert(miniaturizeButton.bounds, to: contentView)
+        let zoomFrame = zoomButton.convert(zoomButton.bounds, to: contentView)
+
+        XCTAssertEqual(headerFrame.midY, closeFrame.midY, accuracy: 1.5)
+        XCTAssertEqual(headerFrame.midY, miniaturizeFrame.midY, accuracy: 1.5)
+        XCTAssertEqual(headerFrame.midY, zoomFrame.midY, accuracy: 1.5)
     }
 
     func testGIFPreviewWindowDoesNotShowEditorBar() throws {

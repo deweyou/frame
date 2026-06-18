@@ -18,14 +18,30 @@ Workspace window.
 - GIF recordings keep preview, copy, and download behavior, but do not expose
   editing controls. GIF Edit remains disabled with a short tooltip or disabled
   explanation.
-- Quick Access Preview and Edit open the same video preview window. Edit should
-  focus the always-visible MP4 editing controls, but it must not open another
-  window.
+- Quick Access uses the centered play affordance as the Preview entry, while
+  hover actions expose Download, Copy, Edit, and Close. Preview and Edit open the
+  same video preview window. Edit should focus the always-visible MP4 editing
+  controls, but it must not open another window.
+- Restoring a recording from Capture History returns it to the bottom-left Quick
+  Access stack. It must not bypass Frame by opening the file directly in the
+  system player, and restored MP4 recordings must retain a valid source duration
+  for preview/edit controls.
+- Frame-owned editing windows, including Image Workspace and video preview
+  windows, remain eligible for the existing window-screenshot double-click
+  selection path. Transient Quick Access and capture HUD/overlay windows remain
+  ineligible.
 - MP4 editing controls are visible by default in the video preview window. A user
   can ignore them and use the same window for preview-only playback.
-- The first editable operations are trim start time, trim end time, and playback
-  speed.
-- Trim time display, input, snapping, and validation use `0.01s` precision.
+- MP4 preview playback uses Frame's own grouped bottom control strip. Native
+  AVPlayer playback controls are hidden so the user sees one editing timeline
+  and one set of play/pause/seek controls. The bottom strip stays compact and
+  media-control-like rather than form-like. Save Current, Copy, and Download use
+  the same right-aligned header row pattern as screenshot editing and align with
+  the traffic-light titlebar controls, while the titlebar filename stays hidden.
+- The first editable operations are trim start/end through the timeline handles
+  and playback speed.
+- Trim time display, handle input, snapping, and validation use `0.01s`
+  precision.
   Export uses the quantized start and end times as the requested AVFoundation
   time range; tests may allow a small tolerance for source track time-scale and
   keyframe behavior.
@@ -77,15 +93,15 @@ This iteration excludes:
 ## User Flow
 
 1. The user completes an MP4 recording.
-2. Quick Access shows the recording card with Download, Copy, Preview, Edit, and
-   Close.
-3. Preview opens the existing video preview window. The MP4 editor bar is visible
-   by default.
+2. Quick Access shows the recording card with a centered Preview play affordance
+   plus Download, Copy, Edit, and Close hover actions.
+3. The centered Preview affordance opens the existing video preview window. The
+   MP4 editor bar is visible by default.
 4. Edit opens or activates the same window and focuses the editor bar.
 5. The editor initializes to the full source duration, `1x` speed, and clean
    state.
-6. The user drags trim handles or edits start/end time fields. Values snap to
-   `0.01s`.
+6. The user drags trim handles on the mini timeline. Values snap to `0.01s`,
+   and start/end labels display the resulting times without direct text editing.
 7. The user chooses one speed preset.
 8. Playback starts at the selected start time, uses the selected speed, and stops
    at the selected end time.
@@ -96,7 +112,8 @@ This iteration excludes:
 
 For GIF recordings:
 
-1. Quick Access keeps Download, Copy, Preview, disabled Edit, and Close.
+1. Quick Access keeps the centered Preview play affordance plus Download, Copy,
+   disabled Edit, and Close hover actions.
 2. Preview opens the same video preview window path used today for animated GIFs.
 3. The MP4 editor bar is not active for GIF files.
 
@@ -121,10 +138,22 @@ Toolbar actions:
 MP4 editor bar:
 
 - Place it below the media preview, not over the recorded pixels.
-- Show a trim range timeline with start and end handles.
-- Show editable start and end time fields in `mm:ss.xx` style.
-- Show selected duration and output duration when space allows.
-- Show speed presets as compact segmented or button controls.
+- Show a mini trim range timeline with start and end handles.
+- Show play/pause and seek/progress controls in the same bottom editor bar as the
+  trim timeline. The progress affordance must live on the Frame-owned timeline,
+  not in AVPlayer's native controls.
+- Keep read-only start and end time labels on the mini timeline in `mm:ss.xx`
+  style. Place them inside wide selected ranges, outside narrow selected ranges
+  when both sides have room, and clamp them inside the timeline at crowded edges.
+- Use a pointing-hand cursor over the timeline strip and trim handles.
+- Do not use a tooltip-only time display for trim edge cases.
+- Do not show a bottom Trim chip; the timeline itself is the trim affordance.
+- Keep the bottom row minimal and aligned to the mini timeline's visible track:
+  a neutral circular play/pause icon button without native focus ring or blue
+  accent fill, compact current time / selected duration summary that adds output
+  duration when speed is not `1x`, and speed as a compact button/dropdown menu
+  using the fixed presets. The speed control must be wide enough for Chinese
+  labels and the longest preset.
 - Keep controls stable in size during edits to avoid layout jumps.
 
 GIF behavior:
@@ -188,11 +217,12 @@ Use one user-facing video window with internal boundaries.
 
 `FrameApp` owns AppKit behavior and side effects:
 
-- `VideoPreviewWindowController`: owns window lifecycle, media view, toolbar
+- `VideoPreviewWindowController`: owns window lifecycle, media view, header
   actions, dirty-close prompt, and delegates edit-specific behavior to smaller
   helpers.
-- Video editor bar view/controller: owns trim handles, time fields, speed preset
-  controls, and player synchronization.
+- Video editor bar view/controller: owns the mini timeline, trim handles,
+  read-only timeline time labels, speed preset controls, and player
+  synchronization.
 - Video playback coordinator: constrains player playback to the selected range,
   applies the selected rate, stops at end, and restarts from start on the next
   play.
@@ -261,7 +291,7 @@ Automated tests should cover boundaries that do not need live screen recording:
 Manual smoke testing should cover:
 
 - Opening an MP4 recording from Quick Access Preview and Edit.
-- Adjusting trim handles and time fields to `0.01s`.
+- Adjusting trim handles while mini timeline time labels update to `0.01s`.
 - Each speed preset.
 - Playback limited to the selected range and stopping at end.
 - Replace Current refreshing the active Quick Access card.

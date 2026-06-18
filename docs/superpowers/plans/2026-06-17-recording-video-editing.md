@@ -21,7 +21,7 @@
 - Create: `Tests/FrameAppTests/VideoEditingExporterTests.swift`
   - Generates tiny MP4 fixtures and verifies trim/speed duration behavior.
 - Create: `Sources/FrameApp/VideoEditorBarView.swift`
-  - AppKit editor bar with start/end fields, speed controls, trim range, and testing API.
+  - AppKit editor bar with a mini timeline, read-only start/end time labels, speed controls, trim range, and testing API.
 - Modify: `Sources/FrameApp/VideoPreviewWindowController.swift`
   - Keeps the single window, adds MP4 editor bar, playback coordination, Save Current menu, dirty close prompt, and test hooks.
 - Modify: `Tests/FrameAppTests/VideoPreviewWindowControllerTests.swift`
@@ -40,6 +40,31 @@
   - Locks new localized copy.
 - Modify after feature implementation: `README.md`, `README_ZH.md`, `docs/architecture.md`, `DESIGN.md`
   - Documents shipped user-facing behavior.
+
+## Follow-up: Native Playback Controls And Editing Window Capture
+
+**Files:**
+- Modify: `Sources/FrameApp/WindowCandidateProvider.swift`
+  - Keep transient Frame panels filtered, but allow Frame-owned editing windows
+    such as Image Workspace and Video Preview to be selected by the existing
+    double-click window screenshot flow.
+- Modify: `Tests/FrameAppTests/WindowCandidateProviderTests.swift`
+  - Cover current-process editing windows without a CG window name and MP4 video
+    preview windows as eligible while Quick Access remains ineligible.
+- Modify: `Sources/FrameApp/VideoPreviewWindowController.swift`
+  - Hide native AVPlayer controls, wire play/pause and seek callbacks from the
+    editor bar, keep playback clipped to the trim range, and update the custom
+    timeline during playback.
+- Modify: `Sources/FrameApp/VideoEditorBarView.swift`
+  - Replace the segmented speed control with a button/dropdown menu, add a custom
+    trim/progress timeline with start/end handles, and expose stable testing APIs
+    for play/pause, seek, trim, and speed selection.
+- Modify: `Tests/FrameAppTests/VideoPreviewWindowControllerTests.swift`
+  - Assert MP4 previews do not expose native AVPlayer controls and that custom
+    play/pause/seek routes to the player coordinator.
+- Modify: `Tests/FrameAppTests/VideoEditorBarViewTests.swift`
+  - Assert the speed dropdown emits preset changes and the timeline emits
+    trim/seek changes.
 
 ## Task 1: Core Video Editing State
 
@@ -1301,9 +1326,13 @@ In `docs/architecture.md`, update VideoPreview and Quick Access bullets to state
 In `DESIGN.md`, update Quick Access / video preview guidance:
 
 ```markdown
-- Recording cards expose Download, Copy, Preview, Edit, and Close. Edit is enabled
-  for MP4 and disabled for GIF. Preview and Edit open the same video preview
-  window; MP4 windows show a bottom editor bar by default for trim and speed.
+- Recording cards use the centered play affordance for Preview and expose
+  Download, Copy, Edit, and Close as hover actions. Edit is enabled for MP4 and
+  disabled for GIF. Preview and Edit open the same video preview window; MP4
+  windows hide native AVPlayer playback controls and show Frame's grouped bottom
+  control bar with a mini timeline for progress/seek, trim handles, and read-only
+  start/end time labels, plus a minimal bottom row for play/pause, time summary,
+  and speed dropdown.
 ```
 
 - [ ] **Step 4: Run docs grep sanity**

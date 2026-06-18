@@ -16,7 +16,7 @@ Screenshots are often a tiny step inside a larger workflow: explaining an idea, 
 - Works across multiple displays.
 - Shows a small Quick Access preview after screenshots and recordings, with a
   larger hover preview after a short pause.
-- Lets you copy, save, or close from hover actions.
+- Lets you copy, save, edit, download, or close from contextual actions.
 - Keeps a local Capture History so recent screenshots and recordings can be
   recovered.
 
