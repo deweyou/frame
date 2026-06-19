@@ -135,6 +135,45 @@ final class WindowCandidateProviderTests: XCTestCase {
         XCTAssertEqual(candidate?.id, 43)
     }
 
+    func testCurrentProcessNamelessEditingWindowIsEligibleForWindowSelection() {
+        let quartzBounds = CGRect(x: 10, y: 20, width: 300, height: 200)
+        let expectedCocoaBounds = WindowCandidateProvider.cocoaRect(fromQuartzWindowRect: quartzBounds)
+        let provider = WindowCandidateProvider(
+            currentProcessID: 100,
+            windowInfoProvider: { _, _ in
+                [Self.windowInfo(
+                    windowID: 45,
+                    ownerProcessID: 100,
+                    bounds: quartzBounds
+                )]
+            }
+        )
+
+        let candidate = provider.candidate(at: CGPoint(x: expectedCocoaBounds.midX, y: expectedCocoaBounds.midY))
+
+        XCTAssertEqual(candidate?.id, 45)
+    }
+
+    func testCurrentProcessVideoPreviewWindowIsEligibleForWindowSelection() {
+        let quartzBounds = CGRect(x: 10, y: 20, width: 300, height: 200)
+        let expectedCocoaBounds = WindowCandidateProvider.cocoaRect(fromQuartzWindowRect: quartzBounds)
+        let provider = WindowCandidateProvider(
+            currentProcessID: 100,
+            windowInfoProvider: { _, _ in
+                [Self.windowInfo(
+                    windowID: 46,
+                    ownerProcessID: 100,
+                    bounds: quartzBounds,
+                    name: "Frame Recording.mp4"
+                )]
+            }
+        )
+
+        let candidate = provider.candidate(at: CGPoint(x: expectedCocoaBounds.midX, y: expectedCocoaBounds.midY))
+
+        XCTAssertEqual(candidate?.id, 46)
+    }
+
     func testCurrentProcessTransientQuickAccessWindowIsNotEligibleForWindowSelection() {
         let quartzBounds = CGRect(x: 10, y: 20, width: 300, height: 200)
         let expectedCocoaBounds = WindowCandidateProvider.cocoaRect(fromQuartzWindowRect: quartzBounds)

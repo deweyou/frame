@@ -31,6 +31,7 @@ final class AppStringsTests: XCTestCase {
         XCTAssertEqual(strings.windowScreenshotDecorationStyleName(.original), "Original")
         XCTAssertEqual(strings.capturePlaceholder, "Drag to select an area")
         XCTAssertEqual(strings.quickAccessSave, "Save")
+        XCTAssertEqual(strings.videoEditingMP4Only, "MP4 editing only in this version")
         XCTAssertEqual(strings.captureHistoryTitle, "Capture History")
         XCTAssertEqual(strings.captureHistoryEmpty, "No local history yet")
         XCTAssertEqual(strings.captureHistoryRestore, "Restore")
@@ -65,6 +66,7 @@ final class AppStringsTests: XCTestCase {
         XCTAssertEqual(strings.windowScreenshotDecorationStyleName(.original), "原图")
         XCTAssertEqual(strings.capturePlaceholder, "拖拽以选择截图区域")
         XCTAssertEqual(strings.quickAccessSave, "保存")
+        XCTAssertEqual(strings.videoEditingMP4Only, "此版本仅支持编辑 MP4")
         XCTAssertEqual(strings.captureHistoryTitle, "捕获历史")
         XCTAssertEqual(strings.captureHistoryEmpty, "暂无本地历史")
         XCTAssertEqual(strings.captureHistoryRestore, "恢复")
@@ -147,6 +149,20 @@ final class AppStringsTests: XCTestCase {
             english.workspaceUnsavedChangesMessage,
             "Before closing, replace the current image, save a new Quick Access preview, close without saving, or cancel and keep editing."
         )
+        XCTAssertEqual(
+            english.videoUnsavedChangesMessage,
+            "Before closing, replace the current recording, save a new Quick Access recording, close without saving, or cancel and keep editing."
+        )
+        XCTAssertEqual(english.videoReplaceCurrent, "Replace Current")
+        XCTAssertEqual(english.videoSaveAsNew, "Save As New")
+        XCTAssertEqual(english.videoEditorPlayPause, "Play/Pause")
+        XCTAssertEqual(english.videoEditorStartTime, "Start time")
+        XCTAssertEqual(english.videoEditorEndTime, "End time")
+        XCTAssertEqual(english.videoEditorStartShort, "Start")
+        XCTAssertEqual(english.videoEditorEndShort, "End")
+        XCTAssertEqual(english.videoEditorPlaybackSpeed, "Playback speed")
+        XCTAssertEqual(english.videoEditorSpeedShort, "Speed")
+        XCTAssertEqual(english.videoEditorOutputDurationShort, "Output")
         XCTAssertEqual(english.cancel, "Cancel")
 
         let chinese = AppStrings(language: .zhHans)
@@ -168,6 +184,20 @@ final class AppStringsTests: XCTestCase {
             chinese.workspaceUnsavedChangesMessage,
             "关闭前选择替换当前图、保存为一张新的 Quick Access 预览、不保存并关闭，或取消并继续编辑。"
         )
+        XCTAssertEqual(
+            chinese.videoUnsavedChangesMessage,
+            "关闭前选择替换当前录屏、保存为一条新的 Quick Access 录屏、不保存并关闭，或取消并继续编辑。"
+        )
+        XCTAssertEqual(chinese.videoReplaceCurrent, "替换当前录屏")
+        XCTAssertEqual(chinese.videoSaveAsNew, "另存新录屏")
+        XCTAssertEqual(chinese.videoEditorPlayPause, "播放/暂停")
+        XCTAssertEqual(chinese.videoEditorStartTime, "开始时间")
+        XCTAssertEqual(chinese.videoEditorEndTime, "结束时间")
+        XCTAssertEqual(chinese.videoEditorStartShort, "开始")
+        XCTAssertEqual(chinese.videoEditorEndShort, "结束")
+        XCTAssertEqual(chinese.videoEditorPlaybackSpeed, "播放速度")
+        XCTAssertEqual(chinese.videoEditorSpeedShort, "速度")
+        XCTAssertEqual(chinese.videoEditorOutputDurationShort, "变速后")
         XCTAssertEqual(chinese.cancel, "取消")
     }
 

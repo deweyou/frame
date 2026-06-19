@@ -50,6 +50,7 @@ final class QuickAccessPanelController: NSObject {
                 ocrProgressIndicator: content.ocrProgressIndicator,
                 statusLabel: content.statusLabel,
                 screenshotImageView: content.imageView,
+                recordingContentView: nil,
                 copy: copy,
                 save: save,
                 recognizeText: recognizeText,
@@ -58,6 +59,7 @@ final class QuickAccessPanelController: NSObject {
                 downloadRecording: nil,
                 copyRecording: nil,
                 previewRecording: nil,
+                editRecording: nil,
                 hoverPreviewMedia: .image(captured.image),
                 close: close
             )
@@ -75,6 +77,7 @@ final class QuickAccessPanelController: NSObject {
         download: @escaping () -> Bool,
         copy: @escaping () -> Bool,
         preview: @escaping () -> Bool,
+        edit: @escaping () -> Bool,
         close: @escaping () -> Void
     ) {
         restoreTemporarilyHiddenPreviews()
@@ -104,6 +107,7 @@ final class QuickAccessPanelController: NSObject {
                 ocrProgressIndicator: nil,
                 statusLabel: nil,
                 screenshotImageView: nil,
+                recordingContentView: content,
                 copy: nil,
                 save: nil,
                 recognizeText: nil,
@@ -112,6 +116,7 @@ final class QuickAccessPanelController: NSObject {
                 downloadRecording: download,
                 copyRecording: copy,
                 previewRecording: preview,
+                editRecording: edit,
                 hoverPreviewMedia: .recording(recording),
                 close: close
             )
@@ -141,6 +146,20 @@ final class QuickAccessPanelController: NSObject {
 
         item.screenshotImageView?.setImage(screenshot.image)
         item.hoverPreviewMedia = .image(screenshot.image)
+        item.hoverPreviewWorkItem?.cancel()
+        item.hoverPreviewWorkItem = nil
+        hoverPreviewController.close()
+        return true
+    }
+
+    @discardableResult
+    func updatePreview(for recording: CapturedRecording) -> Bool {
+        guard let item = previewItems.first(where: { $0.recordingID == recording.id }) else {
+            return false
+        }
+
+        item.hoverPreviewMedia = .recording(recording)
+        item.recordingContentView?.updateDuration(recording.duration)
         item.hoverPreviewWorkItem?.cancel()
         item.hoverPreviewWorkItem = nil
         hoverPreviewController.close()
@@ -488,14 +507,7 @@ final class QuickAccessPanelController: NSObject {
         playImageView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 34, weight: .medium)
         playImageView.contentTintColor = .labelColor.withAlphaComponent(0.72)
 
-        let duration = NSTextField(labelWithString: formattedDuration(recording.duration))
-        duration.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
-        duration.textColor = .labelColor
-        duration.alignment = .center
-        duration.wantsLayer = true
-        duration.layer?.cornerRadius = 10
-        duration.layer?.cornerCurve = .continuous
-        duration.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
+        let duration = DurationBadgeLabel(text: formattedDuration(recording.duration))
 
         let stackView = NSStackView()
         stackView.orientation = .horizontal
@@ -518,22 +530,18 @@ final class QuickAccessPanelController: NSObject {
                 style: .toolbar
             )
         )
-        stackView.addArrangedSubview(
-            makeIconButton(
-                title: strings.videoQuickAccessPreview,
-                symbolName: "play.rectangle",
-                action: #selector(previewRecordingButtonClicked),
-                style: .toolbar
-            )
-        )
         let editButton = makeIconButton(
             title: strings.videoQuickAccessEdit,
             symbolName: "slider.horizontal.3",
-            action: #selector(disabledRecordingEditButtonClicked),
+            action: #selector(editRecordingButtonClicked),
             style: .toolbar
         )
-        editButton.isEnabled = false
-        editButton.contentTintColor = .disabledControlTextColor
+        if recording.format != .mp4 {
+            editButton.isEnabled = false
+            editButton.contentTintColor = .disabledControlTextColor
+            editButton.toolTip = strings.videoEditingMP4Only
+            editButton.setAccessibilityHelp(strings.videoEditingMP4Only)
+        }
         stackView.addArrangedSubview(editButton)
 
         let overlayView = NSVisualEffectView()
@@ -686,6 +694,21 @@ final class QuickAccessPanelController: NSObject {
         previewItems.first { $0.screenshotID == screenshot.id }?
             .screenshotImageView?
             .pngDataForTesting()
+    }
+
+    func recordingCountForTesting() -> Int {
+        previewItems.filter { $0.recordingID != nil }.count
+    }
+
+    func recordingForTesting(id: UUID) -> CapturedRecording? {
+        previewItems.compactMap { item -> CapturedRecording? in
+            guard item.recordingID == id,
+                  case let .recording(recording) = item.hoverPreviewMedia else {
+                return nil
+            }
+
+            return recording
+        }.first
     }
 
     private func scheduleHoverPreview(for window: NSWindow?) {
@@ -880,15 +903,13 @@ final class QuickAccessPanelController: NSObject {
         _ = item.copyRecording?()
     }
 
-    @objc private func previewRecordingButtonClicked(_ sender: NSButton) {
+    @objc private func editRecordingButtonClicked(_ sender: NSButton) {
         guard let item = previewItem(for: sender.window) else {
             return
         }
 
-        _ = item.previewRecording?()
+        _ = item.editRecording?()
     }
-
-    @objc private func disabledRecordingEditButtonClicked(_ sender: NSButton) {}
 
     @objc private func closeButtonClicked(_ sender: NSButton) {
         guard let item = previewItem(for: sender.window) else {
@@ -978,6 +999,7 @@ private final class QuickAccessPreviewItem {
     let ocrProgressIndicator: NSProgressIndicator?
     let statusLabel: NSTextField?
     weak var screenshotImageView: AspectFillImageView?
+    weak var recordingContentView: RecordingQuickAccessContentView?
     let copy: (() -> Bool)?
     let save: (() -> Bool)?
     let recognizeText: (() -> Bool)?
@@ -986,6 +1008,7 @@ private final class QuickAccessPreviewItem {
     let downloadRecording: (() -> Bool)?
     let copyRecording: (() -> Bool)?
     let previewRecording: (() -> Bool)?
+    let editRecording: (() -> Bool)?
     var hoverPreviewMedia: QuickAccessHoverPreviewMedia
     let close: () -> Void
     var isTemporarilyHidden = false
@@ -1000,6 +1023,7 @@ private final class QuickAccessPreviewItem {
         ocrProgressIndicator: NSProgressIndicator?,
         statusLabel: NSTextField?,
         screenshotImageView: AspectFillImageView?,
+        recordingContentView: RecordingQuickAccessContentView?,
         copy: (() -> Bool)?,
         save: (() -> Bool)?,
         recognizeText: (() -> Bool)?,
@@ -1008,6 +1032,7 @@ private final class QuickAccessPreviewItem {
         downloadRecording: (() -> Bool)?,
         copyRecording: (() -> Bool)?,
         previewRecording: (() -> Bool)?,
+        editRecording: (() -> Bool)?,
         hoverPreviewMedia: QuickAccessHoverPreviewMedia,
         close: @escaping () -> Void
     ) {
@@ -1018,6 +1043,7 @@ private final class QuickAccessPreviewItem {
         self.ocrProgressIndicator = ocrProgressIndicator
         self.statusLabel = statusLabel
         self.screenshotImageView = screenshotImageView
+        self.recordingContentView = recordingContentView
         self.copy = copy
         self.save = save
         self.recognizeText = recognizeText
@@ -1026,6 +1052,7 @@ private final class QuickAccessPreviewItem {
         self.downloadRecording = downloadRecording
         self.copyRecording = copyRecording
         self.previewRecording = previewRecording
+        self.editRecording = editRecording
         self.hoverPreviewMedia = hoverPreviewMedia
         self.close = close
     }
@@ -1371,6 +1398,64 @@ private class ScreenshotPreviewView: NSView {
     }
 }
 
+final class DurationBadgeLabel: NSTextField {
+    static let badgeSize = CGSize(width: 52, height: 22)
+
+    var textDrawingRectForTesting: CGRect {
+        textDrawingRect()
+    }
+
+    init(text: String) {
+        super.init(frame: CGRect(origin: .zero, size: Self.badgeSize))
+        stringValue = text
+        font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        textColor = .labelColor
+        alignment = .center
+        isEditable = false
+        isSelectable = false
+        isBordered = false
+        drawsBackground = false
+        backgroundColor = .clear
+        focusRingType = .none
+        wantsLayer = true
+        layer?.cornerRadius = 10
+        layer?.cornerCurve = .continuous
+        layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
+        setAccessibilityLabel(text)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        attributedBadgeText.draw(with: textDrawingRect(), options: [.usesLineFragmentOrigin, .usesFontLeading])
+    }
+
+    private var attributedBadgeText: NSAttributedString {
+        NSAttributedString(
+            string: stringValue,
+            attributes: [
+                .font: font ?? NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
+                .foregroundColor: textColor ?? NSColor.labelColor,
+            ]
+        )
+    }
+
+    private func textDrawingRect() -> CGRect {
+        let textSize = attributedBadgeText.size()
+        let width = min(ceil(textSize.width), bounds.width)
+        let height = min(ceil(textSize.height), bounds.height)
+        return CGRect(
+            x: floor((bounds.width - width) / 2),
+            y: floor((bounds.height - height) / 2),
+            width: width,
+            height: height
+        )
+    }
+}
+
 private final class RecordingQuickAccessContentView: ScreenshotPreviewView {
     var hasThumbnailForTesting = false
     var onPreviewRequested: (() -> Bool)?
@@ -1389,6 +1474,14 @@ private final class RecordingQuickAccessContentView: ScreenshotPreviewView {
         didSet {
             invalidateIntrinsicContentSize()
         }
+    }
+
+    func updateDuration(_ duration: TimeInterval) {
+        let seconds = max(0, Int(duration.rounded(.down)))
+        let text = String(format: "%02d:%02d", seconds / 60, seconds % 60)
+        durationLabel?.stringValue = text
+        durationLabel?.setAccessibilityLabel(text)
+        durationLabel?.needsDisplay = true
     }
 
     override var intrinsicContentSize: NSSize {
@@ -1475,14 +1568,14 @@ private final class RecordingQuickAccessContentView: ScreenshotPreviewView {
             width: 34,
             height: 34
         )
-        let durationSize = CGSize(width: 52, height: 22)
+        let durationSize = DurationBadgeLabel.badgeSize
         durationLabel?.frame = CGRect(
             x: bounds.maxX - durationSize.width - 9,
             y: bounds.minY + 9,
             width: durationSize.width,
             height: durationSize.height
         )
-        let overlayWidth = min(126, max(88, bounds.width - 14))
+        let overlayWidth = min(96, max(76, bounds.width - 14))
         overlayView?.frame = CGRect(
             x: floor((bounds.width - overlayWidth) / 2),
             y: bounds.minY + 7,

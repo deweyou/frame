@@ -493,6 +493,69 @@ struct AppStrings {
         }
     }
 
+    var videoEditingMP4Only: String {
+        switch language {
+        case .zhHans: "此版本仅支持编辑 MP4"
+        case .en: "MP4 editing only in this version"
+        }
+    }
+
+    var videoEditorPlayPause: String {
+        switch language {
+        case .zhHans: "播放/暂停"
+        case .en: "Play/Pause"
+        }
+    }
+
+    var videoEditorStartTime: String {
+        switch language {
+        case .zhHans: "开始时间"
+        case .en: "Start time"
+        }
+    }
+
+    var videoEditorEndTime: String {
+        switch language {
+        case .zhHans: "结束时间"
+        case .en: "End time"
+        }
+    }
+
+    var videoEditorStartShort: String {
+        switch language {
+        case .zhHans: "开始"
+        case .en: "Start"
+        }
+    }
+
+    var videoEditorEndShort: String {
+        switch language {
+        case .zhHans: "结束"
+        case .en: "End"
+        }
+    }
+
+    var videoEditorPlaybackSpeed: String {
+        switch language {
+        case .zhHans: "播放速度"
+        case .en: "Playback speed"
+        }
+    }
+
+    var videoEditorSpeedShort: String {
+        switch language {
+        case .zhHans: "速度"
+        case .en: "Speed"
+        }
+    }
+
+    var videoEditorOutputDurationShort: String {
+        switch language {
+        case .zhHans: "变速后"
+        case .en: "Output"
+        }
+    }
+
     var quickAccessPin: String {
         switch language {
         case .zhHans: "固定到预览窗口"
@@ -553,6 +616,27 @@ struct AppStrings {
         switch language {
         case .zhHans: "关闭前选择替换当前图、保存为一张新的 Quick Access 预览、不保存并关闭，或取消并继续编辑。"
         case .en: "Before closing, replace the current image, save a new Quick Access preview, close without saving, or cancel and keep editing."
+        }
+    }
+
+    var videoUnsavedChangesMessage: String {
+        switch language {
+        case .zhHans: "关闭前选择替换当前录屏、保存为一条新的 Quick Access 录屏、不保存并关闭，或取消并继续编辑。"
+        case .en: "Before closing, replace the current recording, save a new Quick Access recording, close without saving, or cancel and keep editing."
+        }
+    }
+
+    var videoReplaceCurrent: String {
+        switch language {
+        case .zhHans: "替换当前录屏"
+        case .en: "Replace Current"
+        }
+    }
+
+    var videoSaveAsNew: String {
+        switch language {
+        case .zhHans: "另存新录屏"
+        case .en: "Save As New"
         }
     }
 

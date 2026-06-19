@@ -9,7 +9,7 @@ import XCTest
 final class RecordingQuickAccessPanelControllerTests: XCTestCase {
     private var retainedPreviewControllers: [QuickAccessPanelController] = []
 
-    func testRecordingQuickAccessExposesDownloadCopyPreviewAndDisabledEdit() throws {
+    func testMP4RecordingQuickAccessExposesEnabledEdit() throws {
         _ = NSApplication.shared
         let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
         let recording = CapturedRecording(
@@ -24,6 +24,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         let controller = QuickAccessPanelController()
         retainedPreviewControllers.append(controller)
         let expectedPreviewSize = QuickAccessPanelController.recordingPreviewSize(forSourceSize: recording.pixelSize)
+        var editCallCount = 0
 
         controller.show(
             for: recording,
@@ -32,6 +33,10 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
             download: { true },
             copy: { true },
             preview: { true },
+            edit: {
+                editCallCount += 1
+                return true
+            },
             close: {}
         )
 
@@ -52,10 +57,55 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(findPreviewSurface(in: contentView)).frame.size, expectedPreviewSize)
         XCTAssertNotNil(findButton(in: contentView, accessibilityLabel: "Download"))
         XCTAssertNotNil(findButton(in: contentView, accessibilityLabel: "Copy"))
-        XCTAssertNotNil(findButton(in: contentView, accessibilityLabel: "Preview"))
+        XCTAssertNil(findButton(in: contentView, accessibilityLabel: "Preview"))
+        let editButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Edit"))
+        XCTAssertTrue(editButton.isEnabled)
+        editButton.performClick(nil)
+        XCTAssertEqual(editCallCount, 1)
+        XCTAssertNotNil(findButton(in: contentView, accessibilityLabel: "Close"))
+    }
+
+    func testGIFRecordingQuickAccessKeepsEditDisabled() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let recording = CapturedRecording(
+            id: UUID(),
+            fileURL: URL(fileURLWithPath: "/tmp/test.gif"),
+            format: .gif,
+            rect: CGRect(x: 0, y: 0, width: 320, height: 240),
+            pixelSize: CGSize(width: 320, height: 240),
+            byteSize: 10,
+            duration: 2
+        )
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        var editCallCount = 0
+
+        controller.show(
+            for: recording,
+            preferredAnchor: CGRect(x: 0, y: 0, width: 100, height: 100),
+            strings: AppStrings(language: .en),
+            download: { true },
+            copy: { true },
+            preview: { true },
+            edit: {
+                editCallCount += 1
+                return true
+            },
+            close: {}
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer {
+            panel.close()
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
         let editButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Edit"))
         XCTAssertFalse(editButton.isEnabled)
-        XCTAssertNotNil(findButton(in: contentView, accessibilityLabel: "Close"))
+        XCTAssertEqual(editButton.toolTip, "MP4 editing only in this version")
+        editButton.performClick(nil)
+        XCTAssertEqual(editCallCount, 0)
     }
 
     func testRecordingQuickAccessScalesPreviewToRecordingAspectRatio() {
@@ -98,6 +148,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
             download: { true },
             copy: { true },
             preview: { true },
+            edit: { true },
             close: {}
         )
 
@@ -112,6 +163,50 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         let thumbnailView = try XCTUnwrap(previewSurface as? RecordingThumbnailDrawableForTesting)
         XCTAssertTrue(thumbnailView.lastDrawRectForTesting.contains(contentView.bounds))
         XCTAssertEqual(RecordingThumbnailProvider().thumbnail(for: gifURL)?.size, CGSize(width: 2, height: 2))
+    }
+
+    func testRecordingDurationBadgeStaysInsetAndVerticallyCentered() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let recording = CapturedRecording(
+            id: UUID(),
+            fileURL: URL(fileURLWithPath: "/tmp/test.mp4"),
+            format: .mp4,
+            rect: CGRect(x: 0, y: 0, width: 1282, height: 504),
+            pixelSize: CGSize(width: 1282, height: 504),
+            byteSize: 10,
+            duration: 51
+        )
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+
+        controller.show(
+            for: recording,
+            preferredAnchor: CGRect(x: 0, y: 0, width: 100, height: 100),
+            strings: AppStrings(language: .en),
+            download: { true },
+            copy: { true },
+            preview: { true },
+            edit: { true },
+            close: {}
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer {
+            panel.close()
+        }
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let badge = try XCTUnwrap(findTextField(in: contentView, stringValue: "00:51") as? DurationBadgeLabel)
+
+        XCTAssertEqual(badge.frame.size, DurationBadgeLabel.badgeSize)
+        XCTAssertEqual(badge.frame.maxX, contentView.bounds.maxX - 9, accuracy: 0.5)
+        XCTAssertEqual(badge.frame.minY, contentView.bounds.minY + 9, accuracy: 0.5)
+
+        let drawingRect = badge.textDrawingRectForTesting
+        XCTAssertEqual(drawingRect.midX, badge.bounds.midX, accuracy: 0.5)
+        XCTAssertEqual(drawingRect.midY, badge.bounds.midY, accuracy: 0.75)
+        XCTAssertLessThan(drawingRect.height, badge.bounds.height)
     }
 
     func testClickingRecordingPlayOverlayOpensPreview() throws {
@@ -140,6 +235,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
                 previewCallCount += 1
                 return true
             },
+            edit: { true },
             close: {}
         )
 
@@ -183,6 +279,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
                 previewCallCount += 1
                 return true
             },
+            edit: { true },
             close: {}
         )
 
@@ -238,6 +335,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
             download: { true },
             copy: { true },
             preview: { true },
+            edit: { true },
             close: {}
         )
 
@@ -292,6 +390,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
             download: { true },
             copy: { true },
             preview: { true },
+            edit: { true },
             close: {}
         )
 
@@ -440,6 +539,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
             download: { true },
             copy: { true },
             preview: { true },
+            edit: { true },
             close: {}
         )
 
@@ -499,6 +599,7 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
             download: { true },
             copy: { true },
             preview: { true },
+            edit: { true },
             close: {}
         )
 
@@ -589,6 +690,21 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         for subview in view.subviews {
             if let button = findButton(in: subview, accessibilityLabel: accessibilityLabel) {
                 return button
+            }
+        }
+
+        return nil
+    }
+
+    private func findTextField(in view: NSView, stringValue: String) -> NSTextField? {
+        if let textField = view as? NSTextField,
+           textField.stringValue == stringValue {
+            return textField
+        }
+
+        for subview in view.subviews {
+            if let textField = findTextField(in: subview, stringValue: stringValue) {
+                return textField
             }
         }
 
