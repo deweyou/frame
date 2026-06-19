@@ -1,40 +1,29 @@
 {
   "mode": "copy",
   "source": {
-    "root": "/Users/bytedance/.deweyou/agents/source",
-    "commit": "83df65b729297b865810dc9e36485493af597ad3"
+    "root": "/Users/deweyou/.deweyou/agents/source",
+    "commit": "a9c2fc110c8a07a8ac1a6e6d64fef43124eaa288"
   },
-  "cacheRoot": "/Users/bytedance/.deweyou/agents/assets",
+  "cacheRoot": "/Users/deweyou/.deweyou/agents/assets",
   "assets": {
     "skills": [
-      "git-delivery",
-      "repo-memory",
-      "spec-driven-coding"
+      "ui-design"
     ],
     "rules": []
   },
   "assetSnapshot": {
     "skills": {
-      "git-delivery": {
-        "description": "Branch-aware git delivery workflow. Use before editing new coding or asset tasks to check branch, dirty work, and base sync; use when the user asks to commit, submit, push, open a PR, ship work, resolve base conflicts, or follow PR CI, while protecting unrelated work.\n",
-        "hash": "sha256:321555c198d624493a17ace8798e007de1d3f6f178a5c4674d67e9065cdbb479"
-      },
-      "repo-memory": {
-        "description": "Repository memory workflow for durable project knowledge. Use before commits or PRs, after meaningful code or workflow changes, when initializing or updating AGENTS.md/docs/CLAUDE.md, or when local skills and repo conventions may need knowledge updates.\n",
-        "hash": "sha256:129e7082448b4349cbf76c52d9a2f7056274a8b2c50b98c7bb9555dc0a7f6c45"
-      },
-      "spec-driven-coding": {
-        "description": "Enforce the repository's spec-driven coding workflow for new features, behavior changes, and multi-step implementation work. Use this skill when starting a requirement, feature, refactor with behavior impact, or ambiguous coding task. It requires Superpowers brainstorming/spec/plan/task flow before coding unless the task is a simple bugfix, and still requires TDD, unit coverage, verification, and spec updates when requirements change.\n",
-        "hash": "sha256:4bd83ca870a1eb2cb56ae9f48b42b491012577c4389749ebac02581934af318f"
+      "ui-design": {
+        "description": "UX/UI design workflow for research, flow design, visual style, implementation, review, and AI design prompts. Use for web, mobile/H5, native apps, HarmonyOS, mini programs, macOS, dashboards, tools, component libraries, onboarding, settings, empty states, UX references, or explicit UI/UX/style requests.\n",
+        "hash": "sha256:48113ba29bf018556e06d70fd27b1419e99d9ec478fca533c755fd52bcb1f567"
       }
     },
     "rules": {}
   },
   "scope": "project",
   "tools": [
-    "codex",
-    "claude"
+    "codex"
   ],
   "ruleWiring": "reference",
-  "initializedAt": "2026-05-25T09:22:59.372Z"
+  "initializedAt": "2026-06-18T10:06:47.384Z"
 }
