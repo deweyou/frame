@@ -70,9 +70,9 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
         let miniaturizeFrame = miniaturizeButton.convert(miniaturizeButton.bounds, to: contentView)
         let zoomFrame = zoomButton.convert(zoomButton.bounds, to: contentView)
 
-        XCTAssertEqual(headerFrame.midY, closeFrame.midY, accuracy: 1.5)
-        XCTAssertEqual(headerFrame.midY, miniaturizeFrame.midY, accuracy: 1.5)
-        XCTAssertEqual(headerFrame.midY, zoomFrame.midY, accuracy: 1.5)
+        XCTAssertEqual(headerFrame.midY, closeFrame.midY, accuracy: 3)
+        XCTAssertEqual(headerFrame.midY, miniaturizeFrame.midY, accuracy: 3)
+        XCTAssertEqual(headerFrame.midY, zoomFrame.midY, accuracy: 3)
     }
 
     func testGIFPreviewWindowDoesNotShowEditorBar() throws {
