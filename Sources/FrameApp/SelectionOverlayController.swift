@@ -68,6 +68,7 @@ final class SelectionOverlayController: SelectionOverlayControlling {
                 initialMode: initialMode,
                 showsCenteredHUDWhenEmpty: screen === activeScreen,
                 placeholderText: strings.capturePlaceholder,
+                scrollingActionText: strings.scrollingScreenshotAction,
                 ocrActionText: strings.quickAccessOCR,
                 onInteraction: { [weak self] in
                     guard let createdWindow else {

@@ -27,6 +27,8 @@ Screenshots are often a tiny step inside a larger workflow: explaining an idea, 
 - PNG output: saved files use the `Frame yyyy-MM-dd HH.mm.ss.png` filename format.
 - Clipboard copy: copy the captured image for pasting into chat, docs, or other apps.
 - Save location: save PNG files to the configured screenshot folder, defaulting to Desktop.
+- Scrolling screenshot: select a fixed region, scroll manually by default, or
+  enable a small-step auto-scroll assist before finishing one vertical PNG.
 - Screenshot editing: open the Image Workspace from Quick Access to add text,
   shapes, brush strokes, highlight, and mosaic annotations. The toolbar opens in
   pointer mode, lays shape tools out directly, keeps only mosaic behind a tool
@@ -68,7 +70,6 @@ Frame currently does not include:
 
 - audio recording
 - cloud sync or share links
-- scrolling capture
 
 These can be considered after the core local capture experience is stable.
 

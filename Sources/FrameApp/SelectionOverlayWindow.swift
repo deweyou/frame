@@ -13,6 +13,7 @@ final class SelectionOverlayWindow {
         initialMode: SelectionOverlayInitialMode = .screenshot,
         showsCenteredHUDWhenEmpty: Bool,
         placeholderText: String,
+        scrollingActionText: String = "滚动长截图",
         ocrActionText: String,
         delayCountdownNanoseconds: UInt64 = 5_000_000_000,
         onInteraction: @escaping () -> Void,
@@ -26,6 +27,7 @@ final class SelectionOverlayWindow {
             initialMode: initialMode,
             showsCenteredHUDWhenEmpty: showsCenteredHUDWhenEmpty,
             placeholderText: placeholderText,
+            scrollingActionText: scrollingActionText,
             ocrActionText: ocrActionText,
             delayCountdownNanoseconds: delayCountdownNanoseconds,
             onInteraction: onInteraction,
@@ -281,6 +283,7 @@ private final class SelectionOverlayView: NSView {
     private let recordingElapsedLabel = NSTextField(labelWithString: "00:00")
     private let placeholderView = NSVisualEffectView()
     private let placeholderLabel: NSTextField
+    private let scrollingActionText: String
     private let ocrActionText: String
     private let delayCountdownNanoseconds: UInt64
     private let countdownView = CountdownView()
@@ -318,6 +321,7 @@ private final class SelectionOverlayView: NSView {
         initialMode: SelectionOverlayInitialMode,
         showsCenteredHUDWhenEmpty: Bool,
         placeholderText: String,
+        scrollingActionText: String,
         ocrActionText: String,
         delayCountdownNanoseconds: UInt64,
         onInteraction: @escaping () -> Void,
@@ -331,6 +335,7 @@ private final class SelectionOverlayView: NSView {
         self.onWindowSelectionRequested = onWindowSelectionRequested
         self.onStartRecording = onStartRecording
         self.onComplete = onComplete
+        self.scrollingActionText = scrollingActionText
         self.ocrActionText = ocrActionText
         self.delayCountdownNanoseconds = delayCountdownNanoseconds
         self.placeholderLabel = NSTextField(labelWithString: placeholderText)
@@ -738,6 +743,7 @@ private final class SelectionOverlayView: NSView {
             makeRegionModeButton(),
             makeFullScreenButton(),
             makeDelayButton(),
+            makeScrollingScreenshotButton(),
             makeOCRButton(),
             makeRecordingButton(),
         ]
@@ -797,6 +803,24 @@ private final class SelectionOverlayView: NSView {
         button.action = #selector(delayButtonClicked)
         button.onHoverChange = { [weak self, weak button] isHovering in
             self?.setHUDTooltip(isHovering ? "延迟截图" : nil, anchorView: button)
+        }
+        button.contentTintColor = hudTheme.foregroundColor
+        return button
+    }
+
+    private func makeScrollingScreenshotButton() -> HUDIconButton {
+        let button = HUDIconButton(
+            symbolName: "scroll",
+            accessibilityDescription: scrollingActionText
+        )
+        button.target = self
+        button.action = #selector(scrollingScreenshotButtonClicked)
+        button.onHoverChange = { [weak self, weak button] isHovering in
+            guard let self else {
+                return
+            }
+
+            self.setHUDTooltip(isHovering ? self.scrollingActionText : nil, anchorView: button)
         }
         button.contentTintColor = hudTheme.foregroundColor
         return button
@@ -1209,6 +1233,20 @@ private final class SelectionOverlayView: NSView {
         }
 
         completeSelection(with: .recognizeText(activeSelection))
+    }
+
+    @objc private func scrollingScreenshotButtonClicked() {
+        guard !isDelayCountdownActive else {
+            return
+        }
+
+        guard let activeSelection,
+              SelectionGeometry.isValidSelection(activeSelection.rect) else {
+            NSSound.beep()
+            return
+        }
+
+        completeSelection(with: .scrollingScreenshot(activeSelection))
     }
 
     @objc private func recordingButtonClicked() {
@@ -1642,6 +1680,8 @@ private final class SelectionOverlayView: NSView {
             fullScreenButtonClicked()
         case "延迟截图":
             delayButtonClicked()
+        case scrollingActionText:
+            scrollingScreenshotButtonClicked()
         case "录屏":
             recordingButtonClicked()
         case "开始录制":

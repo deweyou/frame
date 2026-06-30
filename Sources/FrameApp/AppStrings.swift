@@ -430,6 +430,69 @@ struct AppStrings {
         }
     }
 
+    var scrollingScreenshotAction: String {
+        switch language {
+        case .zhHans: "滚动长截图"
+        case .en: "Scrolling Screenshot"
+        }
+    }
+
+    var scrollingScreenshotStart: String {
+        switch language {
+        case .zhHans: "开始"
+        case .en: "Start"
+        }
+    }
+
+    var scrollingScreenshotFinish: String {
+        switch language {
+        case .zhHans: "完成"
+        case .en: "Finish"
+        }
+    }
+
+    var scrollingScreenshotAutoScroll: String {
+        switch language {
+        case .zhHans: "自动滚动"
+        case .en: "Auto Scroll"
+        }
+    }
+
+    var scrollingScreenshotStopAutoScroll: String {
+        switch language {
+        case .zhHans: "停止滚动"
+        case .en: "Stop Auto Scroll"
+        }
+    }
+
+    var scrollingScreenshotCancel: String {
+        switch language {
+        case .zhHans: "取消"
+        case .en: "Cancel"
+        }
+    }
+
+    var scrollingScreenshotFailedTitle: String {
+        switch language {
+        case .zhHans: "滚动截图失败"
+        case .en: "Scrolling screenshot failed"
+        }
+    }
+
+    var scrollingScreenshotInsufficientProgress: String {
+        switch language {
+        case .zhHans: "没有检测到可滚动的内容。请确认选区覆盖可滚动区域。"
+        case .en: "Frame did not detect scrollable content. Make sure the selection covers a scrollable area."
+        }
+    }
+
+    var scrollingScreenshotNoReliableOverlap: String {
+        switch language {
+        case .zhHans: "没有找到可拼接的重叠区域。请慢一点滚动，并保持同一个区域可见。"
+        case .en: "Frame could not match the captured frames. Scroll more slowly and keep the same region visible."
+        }
+    }
+
     var quickAccessSave: String {
         switch language {
         case .zhHans: "保存"

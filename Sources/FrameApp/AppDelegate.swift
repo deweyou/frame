@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKeyController: HotKeyController?
     private let selectionOverlayController: SelectionOverlayControlling
     private let captureService = CaptureService()
+    private let scrollingScreenshotSessionController: ScrollingScreenshotSessionControlling
     private let quickAccessPanelController: QuickAccessPanelController
     private let videoPreviewWindowController: VideoPreviewWindowController
     private let imageWorkspacePanelController = ImageWorkspacePanelController()
@@ -45,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     init(
         selectionOverlayController: SelectionOverlayControlling = SelectionOverlayController(),
+        scrollingScreenshotSessionController: ScrollingScreenshotSessionControlling = ScrollingScreenshotSessionController(),
         recordingService: RecordingServicing = ScreenCaptureRecordingService(),
         keyboardHintOverlayController: KeyboardHintOverlayControlling = KeyboardHintOverlayController(),
         quickAccessPanelController: QuickAccessPanelController = QuickAccessPanelController(),
@@ -58,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         playInvalidActionFeedback: @escaping () -> Void = { NSSound.beep() }
     ) {
         self.selectionOverlayController = selectionOverlayController
+        self.scrollingScreenshotSessionController = scrollingScreenshotSessionController
         self.recordingService = recordingService
         self.keyboardHintOverlayController = keyboardHintOverlayController
         self.quickAccessPanelController = quickAccessPanelController
@@ -164,6 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var isCaptureFlowBusy: Bool {
         selectionOverlayController.isSelecting
+            || scrollingScreenshotSessionController.isActive
             || pendingRecordingStartTask != nil
             || activeRecordingSession != nil
             || isStoppingActiveRecording
@@ -244,6 +248,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
                             self.showCaptureFailedAlert(error)
                         }
+                    case let .scrollingScreenshot(selection):
+                        self.startScrollingScreenshot(selection: selection, anchor: quickAccessAnchor)
                     case let .capture(selection):
                         do {
                             let screenshot = try await self.captureService.capture(selection: selection)
@@ -272,6 +278,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let shortcut = hotKeyController?.shortcut ?? SettingsStore.screenshotShortcut()
         activeRecordingSession.recordKeyboardHint(recordingHintLabel(for: shortcut))
+    }
+
+    private func startScrollingScreenshot(selection: SelectionCapture, anchor: CGRect?) {
+        scrollingScreenshotSessionController.start(
+            selection: selection,
+            strings: strings,
+            onComplete: { [weak self] screenshot in
+                guard let self else {
+                    return
+                }
+
+                self.storeInCaptureHistory(screenshot)
+                self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+                self.showQuickAccess(for: screenshot, anchor: anchor)
+                NSLog("Frame 已完成滚动长截图：rect=\(screenshot.rect.debugDescription)")
+            },
+            onCancel: { [weak self] in
+                self?.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+                NSLog("Frame 滚动长截图已取消")
+            },
+            onFailure: { [weak self] error in
+                guard let self else {
+                    return
+                }
+
+                self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+                self.showScrollingScreenshotFailedAlert(error)
+            }
+        )
     }
 
     private func recordingHintLabel(for shortcut: ScreenshotShortcut) -> String {
@@ -711,6 +746,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func quickAccessRecordingCountForTesting() -> Int {
         quickAccessPanelController.recordingCountForTesting()
+    }
+
+    func quickAccessScreenshotCountForTesting() -> Int {
+        activeQuickAccessScreenshotIDs.count
     }
 
     func quickAccessRecordingForTesting(id: UUID) -> CapturedRecording? {
@@ -1412,6 +1451,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.messageText = strings.captureFailedTitle
         alert.informativeText = error.localizedDescription
+        alert.addButton(withTitle: strings.ok)
+        alert.runModal()
+    }
+
+    private func showScrollingScreenshotFailedAlert(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = strings.scrollingScreenshotFailedTitle
+        if let stitchingError = error as? ScrollingScreenshotStitchingError,
+           stitchingError == .insufficientFrames || stitchingError == .noScrollProgress {
+            alert.informativeText = strings.scrollingScreenshotInsufficientProgress
+        } else if let stitchingError = error as? ScrollingScreenshotStitchingError,
+                  stitchingError == .noReliableOverlap {
+            alert.informativeText = strings.scrollingScreenshotNoReliableOverlap
+        } else {
+            alert.informativeText = error.localizedDescription
+        }
         alert.addButton(withTitle: strings.ok)
         alert.runModal()
     }

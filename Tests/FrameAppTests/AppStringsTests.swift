@@ -102,6 +102,36 @@ final class AppStringsTests: XCTestCase {
         XCTAssertEqual(chinese.settingsRecordingMouseHintColor, "鼠标提示颜色")
     }
 
+    func testScrollingScreenshotStringsAreLocalized() {
+        let english = AppStrings(language: .en)
+        XCTAssertEqual(english.scrollingScreenshotAction, "Scrolling Screenshot")
+        XCTAssertEqual(english.scrollingScreenshotStart, "Start")
+        XCTAssertEqual(english.scrollingScreenshotFinish, "Finish")
+        XCTAssertEqual(english.scrollingScreenshotAutoScroll, "Auto Scroll")
+        XCTAssertEqual(english.scrollingScreenshotStopAutoScroll, "Stop Auto Scroll")
+        XCTAssertEqual(english.scrollingScreenshotCancel, "Cancel")
+        XCTAssertEqual(english.scrollingScreenshotFailedTitle, "Scrolling screenshot failed")
+        XCTAssertEqual(
+            english.scrollingScreenshotInsufficientProgress,
+            "Frame did not detect scrollable content. Make sure the selection covers a scrollable area."
+        )
+        XCTAssertEqual(
+            english.scrollingScreenshotNoReliableOverlap,
+            "Frame could not match the captured frames. Scroll more slowly and keep the same region visible."
+        )
+
+        let chinese = AppStrings(language: .zhHans)
+        XCTAssertEqual(chinese.scrollingScreenshotAction, "滚动长截图")
+        XCTAssertEqual(chinese.scrollingScreenshotStart, "开始")
+        XCTAssertEqual(chinese.scrollingScreenshotFinish, "完成")
+        XCTAssertEqual(chinese.scrollingScreenshotAutoScroll, "自动滚动")
+        XCTAssertEqual(chinese.scrollingScreenshotStopAutoScroll, "停止滚动")
+        XCTAssertEqual(chinese.scrollingScreenshotCancel, "取消")
+        XCTAssertEqual(chinese.scrollingScreenshotFailedTitle, "滚动截图失败")
+        XCTAssertEqual(chinese.scrollingScreenshotInsufficientProgress, "没有检测到可滚动的内容。请确认选区覆盖可滚动区域。")
+        XCTAssertEqual(chinese.scrollingScreenshotNoReliableOverlap, "没有找到可拼接的重叠区域。请慢一点滚动，并保持同一个区域可见。")
+    }
+
     func testShortcutRecorderStringsAreLocalized() {
         let english = AppStrings(language: .en)
         XCTAssertEqual(english.settingsShortcutRecorderPrompt, "Press shortcut")
