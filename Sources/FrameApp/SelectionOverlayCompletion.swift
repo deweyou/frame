@@ -4,12 +4,16 @@ import FrameCore
 enum SelectionOverlayCompletion {
     case capture(SelectionCapture)
     case recognizeText(SelectionCapture)
+    case scrollingScreenshot(SelectionCapture)
     case fullScreen
     case startRecording(SelectionCapture, RecordingOptions)
 
     var selection: SelectionCapture? {
         switch self {
-        case let .capture(selection), let .recognizeText(selection), let .startRecording(selection, _):
+        case let .capture(selection),
+             let .recognizeText(selection),
+             let .scrollingScreenshot(selection),
+             let .startRecording(selection, _):
             selection
         case .fullScreen:
             nil
@@ -20,7 +24,7 @@ enum SelectionOverlayCompletion {
         switch self {
         case let .startRecording(_, options):
             options
-        case .capture, .recognizeText, .fullScreen:
+        case .capture, .recognizeText, .scrollingScreenshot, .fullScreen:
             nil
         }
     }

@@ -168,6 +168,83 @@ final class AppDelegateRecordingTests: XCTestCase {
         XCTAssertEqual(selectionOverlay.lastInitialMode, .recordingSetup)
     }
 
+    func testScrollingScreenshotCompletionStartsScrollingSession() async throws {
+        _ = NSApplication.shared
+        let selection = SelectionCapture(
+            rect: CGRect(x: 40, y: 60, width: 320, height: 180),
+            kind: .region
+        )
+        let selectionOverlay = SpySelectionOverlayController()
+        let scrollingController = SpyScrollingScreenshotSessionController()
+        let delegate = AppDelegate(
+            selectionOverlayController: selectionOverlay,
+            scrollingScreenshotSessionController: scrollingController,
+            hasScreenRecordingAccess: { true },
+            showMissingScreenRecordingPermission: {},
+            playInvalidActionFeedback: {}
+        )
+
+        XCTAssertTrue(delegate.startCaptureFlowForTesting())
+        selectionOverlay.emitCompletion(.scrollingScreenshot(selection))
+
+        try await waitUntil {
+            scrollingController.startedSelections == [selection]
+        }
+        XCTAssertEqual(scrollingController.startedSelections, [selection])
+    }
+
+    func testCaptureFlowIgnoresShortcutWhileScrollingSessionIsActive() {
+        _ = NSApplication.shared
+        let scrollingController = SpyScrollingScreenshotSessionController()
+        scrollingController.isActive = true
+        var beepCount = 0
+        let delegate = AppDelegate(
+            scrollingScreenshotSessionController: scrollingController,
+            hasScreenRecordingAccess: { true },
+            showMissingScreenRecordingPermission: {},
+            playInvalidActionFeedback: { beepCount += 1 }
+        )
+
+        XCTAssertFalse(delegate.startCaptureFlowForTesting())
+
+        XCTAssertEqual(beepCount, 1)
+    }
+
+    func testFinishedScrollingScreenshotShowsQuickAccessPreview() async throws {
+        _ = NSApplication.shared
+        let selection = SelectionCapture(
+            rect: CGRect(x: 40, y: 60, width: 320, height: 180),
+            kind: .region
+        )
+        let selectionOverlay = SpySelectionOverlayController()
+        let scrollingController = SpyScrollingScreenshotSessionController()
+        let delegate = AppDelegate(
+            selectionOverlayController: selectionOverlay,
+            scrollingScreenshotSessionController: scrollingController,
+            captureHistoryStore: CaptureHistoryStore(rootDirectory: makeTemporaryDirectory()),
+            hasScreenRecordingAccess: { true },
+            showMissingScreenRecordingPermission: {},
+            playInvalidActionFeedback: {}
+        )
+        let screenshot = CapturedScreenshot(
+            pngData: Data([1, 2, 3]),
+            image: NSImage(size: CGSize(width: 32, height: 64)),
+            rect: selection.rect
+        )
+
+        XCTAssertTrue(delegate.startCaptureFlowForTesting())
+        selectionOverlay.emitCompletion(.scrollingScreenshot(selection))
+        try await waitUntil {
+            scrollingController.startedSelections == [selection]
+        }
+        scrollingController.complete(with: screenshot)
+
+        try await waitUntil {
+            delegate.quickAccessScreenshotCountForTesting() == 1
+        }
+        XCTAssertEqual(delegate.quickAccessScreenshotCountForTesting(), 1)
+    }
+
     func testRecordingStartDoesNotShowStaticKeyboardHintOverlay() async throws {
         _ = NSApplication.shared
         let recordingService = SpyRecordingService()
@@ -458,6 +535,35 @@ private final class SpySelectionOverlayController: SelectionOverlayControlling {
 
     func dismissSelectionForRecording() {
         activeCompletion = nil
+    }
+
+    func emitCompletion(_ completion: SelectionOverlayCompletion?) {
+        activeCompletion?(completion)
+        activeCompletion = nil
+    }
+}
+
+@MainActor
+private final class SpyScrollingScreenshotSessionController: ScrollingScreenshotSessionControlling {
+    var isActive = false
+    private(set) var startedSelections: [SelectionCapture] = []
+    private var completion: ((CapturedScreenshot) -> Void)?
+
+    func start(
+        selection: SelectionCapture,
+        strings: AppStrings,
+        onComplete: @escaping (CapturedScreenshot) -> Void,
+        onCancel: @escaping () -> Void,
+        onFailure: @escaping (Error) -> Void
+    ) {
+        isActive = true
+        startedSelections.append(selection)
+        completion = onComplete
+    }
+
+    func complete(with screenshot: CapturedScreenshot) {
+        isActive = false
+        completion?(screenshot)
     }
 }
 

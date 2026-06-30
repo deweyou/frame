@@ -13,13 +13,17 @@ underlying app.
 
 ## Confirmed Product Decisions
 
-- The first version is manual scrolling only.
+- The first version is manual scrolling by default, with an optional small-step
+  automatic scrolling assist inside the session.
 - The first version supports vertical scrolling only.
 - The user starts from the existing screenshot selection overlay, chooses a new
   scrolling screenshot action, then scrolls the underlying content by hand.
 - Frame does not try to identify or control the app's internal scroll view in
   this version.
-- Frame does not synthesize scroll wheel events in this version.
+- Frame does not need to identify the target app's internal scroll view. When
+  the user enables automatic scrolling assist, Frame posts small generic scroll
+  wheel events at the selected region center and keeps the user in control of
+  finishing or cancelling.
 - Frame keeps the selected rectangle fixed during capture. The user scrolls the
   content underneath that fixed rectangle.
 - The active scrolling session exposes visible controls for Finish and Cancel.
@@ -27,9 +31,8 @@ underlying app.
   session without showing Quick Access.
 - The output is a normal `CapturedScreenshot`, so it uses existing Quick Access,
   capture history, copy, save, image workspace, annotation, and pin behavior.
-- Auto-scroll, horizontal scrolling, bidirectional scrolling, full-page browser
-  DOM capture, and app-specific scroll view introspection are reserved for later
-  versions.
+- Horizontal scrolling, bidirectional scrolling, full-page browser DOM capture,
+  and app-specific scroll view introspection are reserved for later versions.
 
 ## Scope
 
@@ -49,7 +52,7 @@ This iteration includes:
 
 This iteration excludes:
 
-- Automatic scrolling.
+- Automatic scrolling as the default path.
 - Horizontal scrolling.
 - Capturing multiple displays in one scrolling screenshot.
 - Capturing more than one selected region at a time.
@@ -57,8 +60,8 @@ This iteration excludes:
 - Accessibility-based scroll view discovery.
 - App-specific integrations for browsers, chat apps, editors, or PDFs.
 - Background capture while another Frame capture or recording flow is active.
-- A pause/resume control. The user can stop scrolling without needing Frame to
-  pause sampling.
+- An intermediate wait/resume control. The user chooses the range with Start and
+  Finish instead.
 
 ## User Flow
 
@@ -71,10 +74,13 @@ This iteration excludes:
    the underlying app can receive scrolling input, while keeping a lightweight
    visible boundary around the fixed capture region.
 6. Frame shows a compact scrolling session HUD near the selection. The HUD
-   exposes Finish and Cancel and may show a small captured-frame count.
-7. The user scrolls the content manually with a mouse, trackpad, keyboard, or
-   app-specific scroll controls.
-8. Frame periodically captures the same fixed region.
+   exposes Finish, Cancel, and an automatic scrolling assist toggle.
+7. Frame periodically captures the same fixed region while keeping only the
+   boundary and compact session HUD visible during capture.
+8. The user scrolls the content manually with a mouse, trackpad, keyboard, or
+   app-specific scroll controls. If desired, the user can enable automatic
+   scrolling assist; it scrolls with small steps close to manual scrolling and
+   does not change the selected capture region.
 9. The user clicks Finish when enough content has been captured.
 10. Frame stitches the sampled frames vertically, stores the result in capture
     history, restores any temporarily hidden Quick Access previews, and shows
@@ -93,6 +99,8 @@ new modal editor.
 - The session HUD should be compact, icon-first, and styled with the existing
   HUD chrome.
 - Finish is the primary action because it creates the long screenshot.
+- Automatic scrolling assist is secondary. It can be toggled while the session
+  is running, but Finish and Cancel remain the reliable control surfaces.
 - Cancel discards the session immediately after user intent is clear. If the
   implementation needs confirmation later, it should be HUD-local rather than a
   blocking modal alert.
@@ -101,6 +109,8 @@ new modal editor.
 - The session should not auto-finish on scroll inactivity in this version. Some
   pages pause for lazy loading, animations, or user reading time, so user intent
   is safer than inactivity inference.
+- Frame does not show an in-progress stitched preview. This keeps capture
+  responsive and avoids presenting stale partial results while the user scrolls.
 - If several captured frames are effectively identical, Frame can keep sampling
   but should avoid appending duplicates to the stitch input.
 
@@ -145,8 +155,9 @@ Keep side effects in `FrameApp` and deterministic image analysis in `FrameCore`.
 
 - A new `SelectionOverlayCompletion` case for starting a scrolling screenshot
   from a selected region.
-- A scrolling session controller that owns timers, sampled screenshots, Finish,
-  Cancel, and lifecycle cleanup.
+- A scrolling session controller that owns timers, sampled screenshots,
+  automatic scrolling assist, Finish, Cancel, final stitching, and lifecycle
+  cleanup.
 - A non-interactive boundary overlay around the fixed region. It may reuse or
   generalize existing recording boundary behavior if doing so keeps the boundary
   clear and does not leak recording-specific semantics into screenshot code.
@@ -208,6 +219,8 @@ behavior depend on the user's current apps and macOS environment:
 - Cancel a scrolling session and confirm no Quick Access card appears.
 - Finish without scrolling and confirm Frame reports insufficient progress.
 - Confirm Frame's boundary and HUD are not present in the stitched output.
+- Enable automatic scrolling assist and confirm it moves slowly enough to keep
+  adjacent samples overlapping.
 
 ## Documentation
 
@@ -227,6 +240,10 @@ overviews aligned.
 
 - A user can start a manual vertical scrolling screenshot from a selected region.
 - During capture, the selected app can still receive manual scrolling input.
+- During capture, Frame shows only the fixed boundary and compact session HUD;
+  the stitched result appears after Finish.
+- Automatic scrolling assist is available as an optional small-step toggle, not
+  the default behavior.
 - Finish produces one long PNG when there is reliable vertical scroll progress.
 - Cancel exits without creating output.
 - The resulting image appears in Quick Access and capture history as a normal

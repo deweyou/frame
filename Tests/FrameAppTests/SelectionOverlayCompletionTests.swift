@@ -28,6 +28,18 @@ final class SelectionOverlayCompletionTests: XCTestCase {
         XCTAssertEqual(completion.selection?.kind, selection.kind)
     }
 
+    func testScrollingScreenshotCompletionExposesSelection() {
+        let selection = SelectionCapture(
+            rect: CGRect(x: 10, y: 20, width: 120, height: 80),
+            kind: .region
+        )
+
+        let completion = SelectionOverlayCompletion.scrollingScreenshot(selection)
+
+        XCTAssertEqual(completion.selection?.rect, selection.rect)
+        XCTAssertEqual(completion.selection?.kind, selection.kind)
+    }
+
     func testFullScreenCompletionDoesNotRequireSelection() {
         let completion = SelectionOverlayCompletion.fullScreen
 
@@ -58,6 +70,7 @@ final class SelectionOverlayCompletionTests: XCTestCase {
 
         XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("全屏截图"))
         XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("延迟截图"))
+        XCTAssertTrue(window.hudButtonAccessibilityLabelsForTesting().contains("滚动长截图"))
     }
 
     @MainActor
@@ -66,7 +79,7 @@ final class SelectionOverlayCompletionTests: XCTestCase {
 
         XCTAssertEqual(
             window.hudButtonImageDescriptionsForTesting(),
-            ["crop", "display", "timer", "character.textbox", "record.circle"]
+            ["crop", "display", "timer", "scroll", "character.textbox", "record.circle"]
         )
     }
 
@@ -85,7 +98,7 @@ final class SelectionOverlayCompletionTests: XCTestCase {
         XCTAssertLessThanOrEqual(chromeColors.hover.relativeAlphaForTesting, 0.16)
 
         let tintColors = window.hudButtonTintColorsForTesting()
-        for label in ["区域截图", "全屏截图", "延迟截图", "Recognize Text", "录屏"] {
+        for label in ["区域截图", "全屏截图", "延迟截图", "滚动长截图", "Recognize Text", "录屏"] {
             let tintColor = try XCTUnwrap(tintColors[label])
             XCTAssertGreaterThan(tintColor.relativeLuminanceForTesting, 0.8)
         }
@@ -117,7 +130,7 @@ final class SelectionOverlayCompletionTests: XCTestCase {
         XCTAssertGreaterThan(chromeColors.hover.relativeLuminanceForTesting, 0.8)
 
         let tintColors = window.hudButtonTintColorsForTesting()
-        for label in ["区域截图", "全屏截图", "延迟截图", "Recognize Text", "录屏"] {
+        for label in ["区域截图", "全屏截图", "延迟截图", "滚动长截图", "Recognize Text", "录屏"] {
             let tintColor = try XCTUnwrap(tintColors[label])
             XCTAssertGreaterThan(tintColor.relativeLuminanceForTesting, 0.8)
         }
@@ -130,8 +143,8 @@ final class SelectionOverlayCompletionTests: XCTestCase {
 
         XCTAssertEqual(metrics.buttonWidth, 36)
         XCTAssertEqual(metrics.hoverDiameter, metrics.buttonWidth)
-        XCTAssertEqual(metrics.screenshotModeWidth, 186)
-        XCTAssertEqual(metrics.screenshotModeWidth - metrics.buttonWidth * 5, 6)
+        XCTAssertEqual(metrics.screenshotModeWidth, 222)
+        XCTAssertEqual(metrics.screenshotModeWidth - metrics.buttonWidth * 6, 6)
     }
 
     @MainActor
@@ -392,6 +405,29 @@ final class SelectionOverlayCompletionTests: XCTestCase {
         guard case .fullScreen = completionBox.completion else {
             return XCTFail("Expected full-screen completion")
         }
+    }
+
+    @MainActor
+    func testScrollingScreenshotButtonCompletesWithActiveSelection() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        let selectionRect = CGRect(
+            x: screen.frame.minX + 24,
+            y: screen.frame.minY + 32,
+            width: 120,
+            height: 90
+        )
+        let completionBox = CompletionBox()
+        let window = try makeOverlayWindowForTesting(initialGlobalRect: selectionRect) { completion in
+            completionBox.completion = completion
+        }
+
+        XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "滚动长截图"))
+
+        guard case let .scrollingScreenshot(selection) = completionBox.completion else {
+            return XCTFail("Expected scrolling screenshot completion")
+        }
+        XCTAssertEqual(selection.rect, selectionRect)
+        XCTAssertEqual(selection.kind, .region)
     }
 
     @MainActor
