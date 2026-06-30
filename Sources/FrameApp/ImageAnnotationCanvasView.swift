@@ -2,11 +2,12 @@ import AppKit
 import FrameCore
 
 @MainActor
-final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate {
+final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate, ImageWorkspaceZoomableImageSurfaceForTesting {
     private var image: NSImage
     private var baseScreenshot: CapturedScreenshot?
     private var document: ImageAnnotationDocument
     private let onDocumentChange: (ImageAnnotationDocument) -> Void
+    private let imageZoom: ImageWorkspaceImageZoom
     private var interaction: AnnotationInteraction?
     private var activeTextEditor: ImageAnnotationTextEditorView?
     private var activeTextElementID: UUID?
@@ -18,10 +19,12 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate {
     init(
         image: NSImage,
         document: ImageAnnotationDocument,
+        imageZoom: ImageWorkspaceImageZoom = ImageWorkspaceImageZoom(),
         onDocumentChange: @escaping (ImageAnnotationDocument) -> Void = { _ in }
     ) {
         self.image = image
         self.document = document
+        self.imageZoom = imageZoom
         self.onDocumentChange = onDocumentChange
         super.init(frame: .zero)
         wantsLayer = true
@@ -51,6 +54,10 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate {
             image: image,
             rect: CGRect(origin: .zero, size: image.size)
         )
+    }
+
+    var lastDrawRectForTesting: CGRect {
+        imageDrawRect
     }
 
     override var acceptsFirstResponder: Bool {
@@ -116,6 +123,12 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate {
         document.markCurrentRenditionSaved()
         needsDisplay = true
         notifyDocumentChanged()
+    }
+
+    func imageZoomDidChange() {
+        updateActiveTextEditorFrame()
+        window?.invalidateCursorRects(for: self)
+        needsDisplay = true
     }
 
     func commitActiveTextForTesting(_ text: String) {
@@ -315,6 +328,25 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate {
         needsDisplay = true
     }
 
+    override func magnify(with event: NSEvent) {
+        if imageZoom.applyMagnification(event.magnification, imageSize: image.size, bounds: bounds) {
+            imageZoomDidChange()
+        }
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        if imageZoom.applyScroll(
+            delta: CGSize(width: event.scrollingDeltaX, height: event.scrollingDeltaY),
+            imageSize: image.size,
+            bounds: bounds
+        ) {
+            imageZoomDidChange()
+            return
+        }
+
+        super.scrollWheel(with: event)
+    }
+
     override func keyDown(with event: NSEvent) {
         if event.modifierFlags.contains(.command),
            event.charactersIgnoringModifiers?.lowercased() == "z" {
@@ -337,18 +369,7 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate {
     }
 
     private var imageDrawRect: CGRect {
-        guard image.size.width > 0, image.size.height > 0, bounds.width > 0, bounds.height > 0 else {
-            return bounds
-        }
-
-        let scale = min(bounds.width / image.size.width, bounds.height / image.size.height)
-        let drawSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        return CGRect(
-            x: bounds.midX - drawSize.width / 2,
-            y: bounds.midY - drawSize.height / 2,
-            width: drawSize.width,
-            height: drawSize.height
-        )
+        imageZoom.drawRect(imageSize: image.size, in: bounds)
     }
 
     private var imageDisplayScale: CGFloat {
@@ -672,6 +693,20 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate {
         }
         needsDisplay = true
         notifyDocumentChanged()
+    }
+
+    private func updateActiveTextEditorFrame() {
+        guard let activeTextEditor,
+              let activeTextElementID,
+              let element = document.elements.first(where: { $0.id == activeTextElementID }) else {
+            return
+        }
+
+        let style = textEditingStyle(for: activeTextElementID)
+        let frame = viewRect(forImageRect: element.bounds)
+        activeTextEditor.font = ImageAnnotationTextStyle.font(for: style, scale: imageDisplayScale)
+        activeTextEditor.frame = frame
+        activeTextEditor.textContainer?.containerSize = frame.size
     }
 
     private func deleteActiveTextElement() {

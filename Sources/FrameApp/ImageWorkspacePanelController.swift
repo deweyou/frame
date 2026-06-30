@@ -150,14 +150,14 @@ final class ImageWorkspacePanelController: NSObject {
         let aspectRatio = ImageWorkspaceLayout.imageAspectRatio(for: image)
         let resizeMetrics = ImageWorkspaceLayout.resizeMetrics(for: kind)
         let maximumContentSize = CGSize(
-            width: max(440, min(980, visibleFrame.width * 0.72)),
-            height: max(260, min(640, visibleFrame.height * 0.68))
+            width: max(440, visibleFrame.width - ImageWorkspaceLayout.initialWindowScreenMargin),
+            height: max(260, visibleFrame.height - ImageWorkspaceLayout.initialWindowScreenMargin)
         )
         let maximumImageSize = CGSize(
             width: maximumContentSize.width - resizeMetrics.horizontalChromeWidth,
             height: maximumContentSize.height - resizeMetrics.fixedVerticalChromeHeight
         )
-        let sourceWidth = max(ImageWorkspaceLayout.fallbackImageSize.width, image.size.width)
+        let sourceWidth = image.size.width > 0 ? image.size.width : ImageWorkspaceLayout.fallbackImageSize.width
         let fittedImageWidth = min(maximumImageSize.width, maximumImageSize.height * aspectRatio, sourceWidth)
         let minimumImageWidth = max(1, resizeMetrics.minimumContentWidth - resizeMetrics.horizontalChromeWidth)
         let imageWidth = max(minimumImageWidth, fittedImageWidth)
@@ -204,9 +204,11 @@ final class ImageWorkspacePanelController: NSObject {
         imageContainer.menuProvider = contextMenuProvider
         imageContainer.setAccessibilityLabel("Image Preview Container")
 
+        let imageZoom = ImageWorkspaceImageZoom()
         let annotationCanvas = ImageAnnotationCanvasView(
             image: item.screenshot.image,
-            document: ImageAnnotationDocument(editingOptions: editingOptionsProvider())
+            document: ImageAnnotationDocument(editingOptions: editingOptionsProvider()),
+            imageZoom: imageZoom
         ) { [weak self, weak item] document in
             guard let item else {
                 return
@@ -221,11 +223,22 @@ final class ImageWorkspacePanelController: NSObject {
 
         let textSelectionOverlay = ImageWorkspaceTextSelectionOverlayView(
             imageSize: item.screenshot.image.size,
+            imageZoom: imageZoom,
             copyText: item.copyRecognizedText ?? { _ in false }
         )
         textSelectionOverlay.translatesAutoresizingMaskIntoConstraints = false
         textSelectionOverlay.isHidden = true
         textSelectionOverlay.menuProvider = contextMenuProvider
+        textSelectionOverlay.magnifyHandler = { [weak annotationCanvas] event in
+            annotationCanvas?.magnify(with: event)
+        }
+        textSelectionOverlay.scrollWheelHandler = { [weak annotationCanvas] event in
+            annotationCanvas?.scrollWheel(with: event)
+        }
+        imageZoom.onViewportChange = { [weak annotationCanvas, weak textSelectionOverlay] in
+            annotationCanvas?.imageZoomDidChange()
+            textSelectionOverlay?.imageZoomDidChange()
+        }
         item.textSelectionOverlay = textSelectionOverlay
 
         let toolbar = ImageWorkspaceToolbarView()
@@ -396,7 +409,10 @@ final class ImageWorkspacePanelController: NSObject {
 
             toolbar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: ImageWorkspaceLayout.toolbarLeading),
             toolbar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -ImageWorkspaceLayout.toolbarTrailing),
-            toolbar.topAnchor.constraint(equalTo: contentView.topAnchor, constant: ImageWorkspaceLayout.toolbarTopInset),
+            toolbar.topAnchor.constraint(
+                equalTo: contentView.topAnchor,
+                constant: -ImageWorkspaceLayout.toolbarTitlebarOverlap
+            ),
             toolbar.heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.toolbarHeight),
 
             toolbarStack.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor, constant: ImageWorkspaceLayout.toolbarStackLeadingInset),
@@ -1518,20 +1534,21 @@ private enum ImageWorkspaceLayout {
     static let fallbackImageSize = CGSize(width: 640, height: 420)
     static let toolbarLeading: CGFloat = 0
     static let toolbarTrailing: CGFloat = 0
-    static let toolbarTopInset: CGFloat = 0
+    static let toolbarTitlebarOverlap: CGFloat = 2
     static let toolbarStackLeadingInset: CGFloat = 88
     static let toolbarStackTrailingInset: CGFloat = 6
     static let toolbarStackSpacing: CGFloat = 8
-    static let toolbarHeight: CGFloat = 32
+    static let toolbarHeight: CGFloat = 36
     static let imageTopSpacing: CGFloat = 6
     static let imageBottomInset: CGFloat = 0
-    static let editingToolSize: CGFloat = 24
+    static let editingToolSize: CGFloat = 28
     static let toolOptionsButtonWidth: CGFloat = 14
     static let editingToolSpacing: CGFloat = 4
-    static let outputButtonWidth: CGFloat = 26
+    static let outputButtonWidth: CGFloat = 30
     static let minimumSpacerWidth: CGFloat = 12
     static let baseMinimumContentWidth: CGFloat = 440
     static let pinnedMinimumContentWidth: CGFloat = 320
+    static let initialWindowScreenMargin: CGFloat = 80
 
     static var minimumContentWidth: CGFloat {
         max(baseMinimumContentWidth, toolbarLeading + minimumToolbarWidth + toolbarTrailing)
@@ -1546,7 +1563,7 @@ private enum ImageWorkspaceLayout {
         switch kind {
         case .temporaryPreview:
             ImageWorkspaceResizeMetrics(
-                fixedVerticalChromeHeight: toolbarTopInset + toolbarHeight + imageTopSpacing + imageBottomInset,
+                fixedVerticalChromeHeight: toolbarHeight - toolbarTitlebarOverlap + imageTopSpacing + imageBottomInset,
                 horizontalChromeWidth: toolbarLeading + toolbarTrailing,
                 minimumContentWidth: minimumContentWidth
             )
@@ -1781,8 +1798,17 @@ private final class ImageWorkspaceToolbarView: NSVisualEffectView {
     }
 }
 
+private final class ImageWorkspaceToolbarIconView: NSImageView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+}
+
 private final class ImageWorkspaceToolbarButton: NSButton {
+    private static let maximumIconSide: CGFloat = 16
+
     private let hoverLayer = CALayer()
+    private let iconView = ImageWorkspaceToolbarIconView()
     private var trackingArea: NSTrackingArea?
     private var isHovering = false {
         didSet {
@@ -1801,6 +1827,33 @@ private final class ImageWorkspaceToolbarButton: NSButton {
             }
             updateHoverAppearance()
             window?.invalidateCursorRects(for: self)
+        }
+    }
+    override var image: NSImage? {
+        get {
+            iconView.image
+        }
+        set {
+            iconView.image = newValue
+            super.image = nil
+            needsLayout = true
+        }
+    }
+    override var contentTintColor: NSColor? {
+        get {
+            iconView.contentTintColor
+        }
+        set {
+            iconView.contentTintColor = newValue
+        }
+    }
+    override var symbolConfiguration: NSImage.SymbolConfiguration? {
+        get {
+            iconView.symbolConfiguration
+        }
+        set {
+            iconView.symbolConfiguration = newValue
+            needsLayout = true
         }
     }
 
@@ -1837,6 +1890,14 @@ private final class ImageWorkspaceToolbarButton: NSButton {
         hoverLayer.cornerRadius = hoverDiameter / 2
         hoverLayer.bounds = CGRect(x: 0, y: 0, width: hoverDiameter, height: hoverDiameter)
         hoverLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
+
+        let iconSide = min(bounds.width, bounds.height, Self.maximumIconSide)
+        iconView.frame = CGRect(
+            x: bounds.midX - iconSide / 2,
+            y: bounds.midY - iconSide / 2,
+            width: iconSide,
+            height: iconSide
+        )
     }
 
     override func updateTrackingAreas() {
@@ -1911,11 +1972,17 @@ private final class ImageWorkspaceToolbarButton: NSButton {
         isBordered = false
         bezelStyle = .regularSquare
         imagePosition = .imageOnly
+        imageScaling = .scaleNone
         setButtonType(.momentaryPushIn)
         focusRingType = .none
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
         layer?.masksToBounds = false
+        iconView.imageScaling = .scaleNone
+        iconView.imageAlignment = .alignCenter
+        iconView.translatesAutoresizingMaskIntoConstraints = true
+        iconView.isEditable = false
+        addSubview(iconView)
         hoverLayer.opacity = 0
         hoverLayer.backgroundColor = NSColor.labelColor.withAlphaComponent(0.10).cgColor
         layer?.insertSublayer(hoverLayer, at: 0)
@@ -1950,17 +2017,45 @@ private final class ImageWorkspaceToolbarButton: NSButton {
     }
 }
 
-private final class ImageWorkspaceImageView: ImageWorkspaceContextMenuView {
+private final class ImageWorkspaceImageView: ImageWorkspaceContextMenuView, ImageWorkspaceZoomableImageSurfaceForTesting {
     private let image: NSImage
+    private let imageZoom: ImageWorkspaceImageZoom
 
-    init(image: NSImage) {
+    init(
+        image: NSImage,
+        imageZoom: ImageWorkspaceImageZoom = ImageWorkspaceImageZoom()
+    ) {
         self.image = image
+        self.imageZoom = imageZoom
         super.init(frame: .zero)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         nil
+    }
+
+    var lastDrawRectForTesting: CGRect {
+        drawRectForCurrentBounds()
+    }
+
+    override func magnify(with event: NSEvent) {
+        if imageZoom.applyMagnification(event.magnification, imageSize: image.size, bounds: bounds) {
+            needsDisplay = true
+        }
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        if imageZoom.applyScroll(
+            delta: CGSize(width: event.scrollingDeltaX, height: event.scrollingDeltaY),
+            imageSize: image.size,
+            bounds: bounds
+        ) {
+            needsDisplay = true
+            return
+        }
+
+        super.scrollWheel(with: event)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -1970,15 +2065,12 @@ private final class ImageWorkspaceImageView: ImageWorkspaceContextMenuView {
             return
         }
 
-        let scale = min(bounds.width / image.size.width, bounds.height / image.size.height)
-        let drawSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        let drawRect = CGRect(
-            x: bounds.midX - drawSize.width / 2,
-            y: bounds.midY - drawSize.height / 2,
-            width: drawSize.width,
-            height: drawSize.height
-        )
+        let drawRect = drawRectForCurrentBounds()
 
         image.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
+    }
+
+    private func drawRectForCurrentBounds() -> CGRect {
+        imageZoom.drawRect(imageSize: image.size, in: bounds)
     }
 }
