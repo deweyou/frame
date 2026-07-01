@@ -1377,10 +1377,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let previousShortcut = hotKeyController.shortcut
-        let recordingShortcut = hotKeyController.recordingShortcut
 
         do {
-            try hotKeyController.register(shortcut: shortcut, recordingShortcut: recordingShortcut)
+            try hotKeyController.register(shortcut: shortcut)
             SettingsStore.setScreenshotShortcut(shortcut)
             NSLog("Frame 截图快捷键已更新为 \(shortcut.displayName)")
             return true
@@ -1396,7 +1395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func changeRecordingShortcut(to shortcut: ScreenshotShortcut) -> Bool {
+    private func changeRecordingShortcut(to shortcut: ScreenshotShortcut?) -> Bool {
         guard let hotKeyController else {
             SettingsStore.setRecordingShortcut(shortcut)
             return true
@@ -1406,13 +1405,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let previousShortcut = hotKeyController.recordingShortcut
 
         do {
-            try hotKeyController.register(shortcut: screenshotShortcut, recordingShortcut: shortcut)
+            try hotKeyController.register(shortcut: screenshotShortcut, recordingShortcut: .some(shortcut))
             SettingsStore.setRecordingShortcut(shortcut)
-            NSLog("Frame 录屏快捷键已更新为 \(shortcut.displayName)")
+            NSLog("Frame 录屏快捷键已更新为 \(shortcut?.displayName ?? "未设置")")
             return true
         } catch {
             do {
-                try hotKeyController.register(shortcut: screenshotShortcut, recordingShortcut: previousShortcut)
+                try hotKeyController.register(shortcut: screenshotShortcut, recordingShortcut: .some(previousShortcut))
             } catch {
                 NSLog("Frame 恢复原录屏快捷键失败: \(error.localizedDescription)")
             }

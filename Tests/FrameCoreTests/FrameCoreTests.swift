@@ -13,9 +13,6 @@ final class ZFrameCoreTests: XCTestCase {
     func testDefaultShortcutsMatchMvpDefaults() {
         XCTAssert(KeyboardShortcut.defaultScreenshot.key == "a")
         XCTAssert(KeyboardShortcut.defaultScreenshot.displayName == "Command+Shift+A")
-        XCTAssert(KeyboardShortcut.defaultRecording.key == "r")
-        XCTAssert(KeyboardShortcut.defaultRecording.displayName == "Command+Shift+R")
-        XCTAssert(KeyboardShortcut.defaultRecording.isReservedOnly)
         XCTAssert(!KeyboardShortcut.defaultScreenshot.isReservedOnly)
     }
 
@@ -27,7 +24,7 @@ final class ZFrameCoreTests: XCTestCase {
         XCTAssertEqual(ScreenshotShortcut.default.keyboardShortcut.displayName, "Command+Shift+A")
     }
 
-    func testRecordingShortcutDefaultsToCommandShiftR() {
+    func testCommandShiftRRemainsAvailableForConfiguredRecordingShortcut() {
         XCTAssertEqual(ScreenshotShortcut.defaultRecording.key, .letter("R"))
         XCTAssertEqual(ScreenshotShortcut.defaultRecording.modifiers, [.command, .shift])
         XCTAssertEqual(ScreenshotShortcut.defaultRecording.displayName, "⌘⇧R")
@@ -94,7 +91,7 @@ final class ZFrameCoreTests: XCTestCase {
         )
         XCTAssertEqual(
             ScreenshotShortcut.validate(key: .letter("R"), modifiers: [.command, .shift]),
-            .invalid(.reservedShortcut)
+            .valid(ScreenshotShortcut(key: .letter("R"), modifiers: [.command, .shift]))
         )
     }
 

@@ -513,6 +513,164 @@ final class SelectionOverlayCompletionTests: XCTestCase {
     }
 
     @MainActor
+    func testOverlayStartsWithoutRestoredSelectionAndAutoSelectsHoveredWindow() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        let candidate = WindowCandidate(
+            id: 42,
+            ownerProcessID: 100,
+            bounds: CGRect(
+                x: screen.frame.minX + 60,
+                y: screen.frame.minY + 80,
+                width: 320,
+                height: 180
+            )
+        )
+        let window = try makeOverlayWindowForTesting(
+            initialGlobalRect: nil,
+            onWindowSelectionRequested: { point, _ in
+                candidate.bounds.contains(point) ? candidate : nil
+            }
+        )
+
+        XCTAssertFalse(window.hasSelection)
+        XCTAssertTrue(window.placeholderIsVisibleForTesting())
+
+        window.moveMouseForTesting(toGlobalPoint: candidate.bounds.center)
+
+        XCTAssertEqual(window.activeSelectionForTesting()?.rect, candidate.bounds)
+        XCTAssertEqual(window.activeSelectionForTesting()?.kind, .window(id: 42))
+        XCTAssertFalse(window.placeholderIsVisibleForTesting())
+    }
+
+    @MainActor
+    func testAutoHoveredWindowSelectionClearsOverEmptySpace() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        let candidate = WindowCandidate(
+            id: 43,
+            ownerProcessID: 100,
+            bounds: CGRect(
+                x: screen.frame.minX + 60,
+                y: screen.frame.minY + 80,
+                width: 320,
+                height: 180
+            )
+        )
+        let window = try makeOverlayWindowForTesting(
+            initialGlobalRect: nil,
+            onWindowSelectionRequested: { point, _ in
+                candidate.bounds.contains(point) ? candidate : nil
+            }
+        )
+
+        window.moveMouseForTesting(toGlobalPoint: candidate.bounds.center)
+        window.moveMouseForTesting(toGlobalPoint: CGPoint(x: screen.frame.maxX - 12, y: screen.frame.maxY - 12))
+
+        XCTAssertNil(window.activeSelectionForTesting())
+        XCTAssertTrue(window.placeholderIsVisibleForTesting())
+    }
+
+    @MainActor
+    func testClickingAutoHoveredWindowConfirmsWindowSelection() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        let candidate = WindowCandidate(
+            id: 45,
+            ownerProcessID: 100,
+            bounds: CGRect(
+                x: screen.frame.minX + 60,
+                y: screen.frame.minY + 80,
+                width: 320,
+                height: 180
+            )
+        )
+        let window = try makeOverlayWindowForTesting(
+            initialGlobalRect: nil,
+            onWindowSelectionRequested: { point, _ in
+                candidate.bounds.contains(point) ? candidate : nil
+            }
+        )
+
+        window.moveMouseForTesting(toGlobalPoint: candidate.bounds.center)
+        window.mouseDownForTesting(atGlobalPoint: candidate.bounds.center)
+        window.mouseUpForTesting(atGlobalPoint: candidate.bounds.center)
+        window.moveMouseForTesting(toGlobalPoint: CGPoint(x: screen.frame.maxX - 12, y: screen.frame.maxY - 12))
+
+        XCTAssertEqual(
+            window.activeSelectionForTesting(),
+            SelectionCapture(rect: candidate.bounds, kind: .window(id: candidate.id))
+        )
+    }
+
+    @MainActor
+    func testAutoHoveredWindowUsesCrosshairCursorUntilClicked() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        let candidate = WindowCandidate(
+            id: 46,
+            ownerProcessID: 100,
+            bounds: CGRect(
+                x: screen.frame.minX + 60,
+                y: screen.frame.minY + 80,
+                width: 320,
+                height: 180
+            )
+        )
+        let window = try makeOverlayWindowForTesting(
+            initialGlobalRect: nil,
+            onWindowSelectionRequested: { point, _ in
+                candidate.bounds.contains(point) ? candidate : nil
+            }
+        )
+
+        window.moveMouseForTesting(toGlobalPoint: candidate.bounds.center)
+
+        XCTAssertEqual(window.cursorNameForTesting(atGlobalPoint: candidate.bounds.center), "crosshair")
+
+        window.mouseDownForTesting(atGlobalPoint: candidate.bounds.center)
+        window.mouseUpForTesting(atGlobalPoint: candidate.bounds.center)
+
+        XCTAssertEqual(window.cursorNameForTesting(atGlobalPoint: candidate.bounds.center), "openHand")
+    }
+
+    @MainActor
+    func testManualDragInsideAutoHoveredWindowCreatesRegionSelection() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        let candidate = WindowCandidate(
+            id: 44,
+            ownerProcessID: 100,
+            bounds: CGRect(
+                x: screen.frame.minX + 60,
+                y: screen.frame.minY + 80,
+                width: 320,
+                height: 180
+            )
+        )
+        let window = try makeOverlayWindowForTesting(
+            initialGlobalRect: nil,
+            onWindowSelectionRequested: { point, _ in
+                candidate.bounds.contains(point) ? candidate : nil
+            }
+        )
+        let dragStart = CGPoint(x: candidate.bounds.minX + 24, y: candidate.bounds.minY + 24)
+        let dragEnd = CGPoint(x: candidate.bounds.minX + 180, y: candidate.bounds.minY + 120)
+
+        window.moveMouseForTesting(toGlobalPoint: candidate.bounds.center)
+        window.mouseDownForTesting(atGlobalPoint: dragStart)
+        window.mouseDraggedForTesting(toGlobalPoint: dragEnd)
+        window.mouseUpForTesting(atGlobalPoint: dragEnd)
+
+        XCTAssertEqual(
+            window.activeSelectionForTesting(),
+            SelectionCapture(
+                rect: SelectionGeometry.normalizedRect(from: dragStart, to: dragEnd),
+                kind: .region
+            )
+        )
+
+        window.moveMouseForTesting(toGlobalPoint: CGPoint(x: candidate.bounds.maxX - 8, y: candidate.bounds.maxY - 8))
+
+        XCTAssertEqual(window.activeSelectionForTesting()?.kind, .region)
+    }
+
+    @MainActor
     func testCancelSelectionRestoresCursor() {
         _ = NSApplication.shared
         var didResetCursor = false
@@ -532,7 +690,8 @@ final class SelectionOverlayCompletionTests: XCTestCase {
         initialMode: SelectionOverlayInitialMode = .screenshot,
         delayCountdownNanoseconds: UInt64 = 5_000_000_000,
         onComplete: @escaping (SelectionOverlayCompletion?) -> Void = { _ in },
-        onStartRecording: @escaping (SelectionCapture, RecordingOptions) -> Void = { _, _ in }
+        onStartRecording: @escaping (SelectionCapture, RecordingOptions) -> Void = { _, _ in },
+        onWindowSelectionRequested: @escaping (CGPoint, Int?) -> WindowCandidate? = { _, _ in nil }
     ) throws -> SelectionOverlayWindow {
         _ = NSApplication.shared
         let screen = try XCTUnwrap(NSScreen.screens.first)
@@ -545,7 +704,7 @@ final class SelectionOverlayCompletionTests: XCTestCase {
             ocrActionText: "Recognize Text",
             delayCountdownNanoseconds: delayCountdownNanoseconds,
             onInteraction: {},
-            onWindowSelectionRequested: { _, _ in nil },
+            onWindowSelectionRequested: onWindowSelectionRequested,
             onStartRecording: onStartRecording,
             onComplete: onComplete
         )

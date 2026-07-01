@@ -149,7 +149,7 @@ public struct ScreenshotShortcut: Equatable, Hashable, Identifiable, Sendable {
     public static func persistedValue(
         for rawValue: String?,
         defaultShortcut: ScreenshotShortcut = .default,
-        reservedShortcuts: Set<ScreenshotShortcut> = [.defaultRecording]
+        reservedShortcuts: Set<ScreenshotShortcut> = []
     ) -> ScreenshotShortcut {
         guard let rawValue else {
             return defaultShortcut
@@ -165,7 +165,7 @@ public struct ScreenshotShortcut: Equatable, Hashable, Identifiable, Sendable {
     public static func validate(
         key: ScreenshotShortcutKey,
         modifiers: Set<ScreenshotShortcutModifier>,
-        reservedShortcuts: Set<ScreenshotShortcut> = [.defaultRecording],
+        reservedShortcuts: Set<ScreenshotShortcut> = [],
         duplicateShortcut: ScreenshotShortcut? = nil
     ) -> ScreenshotShortcutValidationResult {
         let shortcut = ScreenshotShortcut(key: key, modifiers: modifiers)
@@ -188,7 +188,7 @@ public struct ScreenshotShortcut: Equatable, Hashable, Identifiable, Sendable {
         return .valid(shortcut)
     }
 
-    private static func shortcut(
+    public static func shortcut(
         storageValue: String,
         reservedShortcuts: Set<ScreenshotShortcut>
     ) -> ScreenshotShortcut? {
