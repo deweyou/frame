@@ -165,7 +165,7 @@ Agents should use this stable-sign-and-replace flow whenever the user asks to ru
 21. Confirm save writes `Frame yyyy-MM-dd HH.mm.ss.png` to the configured screenshot folder, or Desktop after reset.
 22. Double-click an eligible app window, capture it, and confirm the output uses the selected window screenshot style. Confirm Original keeps the cropped raw window output without an added background canvas while region screenshots remain undecorated.
 23. Confirm the workspace action opens a movable, resizable preview/edit workspace.
-24. Resize the workspace and confirm the image preview area preserves the captured image aspect ratio without empty fill.
+24. Resize the workspace and confirm the image preview area preserves the captured image aspect ratio without empty fill. Open screenshots that fit on screen and confirm the preview/edit and pinned windows start near the image's original display size instead of the old small cap. Open a small screenshot and confirm the displayed image starts at its original size instead of being enlarged to fill the window. Pinch on the trackpad inside the preview/edit workspace and pinned window; the image content should zoom in and out while the window frame stays fixed. After zooming in, two-finger scroll across the preview and confirm the enlarged image pans to other areas without revealing blank space.
 25. Confirm switching focus to another app does not close the preview/edit workspace.
 26. Click the same Quick Access workspace action again and confirm it activates the existing preview/edit workspace instead of opening a duplicate.
 27. Confirm the top toolbar shows Select, Rectangle, Oval, Line, Arrow, Brush, Text, Highlight, Mosaic, shared Color, the contextual Thickness/Font Size style menu, Save Current, Copy, and Download. The Select tool should be active by default; the Color button should show the currently selected color, menus should mark the active option, and the style menu should be disabled until a drawable tool is active. Change color, thickness, font size, shape, and mosaic mode, reopen the workspace, and confirm those choices are remembered while Select is still active by default.
@@ -220,4 +220,4 @@ tccutil reset ScreenCapture dev.dewey.frame
 Then reopen the exact app bundle you want to authorize.
 
 ---
-*Last updated: 2026-06-17 | Reason: add Original window screenshot smoke checks*
+*Last updated: 2026-06-30 | Reason: add image workspace original-size display plus trackpad zoom and pan smoke checks*

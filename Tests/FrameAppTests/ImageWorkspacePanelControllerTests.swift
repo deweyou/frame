@@ -227,6 +227,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         canvas.setStyle(style)
         canvas.selectTool(.shape)
         canvas.setShapeKind(.rectangle)
+        canvas.magnify(with: FakeMagnifyEvent(magnification: 1, locationInWindow: canvas.convert(canvas.bounds.center, to: nil)))
         canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 16), panel: panel))
         canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 52, y: 36), panel: panel))
 
@@ -1199,7 +1200,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         let textButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Text"))
 
         XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(textButton.action), to: textButton.target, from: textButton))
-        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 80, y: 90), panel: panel))
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: imageWindowPoint(in: canvas, imagePoint: CGPoint(x: 80, y: 90)), panel: panel))
         canvas.commitActiveTextForTesting("Frame")
         let textID = try XCTUnwrap(canvas.documentForTesting.selectedElementID)
         let originalBounds = try XCTUnwrap(canvas.documentForTesting.elements.first?.bounds)
@@ -1228,9 +1229,9 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         XCTAssertFalse(redoButton.isEnabled)
 
         canvas.selectTool(.shape)
-        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel))
-        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 120, y: 90), panel: panel))
-        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 90), panel: panel))
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: imageWindowPoint(in: canvas, imagePoint: CGPoint(x: 20, y: 20)), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: imageWindowPoint(in: canvas, imagePoint: CGPoint(x: 120, y: 90)), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: imageWindowPoint(in: canvas, imagePoint: CGPoint(x: 120, y: 90)), panel: panel))
 
         XCTAssertTrue(undoButton.isEnabled)
         XCTAssertFalse(redoButton.isEnabled)
@@ -1272,9 +1273,9 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         let originalPNGData = canvas.currentScreenshotForTesting.pngData
 
         canvas.selectTool(.shape)
-        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel))
-        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 120, y: 90), panel: panel))
-        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 90), panel: panel))
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: imageWindowPoint(in: canvas, imagePoint: CGPoint(x: 20, y: 20)), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: imageWindowPoint(in: canvas, imagePoint: CGPoint(x: 120, y: 90)), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: imageWindowPoint(in: canvas, imagePoint: CGPoint(x: 120, y: 90)), panel: panel))
 
         let saveCurrentButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Save Current"))
         let editedContextMenu = try XCTUnwrap(contentView.menu(for: try makeRightClickEvent(windowNumber: panel.windowNumber)))
@@ -1294,9 +1295,9 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         XCTAssertFalse(committedSaveMenuItem.isEnabled)
 
         canvas.selectTool(.shape)
-        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 30, y: 30), panel: panel))
-        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 80, y: 70), panel: panel))
-        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 80, y: 70), panel: panel))
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: imageWindowPoint(in: canvas, imagePoint: CGPoint(x: 30, y: 30)), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: imageWindowPoint(in: canvas, imagePoint: CGPoint(x: 80, y: 70)), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: imageWindowPoint(in: canvas, imagePoint: CGPoint(x: 80, y: 70)), panel: panel))
 
         let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy"))
         XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(copyButton.action), to: copyButton.target, from: copyButton))
@@ -1327,9 +1328,9 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         let originalPNGData = canvas.currentScreenshotForTesting.pngData
 
         canvas.selectTool(.shape)
-        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: panel))
-        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 120, y: 90), panel: panel))
-        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 90), panel: panel))
+        canvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: imageWindowPoint(in: canvas, imagePoint: CGPoint(x: 20, y: 20)), panel: panel))
+        canvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: imageWindowPoint(in: canvas, imagePoint: CGPoint(x: 120, y: 90)), panel: panel))
+        canvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: imageWindowPoint(in: canvas, imagePoint: CGPoint(x: 120, y: 90)), panel: panel))
 
         let saveCurrentButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Save Current"))
         let saveAsNewItem = try XCTUnwrap(saveCurrentButton.menu?.item(withTitle: "Save As New"))
@@ -1356,9 +1357,9 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         )
         let replaceCanvas = try XCTUnwrap(findAnnotationCanvas(in: try XCTUnwrap(replacePanel.contentView)))
         replaceCanvas.selectTool(.shape)
-        replaceCanvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: replacePanel))
-        replaceCanvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 120, y: 90), panel: replacePanel))
-        replaceCanvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 90), panel: replacePanel))
+        replaceCanvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: imageWindowPoint(in: replaceCanvas, imagePoint: CGPoint(x: 20, y: 20)), panel: replacePanel))
+        replaceCanvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: imageWindowPoint(in: replaceCanvas, imagePoint: CGPoint(x: 120, y: 90)), panel: replacePanel))
+        replaceCanvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: imageWindowPoint(in: replaceCanvas, imagePoint: CGPoint(x: 120, y: 90)), panel: replacePanel))
 
         replacePanel.close()
 
@@ -1377,9 +1378,9 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         )
         let saveAsNewCanvas = try XCTUnwrap(findAnnotationCanvas(in: try XCTUnwrap(saveAsNewPanel.contentView)))
         saveAsNewCanvas.selectTool(.shape)
-        saveAsNewCanvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: saveAsNewPanel))
-        saveAsNewCanvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 120, y: 90), panel: saveAsNewPanel))
-        saveAsNewCanvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 90), panel: saveAsNewPanel))
+        saveAsNewCanvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: imageWindowPoint(in: saveAsNewCanvas, imagePoint: CGPoint(x: 20, y: 20)), panel: saveAsNewPanel))
+        saveAsNewCanvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: imageWindowPoint(in: saveAsNewCanvas, imagePoint: CGPoint(x: 120, y: 90)), panel: saveAsNewPanel))
+        saveAsNewCanvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: imageWindowPoint(in: saveAsNewCanvas, imagePoint: CGPoint(x: 120, y: 90)), panel: saveAsNewPanel))
 
         saveAsNewPanel.close()
 
@@ -1400,9 +1401,9 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         )
         let discardCanvas = try XCTUnwrap(findAnnotationCanvas(in: try XCTUnwrap(discardPanel.contentView)))
         discardCanvas.selectTool(.shape)
-        discardCanvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: discardPanel))
-        discardCanvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 120, y: 90), panel: discardPanel))
-        discardCanvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 90), panel: discardPanel))
+        discardCanvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: imageWindowPoint(in: discardCanvas, imagePoint: CGPoint(x: 20, y: 20)), panel: discardPanel))
+        discardCanvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: imageWindowPoint(in: discardCanvas, imagePoint: CGPoint(x: 120, y: 90)), panel: discardPanel))
+        discardCanvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: imageWindowPoint(in: discardCanvas, imagePoint: CGPoint(x: 120, y: 90)), panel: discardPanel))
 
         let replacedScreenshotBeforeDiscard = replacedScreenshot
         let newPreviewScreenshotBeforeDiscard = newPreviewScreenshot
@@ -1430,9 +1431,9 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         }
         let cancelCanvas = try XCTUnwrap(findAnnotationCanvas(in: try XCTUnwrap(cancelPanel.contentView)))
         cancelCanvas.selectTool(.shape)
-        cancelCanvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: NSPoint(x: 20, y: 20), panel: cancelPanel))
-        cancelCanvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: NSPoint(x: 120, y: 90), panel: cancelPanel))
-        cancelCanvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: NSPoint(x: 120, y: 90), panel: cancelPanel))
+        cancelCanvas.mouseDown(with: try makeMouseButtonEvent(type: .leftMouseDown, point: imageWindowPoint(in: cancelCanvas, imagePoint: CGPoint(x: 20, y: 20)), panel: cancelPanel))
+        cancelCanvas.mouseDragged(with: try makeMouseButtonEvent(type: .leftMouseDragged, point: imageWindowPoint(in: cancelCanvas, imagePoint: CGPoint(x: 120, y: 90)), panel: cancelPanel))
+        cancelCanvas.mouseUp(with: try makeMouseButtonEvent(type: .leftMouseUp, point: imageWindowPoint(in: cancelCanvas, imagePoint: CGPoint(x: 120, y: 90)), panel: cancelPanel))
 
         let replacedScreenshotBeforeCancel = replacedScreenshot
         let newPreviewScreenshotBeforeCancel = newPreviewScreenshot
@@ -1535,6 +1536,298 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         XCTAssertLessThanOrEqual(closeFrame.maxY, imageContainer.frame.maxY)
         XCTAssertLessThan(closeFrame.midX, imageContainer.frame.minX + 80)
         XCTAssertGreaterThan(closeFrame.midY, imageContainer.frame.maxY - 40)
+    }
+
+    func testTemporaryWorkspaceOpensSmallImageAtOriginalDisplaySize() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = ImageWorkspacePanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeSolidScreenshot(color: .systemBlue, size: CGSize(width: 120, height: 80))
+
+        XCTAssertTrue(controller.show(
+            screenshot: screenshot,
+            kind: .temporaryPreview,
+            copy: { true },
+            save: { true }
+        ))
+
+        let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
+        defer {
+            closePanel(panel)
+        }
+
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let canvas = try XCTUnwrap(findAnnotationCanvas(in: contentView))
+
+        XCTAssertGreaterThan(canvas.bounds.width, screenshot.image.size.width)
+        XCTAssertGreaterThan(canvas.bounds.height, screenshot.image.size.height)
+        XCTAssertEqual(canvas.lastDrawRectForTesting.width, screenshot.image.size.width, accuracy: 0.5)
+        XCTAssertEqual(canvas.lastDrawRectForTesting.height, screenshot.image.size.height, accuracy: 0.5)
+    }
+
+    func testPinnedWorkspaceOpensSmallImageAtOriginalDisplaySize() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = ImageWorkspacePanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeSolidScreenshot(color: .systemBlue, size: CGSize(width: 120, height: 80))
+
+        XCTAssertTrue(controller.show(
+            screenshot: screenshot,
+            kind: .pinned,
+            copy: { true },
+            save: { true }
+        ))
+
+        let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
+        defer {
+            closePanel(panel)
+        }
+
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let imageView = try XCTUnwrap(findZoomableImageSurface(in: contentView))
+
+        XCTAssertGreaterThan(imageView.bounds.width, screenshot.image.size.width)
+        XCTAssertGreaterThan(imageView.bounds.height, screenshot.image.size.height)
+        XCTAssertEqual(imageView.lastDrawRectForTesting.width, screenshot.image.size.width, accuracy: 0.5)
+        XCTAssertEqual(imageView.lastDrawRectForTesting.height, screenshot.image.size.height, accuracy: 0.5)
+    }
+
+    func testTemporaryWorkspaceOpensFittingImageAtOriginalWindowSize() throws {
+        _ = NSApplication.shared
+        let sourceSize = CGSize(width: 1040, height: 650)
+        let visibleFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        try XCTSkipIf(
+            visibleFrame.width < sourceSize.width + 80 || visibleFrame.height < sourceSize.height + 120,
+            "Screen is too small to verify original-size initial workspace window."
+        )
+
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = ImageWorkspacePanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeSolidScreenshot(color: .systemBlue, size: sourceSize)
+
+        XCTAssertTrue(controller.show(
+            screenshot: screenshot,
+            kind: .temporaryPreview,
+            copy: { true },
+            save: { true }
+        ))
+
+        let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
+        defer {
+            closePanel(panel)
+        }
+
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let canvas = try XCTUnwrap(findAnnotationCanvas(in: contentView))
+
+        XCTAssertEqual(canvas.bounds.width, sourceSize.width, accuracy: 1.5)
+        XCTAssertEqual(canvas.bounds.height, sourceSize.height, accuracy: 1.5)
+        XCTAssertEqual(canvas.lastDrawRectForTesting.width, sourceSize.width, accuracy: 0.5)
+        XCTAssertEqual(canvas.lastDrawRectForTesting.height, sourceSize.height, accuracy: 0.5)
+    }
+
+    func testPinnedWorkspaceOpensFittingImageAtOriginalWindowSize() throws {
+        _ = NSApplication.shared
+        let sourceSize = CGSize(width: 1040, height: 650)
+        let visibleFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        try XCTSkipIf(
+            visibleFrame.width < sourceSize.width + 80 || visibleFrame.height < sourceSize.height + 80,
+            "Screen is too small to verify original-size initial pinned window."
+        )
+
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = ImageWorkspacePanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeSolidScreenshot(color: .systemBlue, size: sourceSize)
+
+        XCTAssertTrue(controller.show(
+            screenshot: screenshot,
+            kind: .pinned,
+            copy: { true },
+            save: { true }
+        ))
+
+        let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
+        defer {
+            closePanel(panel)
+        }
+
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let imageView = try XCTUnwrap(findZoomableImageSurface(in: contentView))
+
+        XCTAssertEqual(imageView.bounds.width, sourceSize.width, accuracy: 1.5)
+        XCTAssertEqual(imageView.bounds.height, sourceSize.height, accuracy: 1.5)
+        XCTAssertEqual(imageView.lastDrawRectForTesting.width, sourceSize.width, accuracy: 0.5)
+        XCTAssertEqual(imageView.lastDrawRectForTesting.height, sourceSize.height, accuracy: 0.5)
+    }
+
+    func testTemporaryWorkspaceTrackpadMagnificationZoomsImageWithoutResizingWindow() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = ImageWorkspacePanelController()
+        retainedControllers.append(controller)
+
+        XCTAssertTrue(controller.show(
+            screenshot: try makeScreenshot(),
+            kind: .temporaryPreview,
+            copy: { true },
+            save: { true }
+        ))
+
+        let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
+        defer {
+            closePanel(panel)
+        }
+
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let canvas = try XCTUnwrap(findAnnotationCanvas(in: contentView))
+        let textSelectionOverlay = try XCTUnwrap(findTextSelectionOverlay(in: contentView))
+        let initialPanelFrame = panel.frame
+        let initialDrawRect = canvas.lastDrawRectForTesting
+
+        canvas.magnify(with: FakeMagnifyEvent(magnification: 0.35, locationInWindow: canvas.convert(canvas.bounds.center, to: nil)))
+        contentView.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(panel.frame, initialPanelFrame)
+        XCTAssertGreaterThan(canvas.lastDrawRectForTesting.width, initialDrawRect.width)
+        XCTAssertGreaterThan(canvas.lastDrawRectForTesting.height, initialDrawRect.height)
+
+        let zoomedDrawRect = canvas.lastDrawRectForTesting
+        canvas.magnify(with: FakeMagnifyEvent(magnification: -0.40, locationInWindow: canvas.convert(canvas.bounds.center, to: nil)))
+        XCTAssertEqual(panel.frame, initialPanelFrame)
+        XCTAssertLessThan(canvas.lastDrawRectForTesting.width, zoomedDrawRect.width)
+        XCTAssertGreaterThanOrEqual(canvas.lastDrawRectForTesting.width, initialDrawRect.width)
+
+        let drawRectBeforeOverlayMagnification = canvas.lastDrawRectForTesting
+        textSelectionOverlay.magnify(with: FakeMagnifyEvent(
+            magnification: 0.25,
+            locationInWindow: textSelectionOverlay.convert(textSelectionOverlay.bounds.center, to: nil)
+        ))
+
+        XCTAssertEqual(panel.frame, initialPanelFrame)
+        XCTAssertGreaterThan(canvas.lastDrawRectForTesting.width, drawRectBeforeOverlayMagnification.width)
+    }
+
+    func testTemporaryWorkspaceScrollWheelPansZoomedImageWithoutResizingWindow() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = ImageWorkspacePanelController()
+        retainedControllers.append(controller)
+
+        XCTAssertTrue(controller.show(
+            screenshot: try makeScreenshot(),
+            kind: .temporaryPreview,
+            copy: { true },
+            save: { true }
+        ))
+
+        let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
+        defer {
+            closePanel(panel)
+        }
+
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let canvas = try XCTUnwrap(findAnnotationCanvas(in: contentView))
+        let textSelectionOverlay = try XCTUnwrap(findTextSelectionOverlay(in: contentView))
+        let initialPanelFrame = panel.frame
+
+        canvas.magnify(with: FakeMagnifyEvent(magnification: 1.5, locationInWindow: canvas.convert(canvas.bounds.center, to: nil)))
+        let centeredZoomedDrawRect = canvas.lastDrawRectForTesting
+
+        canvas.scrollWheel(with: FakeScrollWheelEvent(deltaX: 32, deltaY: -24))
+        XCTAssertEqual(panel.frame, initialPanelFrame)
+        XCTAssertNotEqual(canvas.lastDrawRectForTesting.origin, centeredZoomedDrawRect.origin)
+        XCTAssertGreaterThan(canvas.lastDrawRectForTesting.minX, centeredZoomedDrawRect.minX)
+        XCTAssertGreaterThan(canvas.lastDrawRectForTesting.minY, centeredZoomedDrawRect.minY)
+
+        let drawRectBeforeOverlayScroll = canvas.lastDrawRectForTesting
+        textSelectionOverlay.scrollWheel(with: FakeScrollWheelEvent(deltaX: -18, deltaY: 12))
+        XCTAssertEqual(panel.frame, initialPanelFrame)
+        XCTAssertNotEqual(canvas.lastDrawRectForTesting.origin, drawRectBeforeOverlayScroll.origin)
+        XCTAssertLessThan(canvas.lastDrawRectForTesting.minX, drawRectBeforeOverlayScroll.minX)
+        XCTAssertLessThan(canvas.lastDrawRectForTesting.minY, drawRectBeforeOverlayScroll.minY)
+    }
+
+    func testPinnedWorkspaceTrackpadMagnificationZoomsImageWithoutResizingWindow() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = ImageWorkspacePanelController()
+        retainedControllers.append(controller)
+
+        XCTAssertTrue(controller.show(
+            screenshot: try makeScreenshot(),
+            kind: .pinned,
+            copy: { true },
+            save: { true }
+        ))
+
+        let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
+        defer {
+            closePanel(panel)
+        }
+
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let imageView = try XCTUnwrap(findZoomableImageSurface(in: contentView))
+        let initialPanelFrame = panel.frame
+        let initialDrawRect = imageView.lastDrawRectForTesting
+
+        imageView.magnify(with: FakeMagnifyEvent(magnification: 0.35, locationInWindow: imageView.convert(imageView.bounds.center, to: nil)))
+        contentView.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(panel.frame, initialPanelFrame)
+        XCTAssertGreaterThan(imageView.lastDrawRectForTesting.width, initialDrawRect.width)
+        XCTAssertGreaterThan(imageView.lastDrawRectForTesting.height, initialDrawRect.height)
+
+        let zoomedDrawRect = imageView.lastDrawRectForTesting
+        imageView.magnify(with: FakeMagnifyEvent(magnification: -0.40, locationInWindow: imageView.convert(imageView.bounds.center, to: nil)))
+
+        XCTAssertEqual(panel.frame, initialPanelFrame)
+        XCTAssertLessThan(imageView.lastDrawRectForTesting.width, zoomedDrawRect.width)
+        XCTAssertGreaterThanOrEqual(imageView.lastDrawRectForTesting.width, initialDrawRect.width)
+    }
+
+    func testPinnedWorkspaceScrollWheelPansZoomedImageWithoutResizingWindow() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = ImageWorkspacePanelController()
+        retainedControllers.append(controller)
+
+        XCTAssertTrue(controller.show(
+            screenshot: try makeScreenshot(),
+            kind: .pinned,
+            copy: { true },
+            save: { true }
+        ))
+
+        let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
+        defer {
+            closePanel(panel)
+        }
+
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let imageView = try XCTUnwrap(findZoomableImageSurface(in: contentView))
+        let initialPanelFrame = panel.frame
+
+        imageView.magnify(with: FakeMagnifyEvent(magnification: 1.5, locationInWindow: imageView.convert(imageView.bounds.center, to: nil)))
+        let centeredZoomedDrawRect = imageView.lastDrawRectForTesting
+
+        imageView.scrollWheel(with: FakeScrollWheelEvent(deltaX: 32, deltaY: -24))
+
+        XCTAssertEqual(panel.frame, initialPanelFrame)
+        XCTAssertNotEqual(imageView.lastDrawRectForTesting.origin, centeredZoomedDrawRect.origin)
+        XCTAssertGreaterThan(imageView.lastDrawRectForTesting.minX, centeredZoomedDrawRect.minX)
+        XCTAssertGreaterThan(imageView.lastDrawRectForTesting.minY, centeredZoomedDrawRect.minY)
     }
 
     func testPinnedWorkspaceContextMenuOutputsAndEditsWithoutClosingPin() throws {
@@ -1663,6 +1956,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
 
         let toolbar = try XCTUnwrap(findView(in: contentView, accessibilityLabel: "Image Workspace Toolbar"))
         let imageContainer = try XCTUnwrap(findView(in: contentView, accessibilityLabel: "Image Preview Container"))
+        let selectButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Select"))
         let mosaicButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Mosaic"))
         let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy"))
         let saveButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Save Current"))
@@ -1682,6 +1976,9 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         let zoomFrame = zoomButton.convert(zoomButton.bounds, to: contentView)
 
         XCTAssertEqual(toolbar.alphaValue, 1, accuracy: 0.01)
+        XCTAssertEqual(toolbar.frame.height, 36, accuracy: 0.5)
+        XCTAssertEqual(mosaicFrame.width, 28, accuracy: 0.5)
+        XCTAssertEqual(copyFrame.width, 30, accuracy: 0.5)
         XCTAssertEqual(toolbar.layer?.cornerRadius ?? 0, toolbar.frame.height / 2, accuracy: 0.5)
         XCTAssertEqual(toolbar.layer?.borderWidth ?? 0, 0.5, accuracy: 0.01)
         XCTAssertLessThanOrEqual(toolbar.frame.minX, closeFrame.minX - 2)
@@ -1692,6 +1989,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         XCTAssertEqual(toolbar.frame.midY, miniaturizeFrame.midY, accuracy: 1.5)
         XCTAssertEqual(toolbar.frame.midY, zoomFrame.midY, accuracy: 1.5)
         assertCircularHoverLayer(in: mosaicButton)
+        try assertToolbarIconViewCentered(in: selectButton)
         XCTAssertTrue(mosaicButton.isEnabled)
         XCTAssertFalse(saveButton.isEnabled)
         XCTAssertTrue(copyButton.isEnabled)
@@ -1784,6 +2082,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         }
         let contentView = try XCTUnwrap(panel.contentView)
         contentView.layoutSubtreeIfNeeded()
+        let canvas = try XCTUnwrap(findAnnotationCanvas(in: contentView))
         let overlay = try XCTUnwrap(findTextSelectionOverlay(in: contentView))
 
         for _ in 0..<10 where !overlay.hasRecognizedText {
@@ -1792,7 +2091,10 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         XCTAssertTrue(overlay.hasRecognizedText)
         XCTAssertEqual(recognizeCount, 1)
 
-        let selectionPoint = NSPoint(x: overlay.bounds.width * 0.2, y: overlay.bounds.height * 0.25)
+        let selectionPoint = overlay.convert(
+            canvas.convert(imageViewPoint(in: canvas, imagePoint: CGPoint(x: 64, y: 60)), to: nil),
+            from: nil
+        )
         overlay.mouseDown(with: try makeMouseButtonEvent(
             type: .leftMouseDown,
             point: overlay.convert(selectionPoint, to: nil),
@@ -1845,6 +2147,7 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         }
         let contentView = try XCTUnwrap(panel.contentView)
         contentView.layoutSubtreeIfNeeded()
+        let canvas = try XCTUnwrap(findAnnotationCanvas(in: contentView))
         let overlay = try XCTUnwrap(findTextSelectionOverlay(in: contentView))
         let selectButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Select"))
         let shapeButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Rectangle"))
@@ -1854,7 +2157,10 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         }
         XCTAssertTrue(overlay.hasRecognizedText)
 
-        let selectionPoint = NSPoint(x: overlay.bounds.width * 0.2, y: overlay.bounds.height * 0.25)
+        let selectionPoint = overlay.convert(
+            canvas.convert(imageViewPoint(in: canvas, imagePoint: CGPoint(x: 64, y: 60)), to: nil),
+            from: nil
+        )
         XCTAssertTrue(overlay.hitTest(selectionPoint) === overlay)
 
         XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(shapeButton.action), to: shapeButton.target, from: shapeButton))
@@ -1954,6 +2260,74 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         XCTAssertTrue(copyTarget.responds(to: copyAction))
         copyTarget.perform(copyAction, with: copyMenuItem)
         XCTAssertEqual(copiedText, "你好啊")
+    }
+
+    func testImageTextSelectionOverlayClearsSelectionWhenClickingBlankArea() throws {
+        _ = NSApplication.shared
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let overlay = ImageWorkspaceTextSelectionOverlayView(
+            imageSize: CGSize(width: 320, height: 240),
+            copyText: { _ in true }
+        )
+        overlay.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        panel.contentView = overlay
+        panel.orderFrontRegardless()
+        defer {
+            closePanel(panel)
+        }
+
+        overlay.setRecognizedTextLayout(RecognizedTextLayout(lines: [
+            RecognizedTextLine(
+                text: "Frame",
+                bounds: NormalizedImageRect(x: 0.1, y: 0.2, width: 0.2, height: 0.1),
+                confidence: 0.9,
+                tokens: [
+                    RecognizedTextToken(
+                        text: "Frame",
+                        bounds: NormalizedImageRect(x: 0.1, y: 0.2, width: 0.2, height: 0.1),
+                        needsLeadingSpace: false
+                    ),
+                ]
+            ),
+        ]))
+
+        let textPoint = NSPoint(x: 45, y: 60)
+        let blankPoint = NSPoint(x: 280, y: 220)
+        XCTAssertTrue(overlay.hitTest(textPoint) === overlay)
+        XCTAssertNil(overlay.hitTest(blankPoint))
+
+        overlay.mouseDown(with: try makeMouseButtonEvent(
+            type: .leftMouseDown,
+            point: overlay.convert(textPoint, to: nil),
+            panel: panel
+        ))
+        overlay.mouseUp(with: try makeMouseButtonEvent(
+            type: .leftMouseUp,
+            point: overlay.convert(textPoint, to: nil),
+            panel: panel
+        ))
+
+        XCTAssertEqual(overlay.selectedTextForTesting, "Frame")
+        XCTAssertTrue(overlay.hitTest(blankPoint) === overlay)
+
+        overlay.mouseDown(with: try makeMouseButtonEvent(
+            type: .leftMouseDown,
+            point: overlay.convert(blankPoint, to: nil),
+            panel: panel
+        ))
+        overlay.mouseUp(with: try makeMouseButtonEvent(
+            type: .leftMouseUp,
+            point: overlay.convert(blankPoint, to: nil),
+            panel: panel
+        ))
+
+        XCTAssertEqual(overlay.selectedTextForTesting, "")
+        XCTAssertNil(overlay.hitTest(blankPoint))
     }
 
     private func assertLiveCornerResizeKeepsInitialResizeAxisStable(kind: ImageWorkspaceKind) throws {
@@ -2169,6 +2543,40 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         return nil
     }
 
+    private func findZoomableImageSurface(in view: NSView) -> (NSView & ImageWorkspaceZoomableImageSurfaceForTesting)? {
+        if let imageSurface = view as? (NSView & ImageWorkspaceZoomableImageSurfaceForTesting) {
+            return imageSurface
+        }
+
+        for subview in view.subviews {
+            if let imageSurface = findZoomableImageSurface(in: subview) {
+                return imageSurface
+            }
+        }
+
+        return nil
+    }
+
+    private func imageViewPoint(
+        in imageSurface: NSView & ImageWorkspaceZoomableImageSurfaceForTesting,
+        imagePoint: CGPoint,
+        imageSize: CGSize = CGSize(width: 320, height: 240)
+    ) -> NSPoint {
+        let drawRect = imageSurface.lastDrawRectForTesting
+        return NSPoint(
+            x: drawRect.minX + imagePoint.x / imageSize.width * drawRect.width,
+            y: drawRect.minY + imagePoint.y / imageSize.height * drawRect.height
+        )
+    }
+
+    private func imageWindowPoint(
+        in imageSurface: NSView & ImageWorkspaceZoomableImageSurfaceForTesting,
+        imagePoint: CGPoint,
+        imageSize: CGSize = CGSize(width: 320, height: 240)
+    ) -> NSPoint {
+        imageSurface.convert(imageViewPoint(in: imageSurface, imagePoint: imagePoint, imageSize: imageSize), to: nil)
+    }
+
     private func findView(in view: NSView, accessibilityLabel: String) -> NSView? {
         if view.accessibilityLabel() == accessibilityLabel {
             return view
@@ -2221,6 +2629,18 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         XCTAssertEqual(hoverLayer?.bounds.width ?? 0, hoverLayer?.bounds.height ?? 1, accuracy: 0.5)
         XCTAssertEqual(hoverLayer?.cornerRadius ?? 0, (hoverLayer?.bounds.height ?? 0) / 2, accuracy: 0.5)
         XCTAssertEqual(hoverLayer?.opacity ?? 1, 0, accuracy: 0.01)
+    }
+
+    private func assertToolbarIconViewCentered(in button: NSButton) throws {
+        button.layoutSubtreeIfNeeded()
+        let iconView = try XCTUnwrap(button.subviews.compactMap { $0 as? NSImageView }.first)
+        XCTAssertEqual(iconView.imageScaling, .scaleNone)
+        XCTAssertEqual(iconView.frame.midX, button.bounds.midX, accuracy: 0.5)
+        XCTAssertEqual(iconView.frame.midY, button.bounds.midY, accuracy: 0.5)
+
+        let hoverLayer = try XCTUnwrap(button.layer?.sublayers?.first)
+        XCTAssertEqual(iconView.frame.midX, hoverLayer.position.x, accuracy: 0.5)
+        XCTAssertEqual(iconView.frame.midY, hoverLayer.position.y, accuracy: 0.5)
     }
 
     private func makeRightClickEvent(windowNumber: Int) throws -> NSEvent {
@@ -2330,6 +2750,58 @@ private extension NSImage {
         }
 
         return bitmap.representation(using: .png, properties: [:])
+    }
+}
+
+private extension CGRect {
+    var center: CGPoint {
+        CGPoint(x: midX, y: midY)
+    }
+}
+
+private final class FakeMagnifyEvent: NSEvent {
+    private let fakeMagnification: CGFloat
+    private let fakeLocationInWindow: NSPoint
+
+    init(magnification: CGFloat, locationInWindow: NSPoint) {
+        fakeMagnification = magnification
+        fakeLocationInWindow = locationInWindow
+        super.init()
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var magnification: CGFloat {
+        fakeMagnification
+    }
+
+    override var locationInWindow: NSPoint {
+        fakeLocationInWindow
+    }
+}
+
+private final class FakeScrollWheelEvent: NSEvent {
+    private let fakeDeltaX: CGFloat
+    private let fakeDeltaY: CGFloat
+
+    init(deltaX: CGFloat, deltaY: CGFloat) {
+        fakeDeltaX = deltaX
+        fakeDeltaY = deltaY
+        super.init()
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var scrollingDeltaX: CGFloat {
+        fakeDeltaX
+    }
+
+    override var scrollingDeltaY: CGFloat {
+        fakeDeltaY
     }
 }
 

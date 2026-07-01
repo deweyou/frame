@@ -7,6 +7,7 @@ private let imageWorkspaceEscapeKeyCode: UInt16 = 53
 final class ImageWorkspaceTextSelectionOverlayView: NSView {
     private let imageSize: CGSize
     private let copyText: (String) -> Bool
+    private let imageZoom: ImageWorkspaceImageZoom
     private var cutLayout: RecognizedTextCutLayout?
     private var selectedCutIDs: Set<UUID> = []
     private var selectionAnchorCutID: UUID?
@@ -14,9 +15,16 @@ final class ImageWorkspaceTextSelectionOverlayView: NSView {
     private var isTextSelectionEnabled = true
     private var trackingArea: NSTrackingArea?
     var menuProvider: (() -> NSMenu)?
+    var magnifyHandler: ((NSEvent) -> Void)?
+    var scrollWheelHandler: ((NSEvent) -> Void)?
 
-    init(imageSize: CGSize, copyText: @escaping (String) -> Bool) {
+    init(
+        imageSize: CGSize,
+        imageZoom: ImageWorkspaceImageZoom = ImageWorkspaceImageZoom(),
+        copyText: @escaping (String) -> Bool
+    ) {
         self.imageSize = imageSize
+        self.imageZoom = imageZoom
         self.copyText = copyText
         super.init(frame: .zero)
         isHidden = true
@@ -39,7 +47,7 @@ final class ImageWorkspaceTextSelectionOverlayView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard !isHidden,
               isTextSelectionEnabled,
-              cut(at: point) != nil else {
+              cut(at: point) != nil || hasSelectedText else {
             return nil
         }
 
@@ -151,6 +159,42 @@ final class ImageWorkspaceTextSelectionOverlayView: NSView {
             NSColor.selectedTextBackgroundColor.withAlphaComponent(0.55).setFill()
             path.fill()
         }
+    }
+
+    override func magnify(with event: NSEvent) {
+        if let magnifyHandler {
+            magnifyHandler(event)
+            imageZoomDidChange()
+            return
+        }
+
+        if imageZoom.applyMagnification(event.magnification, imageSize: imageSize, bounds: bounds) {
+            imageZoomDidChange()
+        }
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        if let scrollWheelHandler {
+            scrollWheelHandler(event)
+            imageZoomDidChange()
+            return
+        }
+
+        if imageZoom.applyScroll(
+            delta: CGSize(width: event.scrollingDeltaX, height: event.scrollingDeltaY),
+            imageSize: imageSize,
+            bounds: bounds
+        ) {
+            imageZoomDidChange()
+            return
+        }
+
+        super.scrollWheel(with: event)
+    }
+
+    func imageZoomDidChange() {
+        window?.invalidateCursorRects(for: self)
+        needsDisplay = true
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -338,20 +382,6 @@ final class ImageWorkspaceTextSelectionOverlayView: NSView {
     }
 
     private func imageDrawRect() -> CGRect {
-        guard imageSize.width > 0,
-              imageSize.height > 0,
-              bounds.width > 0,
-              bounds.height > 0 else {
-            return .zero
-        }
-
-        let scale = min(bounds.width / imageSize.width, bounds.height / imageSize.height)
-        let drawSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
-        return CGRect(
-            x: bounds.midX - drawSize.width / 2,
-            y: bounds.midY - drawSize.height / 2,
-            width: drawSize.width,
-            height: drawSize.height
-        )
+        imageZoom.drawRect(imageSize: imageSize, in: bounds)
     }
 }
