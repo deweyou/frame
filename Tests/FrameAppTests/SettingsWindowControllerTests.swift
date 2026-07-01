@@ -136,7 +136,7 @@ final class SettingsWindowControllerTests: XCTestCase {
     func testShortcutRecorderSuspendsGlobalHotKeyWhileRecording() {
         let button = ShortcutRecorderButton(frame: .zero)
         var recordingStates: [Bool] = []
-        var appliedShortcuts: [ScreenshotShortcut] = []
+        var appliedShortcuts: [ScreenshotShortcut?] = []
         button.update(
             strings: AppStrings(language: .en),
             shortcut: .default,
@@ -155,6 +155,67 @@ final class SettingsWindowControllerTests: XCTestCase {
 
         XCTAssertEqual(recordingStates, [true, false])
         XCTAssertEqual(appliedShortcuts, [.default])
+    }
+
+    func testShortcutRecorderStopsRecordingWhenFirstResponderMovesElsewhere() {
+        let button = ShortcutRecorderButton(frame: .zero)
+        var recordingStates: [Bool] = []
+        button.update(
+            strings: AppStrings(language: .en),
+            shortcut: .default,
+            onShortcutChange: { _ in true },
+            onValidationFailure: { _ in },
+            onRecordingChange: { isRecording in
+                recordingStates.append(isRecording)
+            }
+        )
+
+        button.startRecording()
+        XCTAssertEqual(button.title, "Press shortcut")
+
+        XCTAssertTrue(button.resignFirstResponder())
+
+        XCTAssertEqual(button.title, "⌘⇧A")
+        XCTAssertEqual(recordingStates, [true, false])
+    }
+
+    func testRecordingShortcutRecorderCanClearShortcut() {
+        let button = ShortcutRecorderButton(frame: .zero)
+        var appliedShortcuts: [ScreenshotShortcut?] = []
+        button.update(
+            strings: AppStrings(language: .en),
+            shortcut: ScreenshotShortcut(key: .number("8"), modifiers: [.command, .control]),
+            allowsEmptyShortcut: true,
+            onShortcutChange: { shortcut in
+                appliedShortcuts.append(shortcut)
+                return true
+            },
+            onValidationFailure: { _ in },
+            onRecordingChange: { _ in }
+        )
+
+        button.startRecording()
+        button.keyDown(with: keyEvent(characters: "\u{7F}", modifiers: [], keyCode: kVK_Delete))
+
+        XCTAssertEqual(button.title, "Not set")
+        XCTAssertEqual(appliedShortcuts.count, 1)
+        XCTAssertNil(appliedShortcuts.first!)
+    }
+
+    func testShortcutRecorderShowsEmptyShortcutTitle() {
+        let strings = AppStrings(language: .zhHans)
+        let button = ShortcutRecorderButton(frame: .zero)
+        button.update(
+            strings: strings,
+            shortcut: nil,
+            allowsEmptyShortcut: true,
+            onShortcutChange: { _ in true },
+            onValidationFailure: { _ in },
+            onRecordingChange: { _ in }
+        )
+
+        XCTAssertEqual(strings.settingsShortcutRecorderUnset, "未设置")
+        XCTAssertEqual(button.title, "未设置")
     }
 
     func testShortcutRecorderResumesGlobalHotKeyWhenCancelled() {

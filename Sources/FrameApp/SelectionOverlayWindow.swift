@@ -163,6 +163,26 @@ final class SelectionOverlayWindow {
         overlayView.activeSelectionForTesting()
     }
 
+    func moveMouseForTesting(toGlobalPoint globalPoint: CGPoint) {
+        overlayView.moveMouseForTesting(toLocalPoint: localPoint(fromGlobalPoint: globalPoint))
+    }
+
+    func mouseDownForTesting(atGlobalPoint globalPoint: CGPoint) {
+        overlayView.mouseDownForTesting(atLocalPoint: localPoint(fromGlobalPoint: globalPoint))
+    }
+
+    func mouseDraggedForTesting(toGlobalPoint globalPoint: CGPoint) {
+        overlayView.mouseDraggedForTesting(toLocalPoint: localPoint(fromGlobalPoint: globalPoint))
+    }
+
+    func mouseUpForTesting(atGlobalPoint globalPoint: CGPoint) {
+        overlayView.mouseUpForTesting(atLocalPoint: localPoint(fromGlobalPoint: globalPoint))
+    }
+
+    func cursorNameForTesting(atGlobalPoint globalPoint: CGPoint) -> String {
+        overlayView.cursorNameForTesting(atLocalPoint: localPoint(fromGlobalPoint: globalPoint))
+    }
+
     func hitTestIsPassthroughForTesting(localPoint: CGPoint) -> Bool {
         overlayView.hitTest(localPoint) == nil
     }
@@ -239,6 +259,13 @@ final class SelectionOverlayWindow {
         window.frame.contains(globalPoint)
     }
 
+    private func localPoint(fromGlobalPoint globalPoint: CGPoint) -> CGPoint {
+        CGPoint(
+            x: globalPoint.x - window.frame.minX,
+            y: globalPoint.y - window.frame.minY
+        )
+    }
+
     func orderOut(_ sender: Any?) {
         window.orderOut(sender)
     }
@@ -300,6 +327,8 @@ private final class SelectionOverlayView: NSView {
 
     private var selectionRect: CGRect?
     private var windowCandidate: WindowCandidate?
+    private var pendingAutoWindowClickCandidate: WindowCandidate?
+    private var isWindowHoverPreselectionEnabled = false
     private var delaySnapshotSelection: SelectionCapture?
     private var dragOperation: SelectionDragOperation?
     private var hasCompleted = false
@@ -344,6 +373,7 @@ private final class SelectionOverlayView: NSView {
 
         wantsLayer = true
         selectionRect = localRect(fromGlobalRect: initialGlobalRect)
+        isWindowHoverPreselectionEnabled = initialGlobalRect == nil
         configureHUD()
         configurePlaceholder()
         if initialMode == .recordingSetup {
@@ -392,6 +422,7 @@ private final class SelectionOverlayView: NSView {
     func clearSelection() {
         selectionRect = nil
         windowCandidate = nil
+        pendingAutoWindowClickCandidate = nil
         dragOperation = nil
         updateMetrics()
         needsDisplay = true
@@ -423,7 +454,8 @@ private final class SelectionOverlayView: NSView {
         }
 
         addCursorRect(bounds, cursor: .crosshair)
-        if let selectionRect {
+        if let selectionRect,
+           !isShowingAutoWindowPreselection {
             if !selectionRect.isNearlyEqual(to: bounds) {
                 addCursorRect(selectionRect, cursor: .openHand)
             }
@@ -447,6 +479,30 @@ private final class SelectionOverlayView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        handleMouseDown(
+            at: clampedPoint(event.locationInWindow),
+            clickCount: event.clickCount,
+            modifiers: event.modifierFlags
+        )
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        handleMouseMoved(at: clampedPoint(event.locationInWindow))
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        handleMouseDragged(at: clampedPoint(event.locationInWindow))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        handleMouseUp()
+    }
+
+    private func handleMouseDown(
+        at point: CGPoint,
+        clickCount: Int,
+        modifiers: NSEvent.ModifierFlags
+    ) {
         guard !isDelayCountdownActive else {
             return
         }
@@ -455,21 +511,54 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
-        let point = clampedPoint(event.locationInWindow)
-
-        if event.clickCount == 2 {
+        if clickCount == 2 {
+            isWindowHoverPreselectionEnabled = false
+            pendingAutoWindowClickCandidate = nil
             selectWindowCandidate(at: point)
             return
         }
 
+        if let windowCandidate,
+           isWindowHoverPreselectionEnabled,
+           let candidateLocalRect = localRect(fromGlobalRect: windowCandidate.bounds),
+           candidateLocalRect.contains(point) {
+            onInteraction()
+            pendingAutoWindowClickCandidate = windowCandidate
+            isWindowHoverPreselectionEnabled = false
+            isShiftTemporarilyLocking = modifiers.contains(.shift)
+            dragOperation = .create(startPoint: point, ratio: ratioForCreateDrag(modifiers: modifiers))
+            updateMetrics()
+            needsDisplay = true
+            return
+        }
+
         onInteraction()
-        isShiftTemporarilyLocking = event.modifierFlags.contains(.shift)
-        dragOperation = dragOperation(startingAt: point, modifiers: event.modifierFlags)
+        pendingAutoWindowClickCandidate = nil
+        clearAutoWindowPreselectionBeforeManualInteraction()
+        isWindowHoverPreselectionEnabled = false
+        isShiftTemporarilyLocking = modifiers.contains(.shift)
+        dragOperation = dragOperation(startingAt: point, modifiers: modifiers)
         updateMetrics()
         needsDisplay = true
     }
 
-    override func mouseDragged(with event: NSEvent) {
+    private func handleMouseMoved(at point: CGPoint) {
+        guard !isDelayCountdownActive else {
+            return
+        }
+
+        guard !isActiveRecordingHUD else {
+            return
+        }
+
+        guard isWindowHoverPreselectionEnabled else {
+            return
+        }
+
+        updateAutoWindowPreselection(at: point)
+    }
+
+    private func handleMouseDragged(at point: CGPoint) {
         guard !isDelayCountdownActive else {
             return
         }
@@ -482,13 +571,26 @@ private final class SelectionOverlayView: NSView {
             return
         }
 
+        pendingAutoWindowClickCandidate = nil
+        isWindowHoverPreselectionEnabled = false
         windowCandidate = nil
-        updateSelection(for: dragOperation, currentPoint: clampedPoint(event.locationInWindow))
+        updateSelection(for: dragOperation, currentPoint: point)
         updateMetrics()
         needsDisplay = true
     }
 
-    override func mouseUp(with event: NSEvent) {
+    private func handleMouseUp() {
+        if let pendingAutoWindowClickCandidate {
+            self.pendingAutoWindowClickCandidate = nil
+            dragOperation = nil
+            isShiftTemporarilyLocking = false
+            windowCandidate = pendingAutoWindowClickCandidate
+            selectionRect = localRect(fromGlobalRect: pendingAutoWindowClickCandidate.bounds)
+            updateMetrics()
+            needsDisplay = true
+            return
+        }
+
         dragOperation = nil
         isShiftTemporarilyLocking = false
         updateMetrics()
@@ -1452,6 +1554,7 @@ private final class SelectionOverlayView: NSView {
         }
 
         onInteraction()
+        pendingAutoWindowClickCandidate = nil
         dragOperation = nil
 
         guard let candidate = onWindowSelectionRequested(
@@ -1466,6 +1569,50 @@ private final class SelectionOverlayView: NSView {
         selectionRect = localRect(fromGlobalRect: candidate.bounds)
         updateMetrics()
         needsDisplay = true
+    }
+
+    private func updateAutoWindowPreselection(at localPoint: CGPoint) {
+        guard hudStackView.isHidden || !hudStackView.frame.contains(localPoint) else {
+            return
+        }
+
+        onInteraction()
+        dragOperation = nil
+
+        guard let candidate = onWindowSelectionRequested(
+            globalPoint(fromLocalPoint: localPoint),
+            overlayWindowNumber()
+        ) else {
+            if selectionRect != nil || windowCandidate != nil {
+                selectionRect = nil
+                windowCandidate = nil
+                pendingAutoWindowClickCandidate = nil
+                updateMetrics()
+                needsDisplay = true
+            }
+            return
+        }
+
+        guard windowCandidate != candidate else {
+            return
+        }
+
+        windowCandidate = candidate
+        pendingAutoWindowClickCandidate = nil
+        selectionRect = localRect(fromGlobalRect: candidate.bounds)
+        updateMetrics()
+        needsDisplay = true
+    }
+
+    private func clearAutoWindowPreselectionBeforeManualInteraction() {
+        guard isWindowHoverPreselectionEnabled,
+              windowCandidate != nil else {
+            return
+        }
+
+        windowCandidate = nil
+        pendingAutoWindowClickCandidate = nil
+        selectionRect = nil
     }
 
     private func updateMetrics() {
@@ -1729,6 +1876,48 @@ private final class SelectionOverlayView: NSView {
         activeSelection
     }
 
+    func moveMouseForTesting(toLocalPoint localPoint: CGPoint) {
+        handleMouseMoved(at: clampedPoint(localPoint))
+    }
+
+    func mouseDownForTesting(atLocalPoint localPoint: CGPoint) {
+        handleMouseDown(at: clampedPoint(localPoint), clickCount: 1, modifiers: [])
+    }
+
+    func mouseDraggedForTesting(toLocalPoint localPoint: CGPoint) {
+        handleMouseDragged(at: clampedPoint(localPoint))
+    }
+
+    func mouseUpForTesting(atLocalPoint localPoint: CGPoint) {
+        handleMouseUp()
+    }
+
+    func cursorNameForTesting(atLocalPoint localPoint: CGPoint) -> String {
+        let point = clampedPoint(localPoint)
+
+        guard !isActiveRecordingHUD else {
+            return hudStackView.frame.contains(point) ? "pointingHand" : "arrow"
+        }
+
+        if hudStackView.frame.contains(point) {
+            return "pointingHand"
+        }
+
+        if let selectionRect,
+           !isShowingAutoWindowPreselection,
+           !selectionRect.isNearlyEqual(to: bounds) {
+            if SelectionHandle.hitTest(point: point, in: selectionRect) != nil {
+                return "resize"
+            }
+
+            if selectionRect.contains(point) {
+                return "openHand"
+            }
+        }
+
+        return "crosshair"
+    }
+
     func recordingHUDFrameForTesting() -> CGRect {
         hudStackView.frame
     }
@@ -1940,6 +2129,10 @@ private final class SelectionOverlayView: NSView {
         }
 
         return nil
+    }
+
+    private var isShowingAutoWindowPreselection: Bool {
+        isWindowHoverPreselectionEnabled && windowCandidate != nil
     }
 
     private func updateHUDTheme() {

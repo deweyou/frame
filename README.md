@@ -11,8 +11,8 @@ It is intentionally small. Frame is not a cloud library or a heavyweight media s
 Screenshots are often a tiny step inside a larger workflow: explaining an idea, reporting a bug, saving a visual state, or sending context to someone else. Frame keeps that step out of the way:
 
 - Lives in the menu bar without a main window.
-- Starts region capture with `Command+Shift+A` and recording setup with
-  `Command+Shift+R` by default; both are configurable in Settings.
+- Starts region capture with `Command+Shift+A`; the recording shortcut is unset
+  by default and can be configured in Settings.
 - Works across multiple displays.
 - Shows a small Quick Access preview after screenshots and recordings, with a
   larger hover preview after a short pause.
@@ -23,7 +23,7 @@ Screenshots are often a tiny step inside a larger workflow: explaining an idea, 
 ## What Frame Does
 
 - Region capture: drag to select part of the screen, then press Enter to capture.
-- Window capture: double-click an eligible app window to capture either a styled window screenshot or the original window image, configurable in Settings.
+- Window capture: hover an eligible app window to preselect it, then capture the original window image by default or choose another window screenshot style in Settings.
 - PNG output: saved files use the `Frame yyyy-MM-dd HH.mm.ss.png` filename format.
 - Clipboard copy: copy the captured image for pasting into chat, docs, or other apps.
 - Save location: save PNG files to the configured screenshot folder, defaulting to Desktop.
@@ -40,7 +40,7 @@ Screenshots are often a tiny step inside a larger workflow: explaining an idea, 
   workspace image and its active Quick Access preview, or create another Quick
   Access preview without closing the editor; closing with unsaved edits can
   replace, save new, close without saving, or be cancelled to keep editing.
-- Selection recording: use the recording shortcut or switch the selection HUD
+- Selection recording: set a recording shortcut or switch the selection HUD
   into recording mode, choose MP4 or GIF, show or hide mouse cursor and click
   highlights together, customize mouse hint color in Settings, record held-key
   hints, and stop, restart, or delete from the recording HUD or red menu bar
@@ -53,7 +53,7 @@ Screenshots are often a tiny step inside a larger workflow: explaining an idea, 
   recording thumbnails when a first frame can be decoded. History is enabled by
   default, keeps captures for 7 days, and uses a 2 GB local cache limit.
 - Multi-display selection: show capture overlays across connected displays and account for Retina scale and screen coordinates.
-- Window screenshot styles: choose Soft Backdrop, Canvas Glow, Transparent Shadow, or Original for window captures.
+- Window screenshot styles: choose Original, Soft Backdrop, Canvas Glow, or Transparent Shadow for window captures. Original is the default.
 - Permission guidance: explain missing Screen Recording permission and open the relevant system settings.
 
 ## Privacy And Permissions

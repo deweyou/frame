@@ -34,18 +34,23 @@ enum SettingsStore {
         defaults.set(shortcut.storageValue, forKey: screenshotShortcutKey)
     }
 
-    static func recordingShortcut(defaults: UserDefaults = .standard) -> ScreenshotShortcut {
-        ScreenshotShortcut.persistedValue(
-            for: defaults.string(forKey: recordingShortcutKey),
-            defaultShortcut: .defaultRecording,
-            reservedShortcuts: []
-        )
+    static func recordingShortcut(defaults: UserDefaults = .standard) -> ScreenshotShortcut? {
+        guard let rawValue = defaults.string(forKey: recordingShortcutKey) else {
+            return nil
+        }
+
+        return ScreenshotShortcut.shortcut(storageValue: rawValue, reservedShortcuts: [])
     }
 
     static func setRecordingShortcut(
-        _ shortcut: ScreenshotShortcut,
+        _ shortcut: ScreenshotShortcut?,
         defaults: UserDefaults = .standard
     ) {
+        guard let shortcut else {
+            defaults.removeObject(forKey: recordingShortcutKey)
+            return
+        }
+
         defaults.set(shortcut.storageValue, forKey: recordingShortcutKey)
     }
 
@@ -105,7 +110,7 @@ enum SettingsStore {
         defaults: UserDefaults = .standard
     ) -> WindowScreenshotDecorationStyle {
         WindowScreenshotDecorationStyle(rawValue: defaults.string(forKey: windowScreenshotDecorationStyleKey) ?? "")
-            ?? .softBackdrop
+            ?? .original
     }
 
     static func setWindowScreenshotDecorationStyle(

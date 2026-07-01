@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import FrameCore
 import SwiftUI
 
@@ -11,7 +12,7 @@ final class SettingsWindowController {
     func show(
         strings: AppStrings,
         onShortcutChange: @escaping @MainActor (ScreenshotShortcut) -> Bool,
-        onRecordingShortcutChange: @escaping @MainActor (ScreenshotShortcut) -> Bool = { _ in true },
+        onRecordingShortcutChange: @escaping @MainActor (ScreenshotShortcut?) -> Bool = { _ in true },
         onShortcutRecordingChange: @escaping @MainActor (Bool) -> Void = { _ in },
         onCheckPermission: @escaping @MainActor () -> Void,
         onLanguageChange: @escaping @MainActor (AppLanguage) -> Void,
@@ -158,7 +159,7 @@ enum SettingsSection: Int, CaseIterable {
 @MainActor
 private final class SettingsContentViewController: NSHostingController<AnyView> {
     private let onShortcutChange: @MainActor (ScreenshotShortcut) -> Bool
-    private let onRecordingShortcutChange: @MainActor (ScreenshotShortcut) -> Bool
+    private let onRecordingShortcutChange: @MainActor (ScreenshotShortcut?) -> Bool
     private let onShortcutRecordingChange: @MainActor (Bool) -> Void
     private let onCheckPermission: @MainActor () -> Void
     private let onLanguageChange: @MainActor (AppLanguage) -> Void
@@ -170,7 +171,7 @@ private final class SettingsContentViewController: NSHostingController<AnyView> 
     init(
         strings: AppStrings,
         onShortcutChange: @escaping @MainActor (ScreenshotShortcut) -> Bool,
-        onRecordingShortcutChange: @escaping @MainActor (ScreenshotShortcut) -> Bool,
+        onRecordingShortcutChange: @escaping @MainActor (ScreenshotShortcut?) -> Bool,
         onShortcutRecordingChange: @escaping @MainActor (Bool) -> Void,
         onCheckPermission: @escaping @MainActor () -> Void,
         onLanguageChange: @escaping @MainActor (AppLanguage) -> Void,
@@ -221,7 +222,7 @@ private final class SettingsContentViewController: NSHostingController<AnyView> 
 private struct SettingsListView: View {
     let strings: AppStrings
     let onShortcutChange: @MainActor (ScreenshotShortcut) -> Bool
-    let onRecordingShortcutChange: @MainActor (ScreenshotShortcut) -> Bool
+    let onRecordingShortcutChange: @MainActor (ScreenshotShortcut?) -> Bool
     let onShortcutRecordingChange: @MainActor (Bool) -> Void
     let onCheckPermission: @MainActor () -> Void
     let onLanguageChange: @MainActor (AppLanguage) -> Void
@@ -270,7 +271,7 @@ private struct SettingsListView: View {
 private struct GeneralSettingsView: View {
     let strings: AppStrings
     let onShortcutChange: @MainActor (ScreenshotShortcut) -> Bool
-    let onRecordingShortcutChange: @MainActor (ScreenshotShortcut) -> Bool
+    let onRecordingShortcutChange: @MainActor (ScreenshotShortcut?) -> Bool
     let onShortcutRecordingChange: @MainActor (Bool) -> Void
     let onChooseScreenshotDirectory: @MainActor () -> URL?
     let onResetScreenshotDirectory: @MainActor () -> Void
@@ -314,9 +315,16 @@ private struct GeneralSettingsView: View {
                             strings: strings,
                             accessibilityLabel: strings.settingsScreenshotShortcut,
                             shortcut: selectedShortcut,
-                            reservedShortcuts: [.defaultRecording],
+                            allowsEmptyShortcut: false,
+                            reservedShortcuts: [],
                             duplicateShortcut: selectedRecordingShortcut,
-                            onShortcutChange: changeShortcut,
+                            onShortcutChange: { shortcut in
+                                guard let shortcut else {
+                                    return false
+                                }
+
+                                return changeShortcut(shortcut)
+                            },
                             onValidationFailure: updateShortcutValidationFailure,
                             onRecordingChange: onShortcutRecordingChange
                         )
@@ -341,6 +349,7 @@ private struct GeneralSettingsView: View {
                             strings: strings,
                             accessibilityLabel: strings.settingsRecordingShortcut,
                             shortcut: selectedRecordingShortcut,
+                            allowsEmptyShortcut: true,
                             reservedShortcuts: [],
                             duplicateShortcut: selectedShortcut,
                             onShortcutChange: changeRecordingShortcut,
@@ -384,7 +393,7 @@ private struct GeneralSettingsView: View {
         return true
     }
 
-    private func changeRecordingShortcut(_ shortcut: ScreenshotShortcut) -> Bool {
+    private func changeRecordingShortcut(_ shortcut: ScreenshotShortcut?) -> Bool {
         selectedRecordingShortcut = shortcut
         guard onRecordingShortcutChange(shortcut) else {
             selectedRecordingShortcut = SettingsStore.recordingShortcut()
@@ -710,10 +719,11 @@ private struct ScreenshotSettingsView: View {
 private struct ShortcutRecorderControl: NSViewRepresentable {
     let strings: AppStrings
     let accessibilityLabel: String
-    let shortcut: ScreenshotShortcut
+    let shortcut: ScreenshotShortcut?
+    let allowsEmptyShortcut: Bool
     let reservedShortcuts: Set<ScreenshotShortcut>
     let duplicateShortcut: ScreenshotShortcut?
-    let onShortcutChange: @MainActor (ScreenshotShortcut) -> Bool
+    let onShortcutChange: @MainActor (ScreenshotShortcut?) -> Bool
     let onValidationFailure: @MainActor (ScreenshotShortcutValidationFailure?) -> Void
     let onRecordingChange: @MainActor (Bool) -> Void
 
@@ -745,6 +755,7 @@ private struct ShortcutRecorderControl: NSViewRepresentable {
             strings: strings,
             accessibilityLabel: accessibilityLabel,
             shortcut: shortcut,
+            allowsEmptyShortcut: allowsEmptyShortcut,
             reservedShortcuts: reservedShortcuts,
             duplicateShortcut: duplicateShortcut,
             onShortcutChange: context.coordinator.onShortcutChange,
@@ -755,12 +766,12 @@ private struct ShortcutRecorderControl: NSViewRepresentable {
 
     @MainActor
     final class Coordinator: NSObject {
-        var onShortcutChange: @MainActor (ScreenshotShortcut) -> Bool
+        var onShortcutChange: @MainActor (ScreenshotShortcut?) -> Bool
         var onValidationFailure: @MainActor (ScreenshotShortcutValidationFailure?) -> Void
         var onRecordingChange: @MainActor (Bool) -> Void
 
         init(
-            onShortcutChange: @escaping @MainActor (ScreenshotShortcut) -> Bool,
+            onShortcutChange: @escaping @MainActor (ScreenshotShortcut?) -> Bool,
             onValidationFailure: @escaping @MainActor (ScreenshotShortcutValidationFailure?) -> Void,
             onRecordingChange: @escaping @MainActor (Bool) -> Void
         ) {
@@ -778,12 +789,13 @@ private struct ShortcutRecorderControl: NSViewRepresentable {
 final class ShortcutRecorderButton: NSButton {
     private var strings = AppStrings(language: .system)
     private var shortcutAccessibilityLabel = ""
-    private var shortcut = ScreenshotShortcut.default
+    private var shortcut: ScreenshotShortcut?
+    private var allowsEmptyShortcut = false
     private var reservedShortcuts: Set<ScreenshotShortcut> = [.defaultRecording]
     private var duplicateShortcut: ScreenshotShortcut?
     private var isRecording = false
     private var recordingPreviewTitle: String?
-    private var onShortcutChange: (@MainActor (ScreenshotShortcut) -> Bool)?
+    private var onShortcutChange: (@MainActor (ScreenshotShortcut?) -> Bool)?
     private var onValidationFailure: (@MainActor (ScreenshotShortcutValidationFailure?) -> Void)?
     private var onRecordingChange: (@MainActor (Bool) -> Void)?
 
@@ -812,16 +824,18 @@ final class ShortcutRecorderButton: NSButton {
     func update(
         strings: AppStrings,
         accessibilityLabel: String = "",
-        shortcut: ScreenshotShortcut,
+        shortcut: ScreenshotShortcut?,
+        allowsEmptyShortcut: Bool = false,
         reservedShortcuts: Set<ScreenshotShortcut> = [.defaultRecording],
         duplicateShortcut: ScreenshotShortcut? = nil,
-        onShortcutChange: @escaping @MainActor (ScreenshotShortcut) -> Bool,
+        onShortcutChange: @escaping @MainActor (ScreenshotShortcut?) -> Bool,
         onValidationFailure: @escaping @MainActor (ScreenshotShortcutValidationFailure?) -> Void,
         onRecordingChange: @escaping @MainActor (Bool) -> Void
     ) {
         self.strings = strings
         shortcutAccessibilityLabel = accessibilityLabel.isEmpty ? strings.settingsScreenshotShortcut : accessibilityLabel
         self.shortcut = shortcut
+        self.allowsEmptyShortcut = allowsEmptyShortcut
         self.reservedShortcuts = reservedShortcuts
         self.duplicateShortcut = duplicateShortcut
         self.onShortcutChange = onShortcutChange
@@ -831,7 +845,7 @@ final class ShortcutRecorderButton: NSButton {
         if isRecording {
             title = recordingTitle
         } else {
-            title = shortcut.displayName
+            title = displayTitle
         }
         updateAccessibilityLabel()
         updateAppearance()
@@ -859,6 +873,16 @@ final class ShortcutRecorderButton: NSButton {
         }
 
         if event.keyCode == shortcutRecorderEscapeKeyCode {
+            stopRecording()
+            return
+        }
+
+        if allowsEmptyShortcut,
+           shortcutRecorderClearKeyCodes.contains(event.keyCode) {
+            let didApply = onShortcutChange?(nil) ?? false
+            if didApply {
+                shortcut = nil
+            }
             stopRecording()
             return
         }
@@ -908,17 +932,27 @@ final class ShortcutRecorderButton: NSButton {
         super.viewWillMove(toWindow: newWindow)
     }
 
-    private func stopRecording() {
+    override func resignFirstResponder() -> Bool {
+        if isRecording {
+            stopRecording(clearsFirstResponder: false)
+        }
+
+        return super.resignFirstResponder()
+    }
+
+    private func stopRecording(clearsFirstResponder: Bool = true) {
         guard isRecording else {
             return
         }
 
         isRecording = false
         recordingPreviewTitle = nil
-        title = shortcut.displayName
+        title = displayTitle
         onValidationFailure?(nil)
         onRecordingChange?(false)
-        window?.makeFirstResponder(nil)
+        if clearsFirstResponder {
+            window?.makeFirstResponder(nil)
+        }
         updateAccessibilityLabel()
         updateAppearance()
     }
@@ -936,6 +970,10 @@ final class ShortcutRecorderButton: NSButton {
 
     private var recordingTitle: String {
         recordingPreviewTitle ?? strings.settingsShortcutRecorderPrompt
+    }
+
+    private var displayTitle: String {
+        shortcut?.displayName ?? strings.settingsShortcutRecorderUnset
     }
 
     private func updateAccessibilityLabel() {
@@ -1035,6 +1073,7 @@ private enum ShortcutRecorderScalar {
 }
 
 private let shortcutRecorderEscapeKeyCode: UInt16 = 53
+private let shortcutRecorderClearKeyCodes: Set<UInt16> = [UInt16(kVK_Delete), UInt16(kVK_ForwardDelete)]
 
 private struct RecordingSettingsView: View {
     let strings: AppStrings

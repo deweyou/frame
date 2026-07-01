@@ -168,6 +168,13 @@ struct AppStrings {
         }
     }
 
+    var settingsShortcutRecorderUnset: String {
+        switch language {
+        case .zhHans: "未设置"
+        case .en: "Not set"
+        }
+    }
+
     var settingsShortcutRecorderInsufficientModifiers: String {
         switch language {
         case .zhHans: "请按下至少两个修饰键"

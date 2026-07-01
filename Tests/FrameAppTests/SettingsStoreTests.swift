@@ -57,8 +57,8 @@ final class SettingsStoreTests: XCTestCase {
         )
     }
 
-    func testRecordingShortcutDefaultsToCommandShiftR() {
-        XCTAssertEqual(SettingsStore.recordingShortcut(defaults: defaults), .defaultRecording)
+    func testRecordingShortcutDefaultsToEmpty() {
+        XCTAssertNil(SettingsStore.recordingShortcut(defaults: defaults))
     }
 
     func testRecordingShortcutPersistsCustomStorageValue() {
@@ -70,8 +70,20 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(SettingsStore.recordingShortcut(defaults: defaults), shortcut)
     }
 
-    func testWindowScreenshotDecorationStyleDefaultsToSoftBackdrop() {
-        XCTAssertEqual(SettingsStore.windowScreenshotDecorationStyle(defaults: defaults), .softBackdrop)
+    func testRecordingShortcutPersistsEmptyChoice() {
+        SettingsStore.setRecordingShortcut(
+            ScreenshotShortcut(key: .number("8"), modifiers: [.command, .control]),
+            defaults: defaults
+        )
+
+        SettingsStore.setRecordingShortcut(nil, defaults: defaults)
+
+        XCTAssertNil(defaults.string(forKey: SettingsStore.recordingShortcutKey))
+        XCTAssertNil(SettingsStore.recordingShortcut(defaults: defaults))
+    }
+
+    func testWindowScreenshotDecorationStyleDefaultsToOriginal() {
+        XCTAssertEqual(SettingsStore.windowScreenshotDecorationStyle(defaults: defaults), .original)
     }
 
     func testWindowScreenshotDecorationStylePersistsExplicitChoice() {
@@ -89,7 +101,7 @@ final class SettingsStoreTests: XCTestCase {
     func testWindowScreenshotDecorationStyleFallsBackWhenPersistedValueIsInvalid() {
         defaults.set("bad-style", forKey: SettingsStore.windowScreenshotDecorationStyleKey)
 
-        XCTAssertEqual(SettingsStore.windowScreenshotDecorationStyle(defaults: defaults), .softBackdrop)
+        XCTAssertEqual(SettingsStore.windowScreenshotDecorationStyle(defaults: defaults), .original)
     }
 
     func testOCRLanguagesDefaultToChineseEnglishJapaneseAndKorean() {

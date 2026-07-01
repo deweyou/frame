@@ -19,13 +19,14 @@ final class HotKeyController {
     var onRecording: (@MainActor () -> Void)?
 
     private(set) var shortcut: ScreenshotShortcut
-    private(set) var recordingShortcut: ScreenshotShortcut
+    private(set) var recordingShortcut: ScreenshotShortcut?
     private var hotKeyRefs: [UInt32: EventHotKeyRef] = [:]
     private var eventHandlerRef: EventHandlerRef?
+    private var registeredHotKeyIDsForTestingStorage: [UInt32]?
 
     init(
         shortcut: ScreenshotShortcut = .default,
-        recordingShortcut: ScreenshotShortcut = .defaultRecording
+        recordingShortcut: ScreenshotShortcut? = nil
     ) {
         self.shortcut = shortcut
         self.recordingShortcut = recordingShortcut
@@ -33,11 +34,15 @@ final class HotKeyController {
 
     func register(
         shortcut: ScreenshotShortcut? = nil,
-        recordingShortcut: ScreenshotShortcut? = nil
+        recordingShortcut: ScreenshotShortcut?? = nil
     ) throws {
         unregister()
         let shortcut = shortcut ?? self.shortcut
-        let recordingShortcut = recordingShortcut ?? self.recordingShortcut
+        let recordingShortcut = if let recordingShortcut {
+            recordingShortcut
+        } else {
+            self.recordingShortcut
+        }
 
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
@@ -61,10 +66,12 @@ final class HotKeyController {
             shortcut: shortcut,
             id: screenshotHotKeyID
         )
-        try registerHotKey(
-            shortcut: recordingShortcut,
-            id: recordingHotKeyID
-        )
+        if let recordingShortcut {
+            try registerHotKey(
+                shortcut: recordingShortcut,
+                id: recordingHotKeyID
+            )
+        }
 
         self.shortcut = shortcut
         self.recordingShortcut = recordingShortcut
@@ -81,16 +88,33 @@ final class HotKeyController {
         hotKeyKind(signature: signature, id: id)
     }
 
+    func registerHotKeysForTesting() throws {
+        registeredHotKeyIDsForTestingStorage = hotKeyIDsToRegister(recordingShortcut: recordingShortcut)
+    }
+
+    func registeredHotKeyIDsForTesting() -> [UInt32] {
+        registeredHotKeyIDsForTestingStorage ?? hotKeyRefs.keys.sorted()
+    }
+
     func unregister() {
         for hotKeyRef in hotKeyRefs.values {
             UnregisterEventHotKey(hotKeyRef)
         }
         hotKeyRefs = [:]
+        registeredHotKeyIDsForTestingStorage = nil
 
         if let eventHandlerRef {
             RemoveEventHandler(eventHandlerRef)
             self.eventHandlerRef = nil
         }
+    }
+
+    private func hotKeyIDsToRegister(recordingShortcut: ScreenshotShortcut?) -> [UInt32] {
+        if recordingShortcut == nil {
+            return [screenshotHotKeyID]
+        }
+
+        return [screenshotHotKeyID, recordingHotKeyID]
     }
 
     private func registerHotKey(shortcut: ScreenshotShortcut, id: UInt32) throws {

@@ -30,6 +30,28 @@ final class HotKeyControllerTests: XCTestCase {
         XCTAssertEqual(parameters.modifierFlags, UInt32(cmdKey | shiftKey))
     }
 
+    func testControllerDefaultsRecordingShortcutToEmpty() {
+        let controller = HotKeyController()
+
+        XCTAssertNil(controller.recordingShortcut)
+    }
+
+    func testRegisteredHotKeyIDsSkipEmptyRecordingShortcut() throws {
+        let controller = HotKeyController(recordingShortcut: nil)
+
+        try controller.registerHotKeysForTesting()
+
+        XCTAssertEqual(controller.registeredHotKeyIDsForTesting(), [1])
+    }
+
+    func testRegisteredHotKeyIDsIncludeConfiguredRecordingShortcut() throws {
+        let controller = HotKeyController(recordingShortcut: .defaultRecording)
+
+        try controller.registerHotKeysForTesting()
+
+        XCTAssertEqual(controller.registeredHotKeyIDsForTesting(), [1, 2])
+    }
+
     func testHotKeyKindRoutesDistinctScreenshotAndRecordingIDs() {
         XCTAssertEqual(
             HotKeyController.hotKeyKindForTesting(signature: HotKeyController.hotKeySignatureForTesting, id: 1),
