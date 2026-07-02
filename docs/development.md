@@ -40,6 +40,95 @@ scripts/package-app.sh
 
 Use this pattern for day-to-day development even when a real Apple certificate is available. The goal is to keep local TCC identity stable while avoiding accidental use of distribution credentials in debug builds. Use Apple Development or Developer ID identities only when intentionally testing those signing paths.
 
+## Manual Beta Release
+
+Frame's first release path is a manual beta download. It produces a DMG, a ZIP,
+and SHA-256 checksums, but it does not notarize the app and does not configure
+automatic updates.
+
+### GitHub Actions
+
+Use the `Manual Release` workflow from the GitHub Actions UI for the normal beta
+release path. It is triggered manually with `workflow_dispatch` and asks for:
+
+- `version_bump`: `patch`, `minor`, `major`, or `custom`.
+- `custom_version`: required only when `version_bump` is `custom`.
+- `create_github_release`: whether to create a GitHub Release after packaging.
+
+The workflow runs `scripts/prepare-release-version.sh`, which computes the next
+semantic version from `Sources/FrameCore/FrameVersion.swift`, increments the
+build number by one, and delegates the actual file updates to
+`scripts/bump-version.sh`.
+
+After the version is prepared, the workflow runs tests, builds, creates release
+artifacts, verifies checksums and the DMG, commits the version/changelog changes,
+tags `v<version>`, pushes the commit and tag, and uploads the DMG, ZIP, and
+`SHA256SUMS` as workflow artifacts. If `create_github_release` is enabled, it
+also creates a GitHub Release with the same files and release notes extracted
+from `CHANGELOG.md`.
+
+### Local Release
+
+Before bumping the version, write user-facing release notes under
+`CHANGELOG.md`'s `Unreleased` section. Then run:
+
+```sh
+scripts/bump-version.sh 0.2.0 2
+```
+
+The first argument is `CFBundleShortVersionString`, and the second argument is
+`CFBundleVersion`. The build number must be a positive integer greater than the
+current build.
+
+To use the same bump choices as GitHub Actions locally, run:
+
+```sh
+scripts/prepare-release-version.sh patch
+scripts/prepare-release-version.sh minor
+scripts/prepare-release-version.sh major
+scripts/prepare-release-version.sh custom 0.2.0
+```
+
+Verify the app before creating downloadable artifacts:
+
+```sh
+swift test
+swift build
+scripts/package-app.sh
+```
+
+Create release artifacts:
+
+```sh
+scripts/package-release.sh
+```
+
+The output is written to:
+
+```text
+.build/release/Frame-<version>-build.<build>/
+```
+
+The directory contains:
+
+- `Frame-<version>-build.<build>.zip`
+- `Frame-<version>-build.<build>.dmg`
+- `SHA256SUMS`
+
+Use `FRAME_RELEASE_CODESIGN_IDENTITY` when intentionally testing a release
+signing identity:
+
+```sh
+FRAME_RELEASE_CODESIGN_IDENTITY="Frame Beta Release" scripts/package-release.sh
+```
+
+If no release identity is supplied, `scripts/package-release.sh` falls back to
+the existing ad-hoc package behavior and prints a warning. Without Developer ID
+signing and notarization, public beta users should be told to copy `Frame.app`
+to `/Applications`, open it from there, use macOS `Open Anyway` when prompted,
+grant Screen Recording permission, and relaunch the app. Do not ask users to run
+Frame directly from the mounted DMG.
+
 ## Local Signing Identity Setup
 
 Each development Mac should create one local self-signed Code Signing identity. It does not require an Apple Developer account and should not be used for public distribution.
