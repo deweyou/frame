@@ -892,7 +892,9 @@ final class QuickAccessPanelController: NSObject {
             return
         }
 
-        _ = item.downloadRecording?()
+        if item.downloadRecording?() == true {
+            closePreview(item, notify: false)
+        }
     }
 
     @objc private func copyRecordingButtonClicked(_ sender: NSButton) {
@@ -900,7 +902,9 @@ final class QuickAccessPanelController: NSObject {
             return
         }
 
-        _ = item.copyRecording?()
+        if item.copyRecording?() == true {
+            closePreview(item, notify: false)
+        }
     }
 
     @objc private func editRecordingButtonClicked(_ sender: NSButton) {

@@ -108,6 +108,98 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         XCTAssertEqual(editCallCount, 0)
     }
 
+    func testRecordingQuickAccessClosesAfterSuccessfulDownload() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let recording = CapturedRecording(
+            id: UUID(),
+            fileURL: URL(fileURLWithPath: "/tmp/test.mp4"),
+            format: .mp4,
+            rect: CGRect(x: 0, y: 0, width: 1282, height: 504),
+            pixelSize: CGSize(width: 1282, height: 504),
+            byteSize: 10,
+            duration: 24
+        )
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        var downloadCallCount = 0
+        var closeCallCount = 0
+
+        controller.show(
+            for: recording,
+            preferredAnchor: CGRect(x: 0, y: 0, width: 100, height: 100),
+            strings: AppStrings(language: .en),
+            download: {
+                downloadCallCount += 1
+                return true
+            },
+            copy: { true },
+            preview: { true },
+            edit: { true },
+            close: {
+                closeCallCount += 1
+            }
+        )
+
+        let panel = try XCTUnwrap(newPreviewPanels(excluding: windowsBeforeShow).first)
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let downloadButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Download"))
+
+        downloadButton.performClick(nil)
+
+        XCTAssertEqual(downloadCallCount, 1)
+        XCTAssertEqual(closeCallCount, 0)
+        XCTAssertEqual(controller.recordingCountForTesting(), 0)
+        XCTAssertFalse(panel.isVisible)
+    }
+
+    func testRecordingQuickAccessClosesAfterSuccessfulCopy() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let recording = CapturedRecording(
+            id: UUID(),
+            fileURL: URL(fileURLWithPath: "/tmp/test.mp4"),
+            format: .mp4,
+            rect: CGRect(x: 0, y: 0, width: 1282, height: 504),
+            pixelSize: CGSize(width: 1282, height: 504),
+            byteSize: 10,
+            duration: 24
+        )
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        var copyCallCount = 0
+        var closeCallCount = 0
+
+        controller.show(
+            for: recording,
+            preferredAnchor: CGRect(x: 0, y: 0, width: 100, height: 100),
+            strings: AppStrings(language: .en),
+            download: { true },
+            copy: {
+                copyCallCount += 1
+                return true
+            },
+            preview: { true },
+            edit: { true },
+            close: {
+                closeCallCount += 1
+            }
+        )
+
+        let panel = try XCTUnwrap(newPreviewPanels(excluding: windowsBeforeShow).first)
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy"))
+
+        copyButton.performClick(nil)
+
+        XCTAssertEqual(copyCallCount, 1)
+        XCTAssertEqual(closeCallCount, 0)
+        XCTAssertEqual(controller.recordingCountForTesting(), 0)
+        XCTAssertFalse(panel.isVisible)
+    }
+
     func testRecordingQuickAccessScalesPreviewToRecordingAspectRatio() {
         XCTAssertEqual(
             QuickAccessPanelController.recordingPreviewSize(forSourceSize: CGSize(width: 1282, height: 504)),

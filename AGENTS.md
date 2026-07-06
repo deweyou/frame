@@ -56,6 +56,10 @@ Keep durable implementation decisions in docs when they affect future agent work
 
 `README.md` is the English product overview and `README_ZH.md` is the Chinese product overview. Keep them aligned. Whenever adding, removing, or materially changing a user-facing feature, check whether both README files need updates.
 
+## Changelog
+
+For user-facing features, behavior changes, bug fixes, and release workflow changes, update `CHANGELOG.md` in the same task unless the user explicitly asks not to. Put changes that are already in the current code but not yet released under `Unreleased`; keep already released behavior under its versioned section. Skip changelog entries for purely internal refactors, tests, or cleanup that do not affect user-visible behavior or release mechanics.
+
 ## macOS Permission Notes
 
 Screen Recording permission is tied to the app identity and code signature. Local ad-hoc builds can require re-authorization after rebuilding because the binary signature changes. For repeat manual testing, prefer a stable local Code Signing identity such as `FRAME_CODESIGN_IDENTITY="Frame Local Dev CLI"`, copy the packaged app to a stable path such as `~/Applications/Frame.app`, and authorize that exact app. Keep this as the default local development path even after Apple signing certificates exist; reserve Apple Development or Developer ID identities for explicit signing-path or distribution tests.
