@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add release notes here before the next version bump.
+
+## 0.1.1 - 2026-07-06
+
 - Add manual beta release tooling for version bumps, changelog rollover, DMG/ZIP
   artifacts, and SHA-256 checksums.
 - Align recording Quick Access copy/download behavior with screenshot actions by

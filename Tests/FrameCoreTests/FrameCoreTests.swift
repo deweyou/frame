@@ -5,9 +5,9 @@ import FrameCore
 
 final class ZFrameCoreTests: XCTestCase {
     func testFrameVersionConstants() {
-        XCTAssert(FrameVersion.shortVersion == "0.1.0")
-        XCTAssert(FrameVersion.build == "1")
-        XCTAssert(FrameVersion.displayName == "0.1.0 (1)")
+        XCTAssert(FrameVersion.shortVersion == "0.1.1")
+        XCTAssert(FrameVersion.build == "2")
+        XCTAssert(FrameVersion.displayName == "0.1.1 (2)")
     }
 
     func testDefaultShortcutsMatchMvpDefaults() {
