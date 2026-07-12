@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add release notes here before the next version bump.
+
+## 0.1.2 - 2026-07-12
+
 - Improve the screenshot editor with a context-aware header style control, an
   icon-only color swatch selector and tiled palette dropdown, canvas tool
   shortcuts, and double-click object context switching.
