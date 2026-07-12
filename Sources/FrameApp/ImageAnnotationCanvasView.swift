@@ -15,6 +15,8 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate, ImageWorkspac
     private var activeTextDidBeginMutation = false
     private var mosaicDrawingSource: ImageMosaicDrawingSource?
     var menuProvider: (() -> NSMenu)?
+    var onToolContextRequest: ((ImageAnnotationCanvasToolContext) -> Void)?
+    var onEditingOptionsChange: (() -> Void)?
 
     init(
         image: NSImage,
@@ -181,6 +183,12 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate, ImageWorkspac
             return
         }
 
+        if event.clickCount >= 2,
+           beginToolContextInteraction(at: imagePoint) {
+            needsDisplay = true
+            return
+        }
+
         if document.selectedTool == .text {
             handleTextToolMouseDown(at: imagePoint, clickCount: event.clickCount)
             needsDisplay = true
@@ -193,7 +201,7 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate, ImageWorkspac
             return
         }
 
-        if shouldSelectExistingShapeOrMosaic(with: event, at: imagePoint) {
+        if shouldBeginExistingElementInteraction(at: imagePoint) {
             beginSelectionInteraction(at: imagePoint, clickCount: event.clickCount)
             needsDisplay = true
             return
@@ -358,6 +366,10 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate, ImageWorkspac
             return
         }
 
+        if handleKeyboardShortcut(event) {
+            return
+        }
+
         if event.keyCode == 51 || event.keyCode == 117 || (event.keyCode == 53 && selectedElement != nil) {
             document.deleteSelected()
             needsDisplay = true
@@ -366,6 +378,100 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate, ImageWorkspac
         }
 
         super.keyDown(with: event)
+    }
+
+    private func handleKeyboardShortcut(_ event: NSEvent) -> Bool {
+        let disallowedModifiers = event.modifierFlags.intersection([.command, .control, .option])
+        guard disallowedModifiers.isEmpty,
+              let character = event.charactersIgnoringModifiers?.lowercased() else {
+            return false
+        }
+
+        switch character {
+        case "v":
+            requestToolContext(.tool(.select))
+        case "r":
+            requestToolContext(.shape(.rectangle))
+        case "o":
+            requestToolContext(.shape(.ellipse))
+        case "l":
+            requestToolContext(.shape(.line))
+        case "a":
+            requestToolContext(.shape(.arrow))
+        case "b":
+            requestToolContext(.tool(.brush))
+        case "t":
+            requestToolContext(.tool(.text))
+        case "h":
+            requestToolContext(.tool(.highlight))
+        case "m":
+            requestToolContext(.tool(.mosaic))
+        case "[":
+            adjustSelectedStyleSize(direction: -1)
+        case "]":
+            adjustSelectedStyleSize(direction: 1)
+        default:
+            return false
+        }
+
+        return true
+    }
+
+    private func requestToolContext(_ context: ImageAnnotationCanvasToolContext) {
+        if let onToolContextRequest {
+            onToolContextRequest(context)
+            return
+        }
+
+        applyToolContext(context)
+        notifyDocumentChanged()
+    }
+
+    private func applyToolContext(_ context: ImageAnnotationCanvasToolContext) {
+        switch context {
+        case let .tool(tool):
+            document.selectTool(tool)
+        case let .shape(shapeKind):
+            document.setShapeKind(shapeKind)
+            document.selectTool(.shape)
+        case let .mosaic(mosaicMode):
+            document.setMosaicMode(mosaicMode)
+            document.selectTool(.mosaic)
+        }
+
+        needsDisplay = true
+    }
+
+    private func adjustSelectedStyleSize(direction: Int) {
+        var style = document.editingOptions.style
+        switch document.selectedTool {
+        case .text:
+            style.fontSize = steppedValue(
+                from: style.fontSize,
+                values: Self.textFontSizes,
+                direction: direction
+            )
+        case .shape, .brush, .highlight:
+            style.lineWidth = steppedValue(
+                from: style.lineWidth,
+                values: Self.annotationLineWidths,
+                direction: direction
+            )
+        case .select, .mosaic:
+            return
+        }
+
+        setStyle(style)
+        onEditingOptionsChange?()
+    }
+
+    private func steppedValue(from currentValue: CGFloat, values: [CGFloat], direction: Int) -> CGFloat {
+        guard let currentIndex = values.firstIndex(of: currentValue) else {
+            return currentValue
+        }
+
+        let nextIndex = max(0, min(values.count - 1, currentIndex + direction))
+        return values[nextIndex]
     }
 
     private var imageDrawRect: CGRect {
@@ -414,6 +520,23 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate, ImageWorkspac
         }
     }
 
+    private func beginToolContextInteraction(at point: CGPoint) -> Bool {
+        guard let elementID = document.topmostElementID(at: point, tolerance: 6),
+              let element = document.elements.first(where: { $0.id == elementID }) else {
+            return false
+        }
+
+        document.selectElement(id: elementID)
+        notifyDocumentChanged()
+        requestToolContext(ImageAnnotationCanvasToolContext(elementKind: element.kind))
+
+        if case let .text(text) = element.kind {
+            beginTextEditing(elementID: elementID, origin: element.bounds.origin, initialText: text)
+        }
+
+        return true
+    }
+
     private var selectedElement: ImageAnnotationElement? {
         guard let selectedElementID = document.selectedElementID else {
             return nil
@@ -438,8 +561,17 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate, ImageWorkspac
             || document.topmostElementID(at: point, tolerance: 6) == selectedElement.id
     }
 
-    private func shouldSelectExistingShapeOrMosaic(with event: NSEvent, at point: CGPoint) -> Bool {
-        event.clickCount >= 2 && topmostShapeOrMosaicID(at: point) != nil
+    private func shouldBeginExistingElementInteraction(at point: CGPoint) -> Bool {
+        guard document.topmostElementID(at: point, tolerance: 6) != nil else {
+            return false
+        }
+
+        switch document.selectedTool {
+        case .select, .text:
+            return false
+        case .shape, .brush, .highlight, .mosaic:
+            return true
+        }
     }
 
     private var shouldBeginPendingCreation: Bool {
@@ -451,30 +583,14 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate, ImageWorkspac
         }
     }
 
-    private func topmostShapeOrMosaicID(at point: CGPoint) -> UUID? {
-        guard let elementID = document.topmostElementID(at: point, tolerance: 6),
-              let element = document.elements.first(where: { $0.id == elementID }) else {
-            return nil
-        }
-
-        switch element.kind {
-        case .shape, .mosaic:
-            return elementID
-        case .brush, .highlight, .text:
-            return nil
-        }
-    }
-
     private func handleTextToolMouseDown(at point: CGPoint, clickCount: Int) {
-        if let textElementID = topmostTextElementID(at: point) {
-            document.selectElement(id: textElementID)
-            notifyDocumentChanged()
+        if topmostTextElementID(at: point) != nil {
+            beginSelectionInteraction(at: point, clickCount: clickCount)
+            return
+        }
 
-            if clickCount >= 2,
-               let selectedElement,
-               case let .text(text) = selectedElement.kind {
-                beginTextEditing(elementID: selectedElement.id, origin: selectedElement.bounds.origin, initialText: text)
-            }
+        if document.topmostElementID(at: point, tolerance: 6) != nil {
+            beginSelectionInteraction(at: point, clickCount: clickCount)
             return
         }
 
@@ -796,9 +912,6 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate, ImageWorkspac
         let path = NSBezierPath(rect: bounds)
         path.lineWidth = 1
         path.stroke()
-
-        NSColor.controlAccentColor.setFill()
-        NSBezierPath(roundedRect: resizeHandleRect(for: bounds), xRadius: 2, yRadius: 2).fill()
     }
 
     private func drawMosaicSelectionDraft(in bounds: CGRect) {
@@ -924,6 +1037,30 @@ final class ImageAnnotationCanvasView: NSView, NSTextViewDelegate, ImageWorkspac
         let source = ImageMosaicDrawingSource(sourceImage: image, imageSize: image.size)
         mosaicDrawingSource = source
         return source
+    }
+
+    private static let annotationLineWidths: [CGFloat] = [1, 2, 4, 8, 12, 16, 24]
+    private static let textFontSizes: [CGFloat] = [12, 14, 16, 18, 22, 28, 36, 48, 64, 80, 96]
+}
+
+enum ImageAnnotationCanvasToolContext: Equatable {
+    case tool(ImageAnnotationTool)
+    case shape(ImageAnnotationShapeKind)
+    case mosaic(ImageAnnotationMosaicMode)
+
+    init(elementKind: ImageAnnotationElementKind) {
+        switch elementKind {
+        case let .shape(shapeKind):
+            self = .shape(shapeKind)
+        case .brush:
+            self = .tool(.brush)
+        case .text:
+            self = .tool(.text)
+        case let .mosaic(mosaicMode):
+            self = .mosaic(mosaicMode)
+        case .highlight:
+            self = .tool(.highlight)
+        }
     }
 }
 

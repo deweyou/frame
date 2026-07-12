@@ -7,6 +7,8 @@ enum SettingsStore {
     static let appLanguageKey = "appLanguage"
     static let screenshotDirectoryKey = "screenshotDirectory"
     static let windowScreenshotDecorationStyleKey = "windowScreenshotDecorationStyle"
+    static let rememberedSelectionKey = "rememberedWindowSelection"
+    static let imageWorkspaceSaveCurrentBehaviorKey = "imageWorkspaceSaveCurrentBehavior"
     static let ocrRecognitionLanguagesKey = "ocrRecognitionLanguages"
     static let captureHistoryEnabledKey = "captureHistoryEnabled"
     static let captureHistoryRetentionKey = "captureHistoryRetention"
@@ -120,6 +122,59 @@ enum SettingsStore {
         defaults.set(style.rawValue, forKey: windowScreenshotDecorationStyleKey)
     }
 
+    static func rememberedSelection(
+        defaults: UserDefaults = .standard,
+        currentDate: Date = Date()
+    ) -> RememberedSelection? {
+        guard let data = defaults.data(forKey: rememberedSelectionKey) else {
+            return nil
+        }
+
+        do {
+            let selection = try JSONDecoder().decode(RememberedSelection.self, from: data)
+            guard selection.isValid(at: currentDate) else {
+                defaults.removeObject(forKey: rememberedSelectionKey)
+                return nil
+            }
+
+            return selection
+        } catch {
+            defaults.removeObject(forKey: rememberedSelectionKey)
+            return nil
+        }
+    }
+
+    static func setRememberedSelection(
+        _ selection: RememberedSelection?,
+        defaults: UserDefaults = .standard
+    ) {
+        guard let selection else {
+            defaults.removeObject(forKey: rememberedSelectionKey)
+            return
+        }
+
+        do {
+            defaults.set(try JSONEncoder().encode(selection), forKey: rememberedSelectionKey)
+        } catch {
+            defaults.removeObject(forKey: rememberedSelectionKey)
+            assertionFailure("Unable to persist remembered selection: \(error.localizedDescription)")
+        }
+    }
+
+    static func imageWorkspaceSaveCurrentBehavior(
+        defaults: UserDefaults = .standard
+    ) -> ImageWorkspaceSaveCurrentBehavior {
+        ImageWorkspaceSaveCurrentBehavior(rawValue: defaults.string(forKey: imageWorkspaceSaveCurrentBehaviorKey) ?? "")
+            ?? .defaultBehavior
+    }
+
+    static func setImageWorkspaceSaveCurrentBehavior(
+        _ behavior: ImageWorkspaceSaveCurrentBehavior,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(behavior.rawValue, forKey: imageWorkspaceSaveCurrentBehaviorKey)
+    }
+
     static func isCaptureHistoryEnabled(defaults: UserDefaults = .standard) -> Bool {
         guard defaults.object(forKey: captureHistoryEnabledKey) != nil else {
             return true
@@ -213,7 +268,7 @@ enum SettingsStore {
         }
 
         let fontSize = CGFloat(defaults.double(forKey: imageAnnotationFontSizeKey))
-        if [12, 14, 16, 18, 22, 28, 36, 48].contains(fontSize) {
+        if [12, 14, 16, 18, 22, 28, 36, 48, 64, 80, 96].contains(fontSize) {
             options.style.fontSize = fontSize
         }
 
@@ -297,6 +352,10 @@ private extension ImageAnnotationColor {
             self = .blue
         case "green":
             self = .green
+        case "white":
+            self = .white
+        case "black":
+            self = .black
         default:
             return nil
         }
@@ -312,6 +371,10 @@ private extension ImageAnnotationColor {
             "blue"
         case .green:
             "green"
+        case .white:
+            "white"
+        case .black:
+            "black"
         default:
             "red"
         }

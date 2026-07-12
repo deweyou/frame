@@ -104,6 +104,52 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(SettingsStore.windowScreenshotDecorationStyle(defaults: defaults), .original)
     }
 
+    func testRememberedSelectionPersistsUntilItExpires() {
+        let recordedAt = Date(timeIntervalSinceReferenceDate: 1_000)
+        let memory = RememberedSelection(
+            windowID: 42,
+            bounds: CGRect(x: 20, y: 30, width: 320, height: 180),
+            recordedAt: recordedAt
+        )
+
+        SettingsStore.setRememberedSelection(memory, defaults: defaults)
+
+        XCTAssertEqual(
+            SettingsStore.rememberedSelection(
+                defaults: defaults,
+                currentDate: recordedAt.addingTimeInterval(300)
+            ),
+            memory
+        )
+        XCTAssertNil(SettingsStore.rememberedSelection(
+            defaults: defaults,
+            currentDate: recordedAt.addingTimeInterval(RememberedSelection.lifetime)
+        ))
+        XCTAssertNil(defaults.data(forKey: SettingsStore.rememberedSelectionKey))
+    }
+
+    func testRememberedRegionSelectionPersistsUntilItExpires() {
+        let recordedAt = Date(timeIntervalSinceReferenceDate: 1_000)
+        let memory = RememberedSelection(
+            bounds: CGRect(x: 20, y: 30, width: 320, height: 180),
+            recordedAt: recordedAt
+        )
+
+        SettingsStore.setRememberedSelection(memory, defaults: defaults)
+
+        XCTAssertEqual(
+            SettingsStore.rememberedSelection(
+                defaults: defaults,
+                currentDate: recordedAt.addingTimeInterval(300)
+            ),
+            memory
+        )
+        XCTAssertNil(SettingsStore.rememberedSelection(
+            defaults: defaults,
+            currentDate: recordedAt.addingTimeInterval(RememberedSelection.lifetime)
+        ))
+    }
+
     func testOCRLanguagesDefaultToChineseEnglishJapaneseAndKorean() {
         XCTAssertEqual(
             SettingsStore.ocrRecognitionLanguages(defaults: defaults),
@@ -283,11 +329,27 @@ final class SettingsStoreTests: XCTestCase {
         options.mosaicMode = .brush
         options.style.strokeColor = .blue
         options.style.lineWidth = 24
-        options.style.fontSize = 28
+        options.style.fontSize = 96
 
         SettingsStore.setImageAnnotationEditingOptions(options, defaults: defaults)
 
         XCTAssertEqual(SettingsStore.imageAnnotationEditingOptions(defaults: defaults), options)
+    }
+
+    func testImageAnnotationEditingOptionsPersistExtendedPaletteColors() {
+        var options = ImageAnnotationEditingOptions()
+        options.style.strokeColor = .white
+
+        SettingsStore.setImageAnnotationEditingOptions(options, defaults: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: SettingsStore.imageAnnotationStrokeColorKey), "white")
+        XCTAssertEqual(SettingsStore.imageAnnotationEditingOptions(defaults: defaults).style.strokeColor, .white)
+
+        options.style.strokeColor = .black
+        SettingsStore.setImageAnnotationEditingOptions(options, defaults: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: SettingsStore.imageAnnotationStrokeColorKey), "black")
+        XCTAssertEqual(SettingsStore.imageAnnotationEditingOptions(defaults: defaults).style.strokeColor, .black)
     }
 
     func testImageAnnotationEditingOptionsFallbackWhenPersistedValuesAreInvalid() {
@@ -301,5 +363,24 @@ final class SettingsStoreTests: XCTestCase {
             SettingsStore.imageAnnotationEditingOptions(defaults: defaults),
             ImageAnnotationEditingOptions()
         )
+    }
+
+    func testImageWorkspaceSaveCurrentBehaviorDefaultsToReplaceCurrent() {
+        XCTAssertEqual(SettingsStore.imageWorkspaceSaveCurrentBehavior(defaults: defaults), .replaceCurrent)
+    }
+
+    func testImageWorkspaceSaveCurrentBehaviorPersistsSelectedValues() {
+        for behavior in ImageWorkspaceSaveCurrentBehavior.allCases {
+            SettingsStore.setImageWorkspaceSaveCurrentBehavior(behavior, defaults: defaults)
+
+            XCTAssertEqual(defaults.string(forKey: SettingsStore.imageWorkspaceSaveCurrentBehaviorKey), behavior.rawValue)
+            XCTAssertEqual(SettingsStore.imageWorkspaceSaveCurrentBehavior(defaults: defaults), behavior)
+        }
+    }
+
+    func testImageWorkspaceSaveCurrentBehaviorFallbackWhenPersistedValueIsInvalid() {
+        defaults.set("bad-behavior", forKey: SettingsStore.imageWorkspaceSaveCurrentBehaviorKey)
+
+        XCTAssertEqual(SettingsStore.imageWorkspaceSaveCurrentBehavior(defaults: defaults), .replaceCurrent)
     }
 }

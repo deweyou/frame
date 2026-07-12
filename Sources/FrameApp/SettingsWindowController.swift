@@ -447,6 +447,7 @@ enum SettingsGeneralMetrics {
 enum SettingsScreenshotMetrics {
     static let containsShortcut = false
     static let containsSaveLocation = false
+    static let containsImageWorkspaceSaveCurrentBehavior = true
 }
 
 enum SettingsGroupMetrics {
@@ -693,6 +694,7 @@ private struct ScreenshotSettingsView: View {
     let strings: AppStrings
 
     @State private var selectedWindowScreenshotDecorationStyle = SettingsStore.windowScreenshotDecorationStyle()
+    @State private var selectedImageWorkspaceSaveCurrentBehavior = SettingsStore.imageWorkspaceSaveCurrentBehavior()
 
     var body: some View {
         SettingsSectionGroup(title: strings.settingsScreenshot) {
@@ -709,6 +711,23 @@ private struct ScreenshotSettingsView: View {
                     .accessibilityLabel(strings.settingsWindowScreenshotDecorationStyle)
                     .onChange(of: selectedWindowScreenshotDecorationStyle) { _, style in
                         SettingsStore.setWindowScreenshotDecorationStyle(style)
+                    }
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(strings.settingsImageWorkspaceSaveCurrentBehavior) {
+                    Picker("", selection: $selectedImageWorkspaceSaveCurrentBehavior) {
+                        ForEach(ImageWorkspaceSaveCurrentBehavior.allCases, id: \.self) { behavior in
+                            Text(strings.imageWorkspaceSaveCurrentBehaviorName(behavior))
+                                .tag(behavior)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .accessibilityLabel(strings.settingsImageWorkspaceSaveCurrentBehavior)
+                    .onChange(of: selectedImageWorkspaceSaveCurrentBehavior) { _, behavior in
+                        SettingsStore.setImageWorkspaceSaveCurrentBehavior(behavior)
                     }
                 }
             }

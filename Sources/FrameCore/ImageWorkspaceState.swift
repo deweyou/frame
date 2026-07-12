@@ -10,6 +10,14 @@ public enum ImageWorkspaceClosePolicy: Sendable, Equatable {
     case explicitCloseOnly
 }
 
+public enum ImageWorkspaceSaveCurrentBehavior: String, CaseIterable, Sendable, Equatable {
+    case askEveryTime
+    case replaceCurrent
+    case saveAsNew
+
+    public static let defaultBehavior: ImageWorkspaceSaveCurrentBehavior = .replaceCurrent
+}
+
 public enum ImageEditingTool: CaseIterable, Sendable, Equatable {
     case mosaic
     case shapeBox

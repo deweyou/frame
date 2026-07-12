@@ -1,6 +1,70 @@
 import AppKit
 import FrameCore
 
+struct RememberedSelection: Codable, Equatable {
+    static let lifetime: TimeInterval = 10 * 60
+
+    let windowID: UInt32?
+    let bounds: CGRect
+    let recordedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case windowID
+        case originX
+        case originY
+        case width
+        case height
+        case recordedAt
+    }
+
+    init(windowID: UInt32, bounds: CGRect, recordedAt: Date) {
+        self.windowID = windowID
+        self.bounds = bounds
+        self.recordedAt = recordedAt
+    }
+
+    init(bounds: CGRect, recordedAt: Date) {
+        self.windowID = nil
+        self.bounds = bounds
+        self.recordedAt = recordedAt
+    }
+
+    init(selection: SelectionCapture, recordedAt: Date) {
+        switch selection.kind {
+        case let .window(id):
+            self.init(windowID: id, bounds: selection.rect, recordedAt: recordedAt)
+        case .region:
+            self.init(bounds: selection.rect, recordedAt: recordedAt)
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        windowID = try container.decodeIfPresent(UInt32.self, forKey: .windowID)
+        bounds = CGRect(
+            x: try container.decode(CGFloat.self, forKey: .originX),
+            y: try container.decode(CGFloat.self, forKey: .originY),
+            width: try container.decode(CGFloat.self, forKey: .width),
+            height: try container.decode(CGFloat.self, forKey: .height)
+        )
+        recordedAt = try container.decode(Date.self, forKey: .recordedAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(windowID, forKey: .windowID)
+        try container.encode(bounds.origin.x, forKey: .originX)
+        try container.encode(bounds.origin.y, forKey: .originY)
+        try container.encode(bounds.width, forKey: .width)
+        try container.encode(bounds.height, forKey: .height)
+        try container.encode(recordedAt, forKey: .recordedAt)
+    }
+
+    func isValid(at date: Date) -> Bool {
+        date.timeIntervalSince(recordedAt) < Self.lifetime
+    }
+}
+
 @MainActor
 protocol SelectionOverlayControlling: AnyObject {
     var isSelecting: Bool { get }
@@ -25,13 +89,30 @@ final class SelectionOverlayController: SelectionOverlayControlling {
     private var overlayWindows: [SelectionOverlayWindow] = []
     private var completion: ((SelectionOverlayCompletion?) -> Void)?
     private var keyMonitor: Any?
-    private let windowCandidateProvider = WindowCandidateProvider()
+    private let windowCandidateProvider: WindowCandidateProvider
     private let resetCursor: () -> Void
+    private let currentDate: () -> Date
+    private let rememberedSelectionProvider: (Date) -> RememberedSelection?
+    private let persistRememberedSelection: (RememberedSelection?) -> Void
     var isSelecting: Bool {
         !overlayWindows.isEmpty || completion != nil
     }
 
-    init(resetCursor: @escaping () -> Void = { NSCursor.arrow.set() }) {
+    init(
+        windowCandidateProvider: WindowCandidateProvider = WindowCandidateProvider(),
+        currentDate: @escaping () -> Date = Date.init,
+        rememberedSelectionProvider: @escaping (Date) -> RememberedSelection? = { date in
+            SettingsStore.rememberedSelection(currentDate: date)
+        },
+        persistRememberedSelection: @escaping (RememberedSelection?) -> Void = { selection in
+            SettingsStore.setRememberedSelection(selection)
+        },
+        resetCursor: @escaping () -> Void = { NSCursor.arrow.set() }
+    ) {
+        self.windowCandidateProvider = windowCandidateProvider
+        self.currentDate = currentDate
+        self.rememberedSelectionProvider = rememberedSelectionProvider
+        self.persistRememberedSelection = persistRememberedSelection
         self.resetCursor = resetCursor
     }
 
@@ -55,12 +136,17 @@ final class SelectionOverlayController: SelectionOverlayControlling {
         NSApp.activate(ignoringOtherApps: true)
 
         let activeScreen = activeScreen(from: screens)
+        let rememberedSelection = resolvedRememberedSelection()
         var createdWindows: [SelectionOverlayWindow] = []
         for screen in screens {
+            let initialSelection = rememberedSelection.flatMap { selection in
+                screen.frame.contains(selection.rect.center) ? selection : nil
+            }
             var createdWindow: SelectionOverlayWindow?
             let window = SelectionOverlayWindow(
                 screen: screen,
-                initialGlobalRect: nil,
+                initialGlobalRect: initialSelection?.rect,
+                initialWindowCandidate: initialSelection?.windowCandidate,
                 initialMode: initialMode,
                 showsCenteredHUDWhenEmpty: screen === activeScreen,
                 placeholderText: strings.capturePlaceholder,
@@ -138,6 +224,7 @@ final class SelectionOverlayController: SelectionOverlayControlling {
         }
 
         self.completion = nil
+        updateRememberedSelection(from: completionResult)
         removeKeyMonitor()
 
         for window in overlayWindows {
@@ -148,6 +235,44 @@ final class SelectionOverlayController: SelectionOverlayControlling {
         resetCursor()
 
         completion(completionResult)
+    }
+
+    private func resolvedRememberedSelection() -> (rect: CGRect, windowCandidate: WindowCandidate?)? {
+        guard let rememberedSelection = rememberedSelectionProvider(currentDate()) else {
+            return nil
+        }
+
+        guard rememberedSelection.isValid(at: currentDate()) else {
+            persistRememberedSelection(nil)
+            return nil
+        }
+
+        guard let windowID = rememberedSelection.windowID else {
+            return (rememberedSelection.bounds, nil)
+        }
+
+        guard let candidate = windowCandidateProvider.candidate(id: windowID) else {
+            persistRememberedSelection(nil)
+            return nil
+        }
+
+        return (candidate.bounds, candidate)
+    }
+
+    private func updateRememberedSelection(from completionResult: SelectionOverlayCompletion?) {
+        guard let completionResult else {
+            return
+        }
+
+        guard let selection = completionResult.selection else {
+            persistRememberedSelection(nil)
+            return
+        }
+
+        persistRememberedSelection(RememberedSelection(
+            selection: selection,
+            recordedAt: currentDate()
+        ))
     }
 
     func cancelSelection() {

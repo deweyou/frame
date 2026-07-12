@@ -48,16 +48,11 @@ final class VideoEditorBarView: NSView {
 
     private func setupView() {
         wantsLayer = true
+        appearance = NSAppearance(named: .vibrantDark)
         layer?.backgroundColor = NSColor.clear.cgColor
         translatesAutoresizingMaskIntoConstraints = false
 
-        backgroundView.material = .contentBackground
-        backgroundView.blendingMode = .withinWindow
-        backgroundView.state = .active
-        backgroundView.wantsLayer = true
-        backgroundView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.86).cgColor
-        backgroundView.layer?.borderWidth = 0.5
-        backgroundView.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.4).cgColor
+        FrameHUDChrome.configure(backgroundView, surface: .editor, cornerRadius: 0)
         backgroundView.translatesAutoresizingMaskIntoConstraints = false
 
         playPauseButton.symbolName = "play.fill"
@@ -68,7 +63,7 @@ final class VideoEditorBarView: NSView {
         playPauseButton.translatesAutoresizingMaskIntoConstraints = false
 
         playbackSummaryLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
-        playbackSummaryLabel.textColor = .secondaryLabelColor
+        playbackSummaryLabel.textColor = FrameHUDChrome.secondaryIcon
         playbackSummaryLabel.setContentHuggingPriority(.required, for: .horizontal)
         playbackSummaryLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         playbackSummaryLabel.lineBreakMode = .byTruncatingMiddle
@@ -82,6 +77,7 @@ final class VideoEditorBarView: NSView {
         speedPopupButton.controlSize = .small
         speedPopupButton.isBordered = false
         speedPopupButton.font = .systemFont(ofSize: 11, weight: .semibold)
+        speedPopupButton.contentTintColor = FrameHUDChrome.primaryIcon
         speedPopupButton.toolTip = strings.videoEditorPlaybackSpeed
         speedPopupButton.setAccessibilityLabel(strings.videoEditorPlaybackSpeed)
         speedPopupButton.translatesAutoresizingMaskIntoConstraints = false
@@ -314,7 +310,8 @@ final class VideoEditorBarView: NSView {
         token.layer?.cornerRadius = 13
         token.layer?.cornerCurve = .continuous
         token.layer?.backgroundColor = style.backgroundColor.cgColor
-        token.layer?.borderWidth = 0
+        token.layer?.borderWidth = 0.5
+        token.layer?.borderColor = FrameHUDChrome.border.cgColor
         token.translatesAutoresizingMaskIntoConstraints = false
         return token
     }
@@ -322,7 +319,7 @@ final class VideoEditorBarView: NSView {
     private static func makeTokenLabel(_ string: String) -> NSTextField {
         let label = NSTextField(labelWithString: string)
         label.font = .systemFont(ofSize: 10, weight: .medium)
-        label.textColor = .tertiaryLabelColor
+        label.textColor = FrameHUDChrome.secondaryIcon
         label.setContentHuggingPriority(.required, for: .horizontal)
         label.setContentCompressionResistancePriority(.required, for: .horizontal)
         return label
@@ -334,7 +331,7 @@ final class VideoEditorBarView: NSView {
         var backgroundColor: NSColor {
             switch self {
             case .plain:
-                NSColor.controlBackgroundColor.withAlphaComponent(0.24)
+                FrameHUDChrome.hoverFill
             }
         }
     }
@@ -386,9 +383,9 @@ final class VideoTrimTimelineView: NSView {
         super.draw(dirtyRect)
 
         let strip = stripRect
-        NSColor.controlBackgroundColor.withAlphaComponent(0.78).setFill()
+        FrameHUDChrome.hoverFill.setFill()
         NSBezierPath(roundedRect: strip, xRadius: 9, yRadius: 9).fill()
-        NSColor.separatorColor.withAlphaComponent(0.18).setStroke()
+        FrameHUDChrome.divider.setStroke()
         NSBezierPath(roundedRect: strip, xRadius: 9, yRadius: 9).stroke()
 
         let selectedRect = selectedRect
@@ -422,7 +419,7 @@ final class VideoTrimTimelineView: NSView {
             width: 2,
             height: strip.height + 4
         ), xRadius: 0.75, yRadius: 0.75)
-        NSColor.labelColor.withAlphaComponent(0.64).setFill()
+        FrameHUDChrome.primaryIcon.withAlphaComponent(0.64).setFill()
         playheadPath.fill()
     }
 
@@ -605,9 +602,9 @@ final class VideoTrimTimelineView: NSView {
     private func drawHandle(centerX: CGFloat, strip: CGRect) {
         let handleRect = CGRect(x: centerX - 2.5, y: strip.midY - 15, width: 5, height: 30)
         let handlePath = NSBezierPath(roundedRect: handleRect, xRadius: 2.5, yRadius: 2.5)
-        NSColor.labelColor.withAlphaComponent(0.52).setFill()
+        FrameHUDChrome.secondaryIcon.withAlphaComponent(0.76).setFill()
         handlePath.fill()
-        NSColor.windowBackgroundColor.withAlphaComponent(0.72).setStroke()
+        NSColor.black.withAlphaComponent(0.72).setStroke()
         handlePath.lineWidth = 0.6
         handlePath.stroke()
     }
@@ -620,7 +617,7 @@ final class VideoTrimTimelineView: NSView {
             field.backgroundColor = .clear
             field.focusRingType = .none
             field.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
-            field.textColor = .secondaryLabelColor
+            field.textColor = FrameHUDChrome.secondaryIcon
             field.alignment = .center
             field.target = nil
             field.action = nil
@@ -834,7 +831,7 @@ private final class VideoEditorTransportButton: NSButton {
 
         iconView.imageScaling = .scaleProportionallyDown
         iconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
-        iconView.contentTintColor = .labelColor
+        iconView.contentTintColor = FrameHUDChrome.primaryIcon
         iconView.translatesAutoresizingMaskIntoConstraints = true
         addSubview(iconView)
 
@@ -857,7 +854,7 @@ private final class VideoEditorTransportButton: NSButton {
             alpha = 0.10
         }
 
-        layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(alpha).cgColor
-        iconView.contentTintColor = isEnabled ? .labelColor : .disabledControlTextColor
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(alpha).cgColor
+        iconView.contentTintColor = isEnabled ? FrameHUDChrome.primaryIcon : FrameHUDChrome.disabledIcon
     }
 }

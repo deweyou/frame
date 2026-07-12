@@ -10,6 +10,7 @@ final class SelectionOverlayWindow {
     init(
         screen: NSScreen,
         initialGlobalRect: CGRect?,
+        initialWindowCandidate: WindowCandidate? = nil,
         initialMode: SelectionOverlayInitialMode = .screenshot,
         showsCenteredHUDWhenEmpty: Bool,
         placeholderText: String,
@@ -24,6 +25,7 @@ final class SelectionOverlayWindow {
         overlayView = SelectionOverlayView(
             screen: screen,
             initialGlobalRect: initialGlobalRect,
+            initialWindowCandidate: initialWindowCandidate,
             initialMode: initialMode,
             showsCenteredHUDWhenEmpty: showsCenteredHUDWhenEmpty,
             placeholderText: placeholderText,
@@ -199,6 +201,10 @@ final class SelectionOverlayWindow {
         overlayView.isDelayCountdownActiveForTesting()
     }
 
+    func isHUDHiddenForTesting() -> Bool {
+        overlayView.isHUDHiddenForTesting()
+    }
+
     func countdownFrameForTesting() -> CGRect? {
         overlayView.countdownFrameForTesting()
     }
@@ -347,6 +353,7 @@ private final class SelectionOverlayView: NSView {
     init(
         screen: NSScreen,
         initialGlobalRect: CGRect?,
+        initialWindowCandidate: WindowCandidate?,
         initialMode: SelectionOverlayInitialMode,
         showsCenteredHUDWhenEmpty: Bool,
         placeholderText: String,
@@ -372,8 +379,9 @@ private final class SelectionOverlayView: NSView {
         super.init(frame: CGRect(origin: .zero, size: screen.frame.size))
 
         wantsLayer = true
-        selectionRect = localRect(fromGlobalRect: initialGlobalRect)
-        isWindowHoverPreselectionEnabled = initialGlobalRect == nil
+        windowCandidate = initialWindowCandidate
+        selectionRect = localRect(fromGlobalRect: initialWindowCandidate?.bounds ?? initialGlobalRect)
+        isWindowHoverPreselectionEnabled = initialGlobalRect == nil && initialWindowCandidate == nil
         configureHUD()
         configurePlaceholder()
         if initialMode == .recordingSetup {
@@ -1490,6 +1498,9 @@ private final class SelectionOverlayView: NSView {
         dragOperation = nil
         pendingTooltipTask?.cancel()
         tooltipView.isHidden = true
+        hudStackView.isHidden = true
+        modeView.isHidden = true
+        sizeView.isHidden = true
         showCountdown(secondsRemaining: 5)
 
         guard delayCountdownNanoseconds > 0 else {
@@ -1616,6 +1627,14 @@ private final class SelectionOverlayView: NSView {
     }
 
     private func updateMetrics() {
+        if isDelayCountdownActive {
+            hudStackView.isHidden = true
+            modeView.isHidden = true
+            sizeView.isHidden = true
+            placeholderView.isHidden = true
+            return
+        }
+
         guard let displayedLocalRect else {
             hudStackView.isHidden = true
             modeView.isHidden = true
@@ -1931,6 +1950,10 @@ private final class SelectionOverlayView: NSView {
 
     func isDelayCountdownActiveForTesting() -> Bool {
         isDelayCountdownActive
+    }
+
+    func isHUDHiddenForTesting() -> Bool {
+        hudStackView.isHidden
     }
 
     func countdownFrameForTesting() -> CGRect? {

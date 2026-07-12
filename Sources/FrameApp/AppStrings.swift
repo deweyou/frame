@@ -272,6 +272,13 @@ struct AppStrings {
         }
     }
 
+    var settingsImageWorkspaceSaveCurrentBehavior: String {
+        switch language {
+        case .zhHans: "编辑保存方式"
+        case .en: "Edited screenshot save"
+        }
+    }
+
     func windowScreenshotDecorationStyleName(_ style: WindowScreenshotDecorationStyle) -> String {
         switch style {
         case .softBackdrop:
@@ -293,6 +300,26 @@ struct AppStrings {
             switch language {
             case .zhHans: "原图"
             case .en: "Original"
+            }
+        }
+    }
+
+    func imageWorkspaceSaveCurrentBehaviorName(_ behavior: ImageWorkspaceSaveCurrentBehavior) -> String {
+        switch behavior {
+        case .askEveryTime:
+            switch language {
+            case .zhHans: "每次询问"
+            case .en: "Ask Every Time"
+            }
+        case .replaceCurrent:
+            switch language {
+            case .zhHans: "替换当前图"
+            case .en: "Replace Current"
+            }
+        case .saveAsNew:
+            switch language {
+            case .zhHans: "另存新图"
+            case .en: "Save As New"
             }
         }
     }
@@ -654,6 +681,20 @@ struct AppStrings {
         }
     }
 
+    var workspaceSaveAndCopy: String {
+        switch language {
+        case .zhHans: "保存并复制"
+        case .en: "Save and Copy"
+        }
+    }
+
+    var workspaceSaveAndDownload: String {
+        switch language {
+        case .zhHans: "保存并下载"
+        case .en: "Save and Download"
+        }
+    }
+
     var workspaceReplaceCurrent: String {
         switch language {
         case .zhHans: "替换当前图"
@@ -824,6 +865,20 @@ struct AppStrings {
             switch language {
             case .zhHans: return "绿色"
             case .en: return "Green"
+            }
+        }
+
+        if color == .white {
+            switch language {
+            case .zhHans: return "白色"
+            case .en: return "White"
+            }
+        }
+
+        if color == .black {
+            switch language {
+            case .zhHans: return "黑色"
+            case .en: return "Black"
             }
         }
 

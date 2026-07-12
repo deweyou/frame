@@ -76,13 +76,22 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
         let toolbar = NSStackView()
         toolbar.orientation = .horizontal
         toolbar.alignment = .centerY
-        toolbar.spacing = 8
+        toolbar.spacing = 0
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         let headerSpacer = NSView()
         headerSpacer.translatesAutoresizingMaskIntoConstraints = false
+        headerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        headerSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         toolbar.addArrangedSubview(headerSpacer)
+
+        let outputGroup = NSView()
+        outputGroup.identifier = NSUserInterfaceItemIdentifier("VideoPreviewOutputGroup")
+        outputGroup.translatesAutoresizingMaskIntoConstraints = false
+        outputGroup.setContentHuggingPriority(.required, for: .horizontal)
+        outputGroup.setContentCompressionResistancePriority(.required, for: .horizontal)
+        var outputButtons: [NSButton] = []
         if editingState != nil {
-            toolbar.addArrangedSubview(
+            outputButtons.append(
                 makeSaveCurrentButton(
                     title: strings.workspaceSaveCurrent,
                     symbolName: "checkmark.circle",
@@ -94,7 +103,7 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
                 )
             )
         }
-        toolbar.addArrangedSubview(
+        outputButtons.append(
             makeButton(
                 title: strings.videoQuickAccessCopy,
                 symbolName: "doc.on.doc",
@@ -103,7 +112,7 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
                 }
             )
         )
-        toolbar.addArrangedSubview(
+        outputButtons.append(
             makeButton(
                 title: strings.videoQuickAccessDownload,
                 symbolName: "tray.and.arrow.down",
@@ -112,6 +121,26 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
                 }
             )
         )
+        for button in outputButtons {
+            outputGroup.addSubview(button)
+        }
+        for (index, button) in outputButtons.enumerated() {
+            NSLayoutConstraint.activate([
+                button.centerYAnchor.constraint(equalTo: outputGroup.centerYAnchor),
+                button.leadingAnchor.constraint(
+                    equalTo: index == 0 ? outputGroup.leadingAnchor : outputButtons[index - 1].trailingAnchor,
+                    constant: index == 0 ? 0 : 2
+                ),
+            ])
+        }
+        if let lastButton = outputButtons.last {
+            lastButton.trailingAnchor.constraint(equalTo: outputGroup.trailingAnchor).isActive = true
+        }
+        outputGroup.widthAnchor.constraint(
+            equalToConstant: CGFloat(outputButtons.count * 28 + max(0, outputButtons.count - 1) * 2)
+        ).isActive = true
+        outputGroup.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        toolbar.addArrangedSubview(outputGroup)
 
         let header = makeHeaderView()
         header.addSubview(toolbar)
@@ -402,17 +431,9 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
 
     private func makeHeaderView() -> NSVisualEffectView {
         let header = NSVisualEffectView()
-        header.material = .hudWindow
-        header.blendingMode = .withinWindow
-        header.state = .active
+        header.identifier = NSUserInterfaceItemIdentifier("VideoPreviewOutputHeader")
         header.alphaValue = 1
-        header.wantsLayer = true
-        header.layer?.cornerRadius = 16
-        header.layer?.cornerCurve = .continuous
-        header.layer?.masksToBounds = true
-        header.layer?.borderWidth = 0.5
-        header.layer?.borderColor = NSColor.white.withAlphaComponent(0.38).cgColor
-        header.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.04).cgColor
+        FrameHUDChrome.configure(header, surface: .toolbar, cornerRadius: 16)
         header.translatesAutoresizingMaskIntoConstraints = false
         return header
     }
@@ -420,7 +441,7 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
     private func makeDisabledButton(title: String, symbolName: String) -> NSButton {
         let button = makeButton(title: title, symbolName: symbolName, action: { false })
         button.isEnabled = false
-        button.contentTintColor = .disabledControlTextColor
+        button.contentTintColor = FrameHUDChrome.disabledIcon
         return button
     }
 
@@ -445,13 +466,14 @@ final class VideoPreviewWindowController: NSObject, NSWindowDelegate {
     private func configureActionButton(_ button: NSButton) {
         button.isBordered = false
         button.bezelStyle = .regularSquare
+        button.controlSize = .small
         button.imagePosition = .imageOnly
         button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
-        button.contentTintColor = .labelColor
+        button.contentTintColor = FrameHUDChrome.primaryIcon
         button.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            button.widthAnchor.constraint(equalToConstant: 26),
-            button.heightAnchor.constraint(equalToConstant: 24),
+            button.widthAnchor.constraint(equalToConstant: 28),
+            button.heightAnchor.constraint(equalToConstant: 28),
         ])
     }
 
@@ -566,7 +588,103 @@ private final class VideoPreviewItem {
     }
 }
 
-private final class VideoPreviewActionButton: NSButton {
+private class VideoPreviewToolbarButton: NSButton {
+    private let hoverLayer = CALayer()
+    private var trackingArea: NSTrackingArea?
+    private var isHovering = false {
+        didSet {
+            updateHoverAppearance()
+        }
+    }
+
+    override var isEnabled: Bool {
+        didSet {
+            if !isEnabled {
+                isHovering = false
+            }
+            updateHoverAppearance()
+            window?.invalidateCursorRects(for: self)
+        }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.masksToBounds = false
+        hoverLayer.backgroundColor = FrameHUDChrome.hoverFill.cgColor
+        hoverLayer.cornerCurve = .continuous
+        hoverLayer.opacity = 0
+        layer?.insertSublayer(hoverLayer, at: 0)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func layout() {
+        super.layout()
+        let side = min(22, min(bounds.width, bounds.height))
+        hoverLayer.frame = CGRect(
+            x: bounds.midX - side / 2,
+            y: bounds.midY - side / 2,
+            width: side,
+            height: side
+        )
+        hoverLayer.cornerRadius = side / 2
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let newTrackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .mouseEnteredAndExited, .cursorUpdate, .inVisibleRect],
+            owner: self
+        )
+        addTrackingArea(newTrackingArea)
+        trackingArea = newTrackingArea
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        if isEnabled {
+            addCursorRect(bounds, cursor: .pointingHand)
+        }
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        if isEnabled {
+            NSCursor.pointingHand.set()
+        } else {
+            NSCursor.arrow.set()
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = isEnabled
+        super.mouseEntered(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+        super.mouseExited(with: event)
+    }
+
+    private func updateHoverAppearance() {
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = hoverLayer.presentation()?.opacity ?? hoverLayer.opacity
+        animation.toValue = isHovering ? 1 : 0
+        animation.duration = 0.14
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        hoverLayer.opacity = isHovering ? 1 : 0
+        hoverLayer.add(animation, forKey: "opacity")
+    }
+}
+
+private final class VideoPreviewActionButton: VideoPreviewToolbarButton {
     private let handler: () -> Bool
 
     init(action: @escaping () -> Bool) {
@@ -586,7 +704,7 @@ private final class VideoPreviewActionButton: NSButton {
     }
 }
 
-private final class VideoPreviewSaveButton: NSButton {
+private final class VideoPreviewSaveButton: VideoPreviewToolbarButton {
     private let replaceTitle: String
     private let saveAsNewTitle: String
     private let handler: (VideoPreviewSaveChoice) -> Bool
