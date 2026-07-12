@@ -28,6 +28,12 @@ struct WindowCandidateProvider {
         return fallbackLookup.candidate
     }
 
+    func candidate(id: UInt32) -> WindowCandidate? {
+        windowInfos(belowWindowNumber: nil)
+            .compactMap(candidate(from:))
+            .first { $0.id == id }
+    }
+
     private func lookupCandidate(
         at point: CGPoint,
         belowWindowNumber: Int?

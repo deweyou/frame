@@ -1,5 +1,10 @@
 # Screenshot Editor Design
 
+> Superseded in part by
+> `docs/superpowers/specs/2026-07-09-image-editor-workflow-polish-design.md`
+> for the contextual header style control, canvas tool shortcuts, double-click
+> object context switching, and configurable Save Current default behavior.
+
 ## Goal
 
 Ship Frame's first real screenshot editing workflow inside the existing Image Workspace. Users keep the current Quick Access-first capture loop, open the workspace when they want to edit, add annotations, update the current in-memory edited screenshot, or download a new PNG.
@@ -18,11 +23,10 @@ Ship Frame's first real screenshot editing workflow inside the existing Image Wo
 - The toolbar remains a single top row. Shape tools are flat top-level buttons
   for rectangle, oval, line, and arrow. Only mosaic uses a split button: clicking
   the main icon activates the current mosaic mode immediately, while the adjacent
-  chevron opens Region/Brush mosaic options. Color is a standalone shared
-  toolbar dropdown; the adjacent style dropdown is contextual, showing stroke
-  Thickness for shape/brush/highlight and Font Size for text. Color shows the
-  currently selected color as its icon. Dropdown menus mark the active option.
-  No persistent side inspector and no canvas property floating bar.
+  chevron opens Region/Brush mosaic options. The later 2026-07-09 workflow
+  polish replaces the old separate Color and Thickness/Font Size toolbar menu
+  buttons with a compact context-aware header style control for frequent color
+  and size edits. Do not add a persistent side inspector or full property panel.
 - The workspace opens with pointer/select active by default, while remembering
   the last selected color, thickness, font size, shape kind, and mosaic mode.
   The mosaic toolbar icon reflects the selected mosaic subtool.
@@ -46,12 +50,18 @@ This iteration includes:
   the drag.
 - Object selection, move, bottom-right resize, delete, undo, and redo.
 - Text creation and double-click/re-enter editing.
+- Double-clicking non-text annotations enters the matching editing context:
+  shape subtypes select their matching shape tool, brush selects Brush,
+  highlight selects Highlight, and mosaic selects Mosaic with the matching mode.
+- Canvas tool shortcuts select editor tools while no inline text editor is
+  active.
 - Copy and Download use the current rendered edited image.
-- Save Current opens a replace-or-save-new menu. Replace updates the workspace's current screenshot rendition and any still-active Quick Access preview without writing an external file; Save As New creates another Quick Access preview and keeps the workspace open without writing a local file directly.
-- Closing the workspace with unsaved edits prompts for Replace Current, Save As
-  New, Don't Save, or Cancel. Save choices close after they succeed; Don't Save
-  closes without calling save handlers; Cancel keeps the workspace open with
-  edits intact.
+- Save Current follows the user's configured default. Ask Every Time opens a replace-or-save-new menu. Replace updates the workspace's current screenshot rendition and any still-active Quick Access preview without writing an external file; Save As New creates another Quick Access preview and keeps the workspace open without writing a local file directly.
+- Closing the workspace with unsaved edits prompts for Save, Don't Save, or
+  Cancel when a direct Save Current default is selected. Ask Every Time retains
+  Replace Current / Save As New. Save choices close after they succeed; Don't
+  Save closes without calling save handlers; Cancel keeps the workspace open
+  with edits intact.
 - Pinned image windows remain image-only; Edit opens the full editor workspace.
 
 This iteration excludes:
@@ -86,15 +96,19 @@ The workspace should not recapture the screen. It edits the PNG/image already pr
 - Tools with options use a compact split-button affordance: the main icon area
   selects the tool, and a small adjacent chevron opens the menu. `Select` remains
   a single button because it has no options.
-- Save Current uses a checkmark-style action and stays enabled when edits exist.
+- Save Current uses a checkmark-style action, stays enabled when edits exist,
+  and executes the configured default behavior on primary click.
 - Download writes a new PNG from the current edited rendition.
-- Selection handles are small, high-contrast, and drawn only for the selected object.
+- Selected annotations use a thin high-contrast outline without a visible resize
+  anchor; the top-right corner remains the resize target.
+- Save Current, Copy, and Download are equal-sized controls in a compact output
+  group. Copy and Download tooltips read Save and Copy and Save and Download.
 - Text editing uses an inline native text field placed over the text object.
 
 ## Output Semantics
 
 - Copy renders base screenshot plus unsaved annotations and writes that image to the clipboard.
-- Save Current renders base screenshot plus annotations, replaces the workspace's current screenshot, refreshes the still-active Quick Access preview, clears the annotation stack, and keeps the workspace open.
+- Replace Current renders base screenshot plus annotations, replaces the workspace's current screenshot, refreshes the still-active Quick Access preview, clears the annotation stack, and keeps the workspace open.
 - Save As New renders base screenshot plus annotations into a new screenshot identity, creates another Quick Access preview, keeps the workspace open, and leaves the current workspace edits uncommitted.
 - Download renders base screenshot plus annotations, writes a new PNG through the configured screenshot directory, and follows the existing temporary workspace close behavior on success.
 - Pinned windows keep their existing context menu output behavior and do not expose editing chrome directly.
@@ -113,8 +127,9 @@ The workspace should not recapture the screen. It edits the PNG/image already pr
   split-button menu behavior, dropdown menu contents and active states, cached
   toolbar option restoration, Shift-constrained shape drawing, rectangular
   mosaic draft-vs-commit rendering, copy/download using rendered edited output,
-  Save Current updating the workspace current image without external save, Save
-  As New creating a new Quick Access preview, and text editing/style re-entry.
+  Replace Current updating the workspace current image without external save,
+  Save As New creating a new Quick Access preview, and text editing/style
+  re-entry.
 - Manual smoke covers real mouse drawing, resizing handles, text editing, mosaic region/brush visual output, and saved PNG inspection.
 
 ## Acceptance Criteria
@@ -127,14 +142,21 @@ The workspace should not recapture the screen. It edits the PNG/image already pr
 - Text can be edited again after creation, and selected text updates when Font Size changes.
 - Only mosaic tool options live in a split-button dropdown menu on the top
   toolbar; clicking a main tool icon does not open the menu.
-- Color and contextual style controls live in standalone shared toolbar dropdown
-  menus, not in each drawable tool menu. The style menu shows Thickness for
-  shape/brush/highlight and Font Size for text. Thickness offers 1, 2, 4, 8,
-  12, 16, and 24 px.
+- Color and contextual style controls live in the compact context-aware header
+  style control, not in each drawable tool menu. The control uses an icon-only
+  color swatch without a visible chevron, a tiled icon-only color dropdown
+  palette, and an icon-only contextual size slider.
+  It shows Thickness for shape/brush/highlight and Font Size for text. Select,
+  mosaic, and other contexts without color/size controls hide the control. Text
+  sizes range from 12 through 96 pt.
+  Thickness offers 1, 2, 4, 8, 12, 16, and 24 px.
 - Dropdown menus mark the active option and restore the last selected color,
   thickness, font size, shape kind, and mosaic mode while still opening with the
   pointer/select tool active.
 - Copy and Download output the rendered edited screenshot.
-- Save Current offers Replace Current and Save As New choices.
-- Closing with unsaved edits offers Replace Current, Save As New, Don't Save, and Cancel choices.
+- Save Current follows the configured default and Ask Every Time offers Replace
+  Current and Save As New choices.
+- Closing with unsaved edits follows the Save Current preference: direct defaults
+  offer Save, Don't Save, and Cancel, while Ask Every Time retains Replace
+  Current / Save As New.
 - README English and Chinese product descriptions no longer say annotation tools are missing.

@@ -89,6 +89,12 @@ system tool, not a branded dashboard.
 - Do not show a persistent confirmation button. Enter confirms; Esc cancels.
 - Prefer direct manipulation. Window capture should primarily use hover
   highlight plus click/Enter, not a heavy button workflow.
+- After confirming a screenshot selection, remember it for the next ten minutes,
+  including after Frame restarts. A window selection revalidates its window ID
+  against the current global window list before restoring it, while a region
+  selection restores its saved rectangle. Either valid selection suppresses
+  hover-based window preselection. A full-screen capture, a missing remembered
+  window, or expiration clears the memory.
 - Hover state is a circular background behind the icon, not a full cell or
   whole-toolbar highlight.
 - Tooltips should be delayed and owned above the overlay/HUD layer. Default
@@ -101,8 +107,9 @@ system tool, not a branded dashboard.
   quiet hairline border, and subtle hover fill instead.
 - Delay screenshot countdowns are passive: after the user starts the countdown,
   keep a prominent semi-transparent red countdown near the current screen's
-  bottom center while letting underlying apps receive mouse interaction. Avoid a
-  white outline around the countdown.
+  bottom center while letting underlying apps receive mouse interaction. Hide
+  the selection HUD for the countdown so it cannot obstruct the desktop. Avoid
+  a white outline around the countdown.
 
 ## Recording HUD
 
@@ -143,22 +150,22 @@ system tool, not a branded dashboard.
 
 ## HUD And Workspace Chrome
 
-- HUD-like controls share one visual language across capture, Quick Access, and
-  Image Workspace surfaces.
+- HUD-like controls share one visual language across capture, Image Workspace,
+  video preview/editing, and Quick Access surfaces.
 - Glass containers use HUD material, a quiet translucent border, and capsule
   geometry when the control row is short. For fixed-height toolbars, the left
   and right ends should read as large rounded caps rather than square panels.
-- Capture and recording HUD rows use a darker, less-transparent glass fill under
-  that material so white icons stay readable without relying on background
-  luminance detection.
+- Capture, recording, and workspace toolbar rows use a darker,
+  less-transparent glass fill under that material so light icons stay readable
+  without relying on background luminance detection.
 - Icon buttons are icon-only except for compact state toggles such as the
   MP4/GIF recording format control. Their default state is quiet; hover shows a
   circular background behind the icon instead of changing the whole toolbar or
   adding explanatory text.
 - Actions that are visible before their behavior is implemented stay disabled:
   no pointer cursor, no hover fill, and disabled tint.
-- Selected tools keep the same circular affordance, using a subtle accent tint
-  rather than a heavy filled segment.
+- Selected tools keep the same circular affordance, using a compact accent tint
+  with a light glyph rather than a heavy filled segment.
 - Toolbar chrome must not obscure the screenshot. Workspace toolbar rows align
   vertically with the native traffic-light row and extend behind the native
   traffic-light controls. The toolbar chrome and image preview run edge-to-edge
@@ -186,11 +193,20 @@ system tool, not a branded dashboard.
   These actions must not close the pinned window. Edit opens or activates the
   preview/edit workspace for the same screenshot.
 - Every icon-only action must keep a tooltip and accessibility label.
+- Video Preview output actions follow the workspace's traffic-light-safe header
+  pattern: a compact, right-aligned group of fixed-width icon cells with a
+  centered hover circle. The MP4 editor remains a deep horizontal workbench for
+  its timeline, playback, duration, and speed controls rather than becoming a
+  second floating capsule toolbar.
 
 ## Quick Access
 
 - Quick Access is a small fixed post-capture preview with icon-only hover
   actions for copy, save, workspace, pin, and close.
+- Keep captured image and video pixels visually true. Apply stable deep glass
+  only to hover action overlays, close/status/duration accessories, fallback
+  placeholders, and the larger hover preview shell so arbitrary media or
+  wallpaper cannot lower control contrast.
 - It anchors to the active screen's bottom-left corner with equal left and
   bottom padding.
 - While previews are visible, they follow active-screen changes.
@@ -199,33 +215,62 @@ system tool, not a branded dashboard.
   pasteboard drags.
 - Workspace opens a movable preview/edit window that stays open across focus
   changes. If there are unsaved edits, Escape or the native close control asks
-  whether to Replace Current, Save As New, Don't Save, or Cancel and continue
-  editing; pin behavior is handled separately as an image-only pinned window.
+  Save, Don't Save, or Cancel. Save follows the configured Save Current default;
+  only an explicit Ask Every Time preference exposes Replace Current / Save As
+  New in this close flow. Pin behavior is handled separately as an image-only
+  pinned window.
 - Opening workspace again for the same captured screenshot activates the existing
   preview/edit window instead of creating duplicates.
 - Workspace Copy and Download are active output actions. On success they close
   the workspace and the originating Quick Access preview. The checkmark Save
-  Current action opens a choice between replacing the current in-memory edited
-  screenshot and creating a new Quick Access preview; replacing keeps the
-  workspace open, refreshes any still-active Quick Access preview, and must not
-  overwrite a user-saved external file. Save As New keeps the workspace open and
-  adds another Quick Access preview instead of writing a file directly.
+  Current action follows the user's configured default: Ask Every Time opens the
+  Replace Current / Save As New choice menu, Replace Current updates the
+  current in-memory edited screenshot and any still-active Quick Access preview,
+  and Save As New creates another Quick Access preview. Replace Current must not
+  overwrite a user-saved external file.
+- Save Current, Copy, and Download form one compact, evenly sized output group
+  in the workspace toolbar. Copy and Download tooltips read Save and Copy and
+  Save and Download. The toolbar divides History, Tools, Contextual Style, and
+  Output with short quiet separators; the style separator hides with its control.
+  Every primary icon uses the shared visual-metrics catalog, a 28 pt control cell,
+  a 22 pt hover/selected circle, and a 14 pt visual glyph box. Normalize native
+  SF Symbol ink bounds through that catalog instead of adding point-size or
+  baseline overrides at individual button call sites.
 - Screenshot editing controls stay in the top workspace toolbar. Shape tools
   are flat top-level buttons for rectangle, oval, line, and arrow. Only mosaic
   uses a split button: the main icon activates the current mosaic mode, and the
-  adjacent chevron opens Region/Brush mosaic options. Color is a standalone
-  toolbar dropdown that shows the current color as its icon. The adjacent style
-  dropdown is contextual: stroke Thickness for shape, brush, and highlight, and
-  Font Size for text. Text does not expose a separate tool dropdown. The editor
-  opens with the pointer/select tool active, while remembering the last selected
-  color, thickness, font size, mosaic mode, and shape type. Thickness options
-  include 1, 2, 4, 8, 12, 16, and 24 px. Dropdown menus mark the active option
-  with the native menu selected state. The mosaic primary icon follows its
-  selected subtool. Do not use a persistent side inspector or a floating property
-  bar over the screenshot.
+  attached chevron opens Region/Brush mosaic options through at least a 20 pt
+  target. The two sides share one compact visual container, inner divider, and
+  hover/selected state while retaining independent actions. The old separate
+  Color and Thickness/Font Size toolbar menus are
+  replaced by a compact contextual header style control. It appears in the
+  toolbar only when the selected object or active tool supports color and
+  contextual size edits. Color uses an icon-only swatch selector without a
+  visible chevron and a tiled dropdown palette, while contextual size uses an icon plus
+  slider without a visible numeric value. The control edits the selected
+  annotation when one is selected, or the current tool defaults when no
+  annotation is selected. It is a lightweight editing affordance, not a
+  persistent side inspector or layer/property panel.
+- The image canvas uses a fully opaque black backdrop behind aspect-fitted image
+  content; do not let desktop/window translucency show through the work area.
+- The editor opens with the pointer/select tool active, while remembering the
+  last selected color, thickness, font size, mosaic mode, and shape type.
+  Thickness options include 1, 2, 4, 8, 12, 16, and 24 px; text sizes include
+  12, 14, 16, 18, 22, 28, 36, 48, 64, 80, and 96 pt. Dropdown menus mark the
+  active option with the native menu selected state. The mosaic primary icon
+  follows its selected subtool.
 - Editing is object-based: annotations can be selected, moved, resized, deleted,
-  undone, and redone. Selection handles should remain small and high-contrast.
-- Text annotations support re-entering text edit mode after creation.
+  undone, and redone. Selected annotations use a thin high-contrast outline
+  without a visible resize anchor; their top-right corner remains a resize target.
+- Text annotations support re-entering text edit mode after creation. Double
+  clicking any annotation enters that object's editing context: text edits
+  inline, shape subtypes select their matching shape tool, and brush, highlight,
+  and mosaic select their matching tool context.
+- Canvas tool shortcuts are local to the Image Workspace responder chain. Use
+  `V`, `R`, `O`, `L`, `A`, `B`, `T`, `H`, and `M` for Select, Rectangle, Oval,
+  Line, Arrow, Brush, Text, Highlight, and Mosaic; `[` and `]` step contextual
+  size. Inline text editing keeps native text shortcuts and normal character
+  entry.
 - Shape annotations include rectangle, oval, line, and arrow. Arrows should be
   straight-edged filled wedge arrows that grow from a fine tail into a wider
   body and filled head instead of stroked line arrows. Holding Shift while

@@ -73,6 +73,28 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
         XCTAssertEqual(headerFrame.midY, closeFrame.midY, accuracy: 3)
         XCTAssertEqual(headerFrame.midY, miniaturizeFrame.midY, accuracy: 3)
         XCTAssertEqual(headerFrame.midY, zoomFrame.midY, accuracy: 3)
+        XCTAssertEqual(header.appearance?.name, .vibrantDark)
+        XCTAssertEqual(header.material, .hudWindow)
+        XCTAssertGreaterThanOrEqual(
+            header.layer?.backgroundColor?.alpha ?? 0,
+            FrameHUDChrome.backgroundColor(for: .toolbar).alphaComponent
+        )
+
+        let outputGroup = try XCTUnwrap(findSubview(identifier: "VideoPreviewOutputGroup", in: contentView))
+        XCTAssertEqual(outputGroup.frame.width, 88, accuracy: 0.5)
+        var previousFrame: CGRect?
+        for label in ["Save Current", "Copy", "Download"] {
+            let button = try XCTUnwrap(findButton(accessibilityLabel: label, in: outputGroup))
+            XCTAssertEqual(button.frame.width, 28, accuracy: 0.5)
+            XCTAssertEqual(button.frame.midY, outputGroup.bounds.midY, accuracy: 1)
+            XCTAssertEqual(button.contentTintColor, FrameHUDChrome.primaryIcon)
+            XCTAssertEqual(button.layer?.sublayers?.first?.bounds.width ?? 0, 22, accuracy: 0.5)
+            XCTAssertEqual(button.layer?.sublayers?.first?.bounds.height ?? 0, 22, accuracy: 0.5)
+            if let previousFrame {
+                XCTAssertEqual(button.frame.minX - previousFrame.maxX, 2, accuracy: 0.5)
+            }
+            previousFrame = button.frame
+        }
     }
 
     func testGIFPreviewWindowDoesNotShowEditorBar() throws {
@@ -274,6 +296,35 @@ final class VideoPreviewWindowControllerTests: XCTestCase {
         for subview in view.subviews {
             if let matchingView = findSubview(of: type, in: subview) {
                 return matchingView
+            }
+        }
+
+        return nil
+    }
+
+    private func findSubview(identifier: String, in view: NSView) -> NSView? {
+        if view.identifier?.rawValue == identifier {
+            return view
+        }
+
+        for subview in view.subviews {
+            if let matchingView = findSubview(identifier: identifier, in: subview) {
+                return matchingView
+            }
+        }
+
+        return nil
+    }
+
+    private func findButton(accessibilityLabel: String, in view: NSView) -> NSButton? {
+        if let button = view as? NSButton,
+           button.accessibilityLabel() == accessibilityLabel {
+            return button
+        }
+
+        for subview in view.subviews {
+            if let matchingButton = findButton(accessibilityLabel: accessibilityLabel, in: subview) {
+                return matchingButton
             }
         }
 

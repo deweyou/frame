@@ -2,9 +2,13 @@
 
 ```mermaid
 flowchart TD
-    Start["Overlay starts empty"] --> HoverWindow["Hover eligible window: temporary window selection"]
+    Start["Overlay starts"] --> Restored["Valid remembered selection: restore"]
+    Start --> Empty["No valid remembered selection"]
+    Empty --> HoverWindow["Hover eligible window: temporary window selection"]
+    Restored --> Fixed["Window selection fixed"]
     HoverWindow --> HoverEmpty["Hover empty space: clear temporary selection"]
     HoverWindow --> Click["Click suggested window: keep window selection"]
+    Click --> Fixed
     HoverWindow --> DragInside["Drag inside suggested window: create manual region"]
     Outside["Outside selection"] --> Create["Crosshair: create a new region"]
     Inside["Inside non-fullscreen selection"] --> Move["Open hand: move the region"]
@@ -18,9 +22,15 @@ clicks. Cursor shape and drag behavior must stay aligned.
 
 ## Rules
 
-- A new capture starts with no restored selection. While the user has not
-  clicked or dragged, hovering an eligible app window temporarily selects that
-  window; hovering empty space clears it.
+- A confirmed screenshot selection is remembered in user preferences for ten
+  minutes, including across Frame restarts. The next overlay revalidates a
+  remembered window ID against the current global window list, while a
+  remembered region restores its saved rectangle. Either restored selection
+  skips hover preselection. A full-screen capture, expiration, or a missing
+  remembered window clears the memory.
+- Without a valid remembered selection, a new capture starts empty. While the user
+  has not clicked or dragged, hovering an eligible app window temporarily
+  selects that window; hovering empty space clears it.
 - Clicking the suggested window exits automatic window preselection and keeps
   that window selected. Dragging inside the suggested window exits automatic
   mode and starts a manual region selection from that point instead of moving
@@ -43,7 +53,8 @@ clicks. Cursor shape and drag behavior must stay aligned.
 ## Key Files
 
 - [Sources/FrameApp/SelectionOverlayWindow.swift](../Sources/FrameApp/SelectionOverlayWindow.swift) owns overlay hit-testing, cursor rectangles, resize behavior, handles, and HUD tooltip placement.
+- [Sources/FrameApp/SelectionOverlayController.swift](../Sources/FrameApp/SelectionOverlayController.swift) owns the persisted ten-minute remembered selection lifecycle, region restoration, and window revalidation before overlays open.
 - [Sources/FrameApp/HUDSizeControl.swift](../Sources/FrameApp/HUDSizeControl.swift) owns size HUD buttons, ratio menu state, and tooltip hover callbacks.
 
 ---
-*Last updated: 2026-07-01 | Reason: documented automatic hover window preselection*
+*Last updated: 2026-07-10 | Reason: document persistent region and window selection restoration*

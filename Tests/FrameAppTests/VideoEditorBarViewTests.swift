@@ -35,6 +35,25 @@ final class VideoEditorBarViewTests: XCTestCase {
         XCTAssertLessThanOrEqual(timelineHeight, 44)
     }
 
+    func testEditorBarUsesDeepSharedHUDChrome() throws {
+        let state = try VideoEditingState(sourceDuration: 24)
+        let editorBar = VideoEditorBarView(state: state, strings: AppStrings(language: .en))
+
+        let background = try XCTUnwrap(findSubview(of: NSVisualEffectView.self, in: editorBar))
+        XCTAssertEqual(editorBar.appearance?.name, .vibrantDark)
+        XCTAssertEqual(background.appearance?.name, .vibrantDark)
+        XCTAssertEqual(background.material, .hudWindow)
+        XCTAssertGreaterThanOrEqual(
+            background.layer?.backgroundColor?.alpha ?? 0,
+            FrameHUDChrome.backgroundColor(for: .editor).alphaComponent
+        )
+
+        let speedPopup = try XCTUnwrap(findPopUpButton(accessibilityLabel: "Playback speed", in: editorBar))
+        let speedToken = try XCTUnwrap(speedPopup.superview)
+        XCTAssertEqual(speedToken.layer?.borderWidth ?? 0, 0.5, accuracy: 0.01)
+        XCTAssertEqual(speedToken.layer?.backgroundColor?.alpha ?? 0, FrameHUDChrome.hoverFill.alphaComponent, accuracy: 0.01)
+    }
+
     func testEditorBarAlignsTransportControlsToTimelineTrackEdges() throws {
         let state = try VideoEditingState(sourceDuration: 24)
         let editorBar = VideoEditorBarView(state: state, strings: AppStrings(language: .en))

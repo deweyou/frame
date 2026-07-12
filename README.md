@@ -51,6 +51,8 @@ The goal is simple: capture what you need, then get back to what you were doing.
 - Add text, arrows, shapes, highlights, brush marks, or blur sensitive details.
 - Move things after adding them.
 - Resize or delete them.
+- Change color and size from a contextual header style control.
+- Use canvas shortcuts or double-click an object to return to its editing tool.
 - Undo and redo.
 - Save the edited result.
 

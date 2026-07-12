@@ -6,6 +6,8 @@ final class ImageWorkspacePanelController: NSObject {
     private var workspaceItems: [ImageWorkspaceItem] = []
     private let editingOptionsProvider: () -> ImageAnnotationEditingOptions
     private let persistEditingOptions: (ImageAnnotationEditingOptions) -> Void
+    private let saveCurrentBehaviorProvider: () -> ImageWorkspaceSaveCurrentBehavior
+    private let presentSaveCurrentMenu: (NSMenu, NSButton) -> Void
 
     init(
         editingOptionsProvider: @escaping () -> ImageAnnotationEditingOptions = {
@@ -13,10 +15,22 @@ final class ImageWorkspacePanelController: NSObject {
         },
         persistEditingOptions: @escaping (ImageAnnotationEditingOptions) -> Void = {
             SettingsStore.setImageAnnotationEditingOptions($0)
+        },
+        saveCurrentBehaviorProvider: @escaping () -> ImageWorkspaceSaveCurrentBehavior = {
+            SettingsStore.imageWorkspaceSaveCurrentBehavior()
+        },
+        presentSaveCurrentMenu: @escaping (NSMenu, NSButton) -> Void = { menu, sender in
+            menu.popUp(
+                positioning: nil,
+                at: NSPoint(x: sender.bounds.minX, y: sender.bounds.maxY + 4),
+                in: sender
+            )
         }
     ) {
         self.editingOptionsProvider = editingOptionsProvider
         self.persistEditingOptions = persistEditingOptions
+        self.saveCurrentBehaviorProvider = saveCurrentBehaviorProvider
+        self.presentSaveCurrentMenu = presentSaveCurrentMenu
         super.init()
     }
 
@@ -200,7 +214,7 @@ final class ImageWorkspacePanelController: NSObject {
         imageContainer.layer?.cornerRadius = 10
         imageContainer.layer?.cornerCurve = .continuous
         imageContainer.layer?.masksToBounds = true
-        imageContainer.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.28).cgColor
+        imageContainer.layer?.backgroundColor = NSColor.black.cgColor
         imageContainer.menuProvider = contextMenuProvider
         imageContainer.setAccessibilityLabel("Image Preview Container")
 
@@ -215,6 +229,24 @@ final class ImageWorkspacePanelController: NSObject {
             }
 
             self?.updateDocumentControls(for: item, document: document)
+        }
+        annotationCanvas.onToolContextRequest = { [weak self, weak item] context in
+            guard let self,
+                  let item else {
+                return
+            }
+
+            self.applyToolContext(context, in: item)
+        }
+        annotationCanvas.onEditingOptionsChange = { [weak self, weak item] in
+            guard let self,
+                  let item else {
+                return
+            }
+
+            self.saveEditingOptions(for: item)
+            self.updatePrimaryToolButtons(for: item)
+            self.updateOptionMenuStates(for: item)
         }
         annotationCanvas.translatesAutoresizingMaskIntoConstraints = false
         annotationCanvas.menuProvider = contextMenuProvider
@@ -252,6 +284,13 @@ final class ImageWorkspacePanelController: NSObject {
         toolbarStack.spacing = ImageWorkspaceLayout.toolbarStackSpacing
         toolbarStack.translatesAutoresizingMaskIntoConstraints = false
 
+        let historyStack = NSStackView()
+        historyStack.orientation = .horizontal
+        historyStack.alignment = .centerY
+        historyStack.distribution = .fill
+        historyStack.spacing = ImageWorkspaceLayout.editingToolSpacing
+        historyStack.translatesAutoresizingMaskIntoConstraints = false
+
         let toolStack = NSStackView()
         toolStack.orientation = .horizontal
         toolStack.alignment = .centerY
@@ -273,13 +312,15 @@ final class ImageWorkspacePanelController: NSObject {
         )
         for button in [undoButton, redoButton] {
             button.isEnabled = false
-            button.contentTintColor = .disabledControlTextColor
+            button.contentTintColor = FrameHUDChrome.disabledIcon
             button.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
             button.heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
-            toolStack.addArrangedSubview(button)
+            historyStack.addArrangedSubview(button)
         }
         item.undoButton = undoButton
         item.redoButton = redoButton
+
+        let historyToolsDivider = makeToolbarDivider(identifier: "ImageWorkspaceToolbarHistoryToolsDivider")
 
         for toolbarItem in ImageWorkspaceToolbarToolOrder.items {
             let button = makeIconButton(
@@ -308,45 +349,28 @@ final class ImageWorkspacePanelController: NSObject {
                 title: optionsTitle(for: toolbarItem, strings: item.strings),
                 symbolName: "chevron.down",
                 action: #selector(toolOptionsButtonClicked),
-                buttonType: .momentaryPushIn
+                buttonType: .momentaryPushIn,
+                iconMetrics: .auxiliary
             )
             optionsButton.tag = tag(for: toolbarItem)
             optionsButton.isEnabled = true
             optionsButton.menu = optionsMenu
-            optionsButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 8, weight: .semibold)
             optionsButton.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.toolOptionsButtonWidth).isActive = true
             optionsButton.heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
 
-            let splitControl = NSStackView(views: [button, optionsButton])
-            splitControl.orientation = .horizontal
-            splitControl.alignment = .centerY
-            splitControl.distribution = .fill
-            splitControl.spacing = 0
-            splitControl.translatesAutoresizingMaskIntoConstraints = false
+            let splitControl = ImageWorkspaceSplitToolControl(
+                primaryButton: button,
+                optionsButton: optionsButton
+            )
+            splitControl.identifier = NSUserInterfaceItemIdentifier("ImageWorkspaceToolbarMosaicSplitControl")
             toolStack.addArrangedSubview(splitControl)
         }
 
-        let colorButton = makeIconButton(
-            title: item.strings.workspaceColorOptions,
-            symbolName: "circle.fill",
-            action: #selector(toolbarMenuButtonClicked),
-            buttonType: .momentaryPushIn
-        )
-        colorButton.menu = makeColorOptionsMenu(for: item)
-        item.colorButton = colorButton
-        let sizeButton = makeIconButton(
-            title: item.strings.workspaceThicknessOptions,
-            symbolName: "lineweight",
-            action: #selector(toolbarMenuButtonClicked),
-            buttonType: .momentaryPushIn
-        )
-        sizeButton.menu = makeThicknessOptionsMenu(for: item)
-        item.styleButton = sizeButton
-        for button in [colorButton, sizeButton] {
-            button.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
-            button.heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
-            toolStack.addArrangedSubview(button)
-        }
+        let styleControl = makeHeaderStyleControl(for: item)
+        item.styleControl = styleControl
+        let styleDivider = makeToolbarDivider(identifier: "ImageWorkspaceToolbarStyleDivider")
+        styleDivider.isHidden = true
+        item.styleDivider = styleDivider
 
         let spacer = NSView()
         spacer.translatesAutoresizingMaskIntoConstraints = false
@@ -359,37 +383,50 @@ final class ImageWorkspacePanelController: NSObject {
         )
         let copyButton = makeIconButton(
             title: item.strings.workspaceCopy,
+            toolTip: item.strings.workspaceSaveAndCopy,
             symbolName: "doc.on.doc",
             action: #selector(copyButtonClicked),
             buttonType: .momentaryPushIn
         )
         let downloadButton = makeIconButton(
             title: item.strings.workspaceDownload,
+            toolTip: item.strings.workspaceSaveAndDownload,
             symbolName: "square.and.arrow.down",
             action: #selector(downloadButtonClicked),
             buttonType: .momentaryPushIn
         )
         saveEditedButton.isEnabled = false
-        saveEditedButton.contentTintColor = .disabledControlTextColor
+        saveEditedButton.contentTintColor = FrameHUDChrome.disabledIcon
         saveEditedButton.menu = makeSaveCurrentMenu(for: item)
         item.saveCurrentButton = saveEditedButton
-        saveEditedButton.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.outputButtonWidth).isActive = true
+        saveEditedButton.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.outputButtonSize).isActive = true
         saveEditedButton.heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
-        copyButton.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.outputButtonWidth).isActive = true
+        copyButton.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.outputButtonSize).isActive = true
         copyButton.heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
-        downloadButton.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.outputButtonWidth).isActive = true
+        downloadButton.widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.outputButtonSize).isActive = true
         downloadButton.heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize).isActive = true
+
+        let outputStack = NSStackView(views: [saveEditedButton, copyButton, downloadButton])
+        outputStack.orientation = .horizontal
+        outputStack.alignment = .centerY
+        outputStack.distribution = .fill
+        outputStack.spacing = ImageWorkspaceLayout.outputButtonSpacing
+        outputStack.translatesAutoresizingMaskIntoConstraints = false
+        let outputDivider = makeToolbarDivider(identifier: "ImageWorkspaceToolbarOutputDivider")
 
         contentView.addSubview(imageContainer)
         contentView.addSubview(toolbar)
         imageContainer.addSubview(annotationCanvas)
         imageContainer.addSubview(textSelectionOverlay)
         toolbar.addSubview(toolbarStack)
+        toolbarStack.addArrangedSubview(historyStack)
+        toolbarStack.addArrangedSubview(historyToolsDivider)
         toolbarStack.addArrangedSubview(toolStack)
+        toolbarStack.addArrangedSubview(styleDivider)
+        toolbarStack.addArrangedSubview(styleControl)
         toolbarStack.addArrangedSubview(spacer)
-        toolbarStack.addArrangedSubview(saveEditedButton)
-        toolbarStack.addArrangedSubview(copyButton)
-        toolbarStack.addArrangedSubview(downloadButton)
+        toolbarStack.addArrangedSubview(outputDivider)
+        toolbarStack.addArrangedSubview(outputStack)
 
         NSLayoutConstraint.activate([
             imageContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: ImageWorkspaceLayout.toolbarLeading),
@@ -454,7 +491,7 @@ final class ImageWorkspacePanelController: NSObject {
         imageContainer.layer?.cornerRadius = 10
         imageContainer.layer?.cornerCurve = .continuous
         imageContainer.layer?.masksToBounds = true
-        imageContainer.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.28).cgColor
+        imageContainer.layer?.backgroundColor = NSColor.black.cgColor
         imageContainer.menuProvider = contextMenuProvider
         imageContainer.setAccessibilityLabel("Pinned Image Container")
 
@@ -482,18 +519,36 @@ final class ImageWorkspacePanelController: NSObject {
 
     private func makeIconButton(
         title: String,
+        toolTip: String? = nil,
         symbolName: String,
         action: Selector,
-        buttonType: NSButton.ButtonType
-    ) -> NSButton {
-        let button = ImageWorkspaceToolbarButton(image: toolbarImage(symbolName: symbolName, title: title), target: self, action: action)
-        button.toolTip = title
-        button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
-        button.contentTintColor = .labelColor
+        buttonType: NSButton.ButtonType,
+        iconMetrics: ImageWorkspaceToolbarIconMetrics = .primary
+    ) -> ImageWorkspaceToolbarButton {
+        let button = ImageWorkspaceToolbarButton(
+            image: toolbarImage(symbolName: symbolName, title: title),
+            iconMetrics: iconMetrics,
+            target: self,
+            action: action
+        )
+        button.toolTip = toolTip ?? title
+        button.symbolConfiguration = iconMetrics.symbolConfiguration
+        button.contentTintColor = FrameHUDChrome.primaryIcon
         button.setButtonType(buttonType)
         button.setAccessibilityLabel(title)
         button.setAccessibilityHelp(title)
         return button
+    }
+
+    private func makeToolbarDivider(identifier: String) -> NSView {
+        let divider = NSView()
+        divider.identifier = NSUserInterfaceItemIdentifier(identifier)
+        divider.wantsLayer = true
+        divider.layer?.backgroundColor = FrameHUDChrome.divider.cgColor
+        divider.translatesAutoresizingMaskIntoConstraints = false
+        divider.widthAnchor.constraint(equalToConstant: 1).isActive = true
+        divider.heightAnchor.constraint(equalToConstant: 16).isActive = true
+        return divider
     }
 
     private func toolbarImage(symbolName: String, title: String) -> NSImage {
@@ -508,22 +563,31 @@ final class ImageWorkspacePanelController: NSObject {
         return image
     }
 
-    private func colorSwatchImage(color: ImageAnnotationColor, title: String) -> NSImage {
-        let image = NSImage(size: NSSize(width: 14, height: 14))
-        image.lockFocus()
-        NSColor.clear.setFill()
-        NSRect(origin: .zero, size: image.size).fill()
+    private func makeHeaderStyleControl(for item: ImageWorkspaceItem) -> ImageWorkspaceHeaderStyleControlView {
+        let styleControl = ImageWorkspaceHeaderStyleControlView(
+            strings: item.strings,
+            colors: Self.annotationColors,
+            lineWidths: Self.annotationLineWidths,
+            fontSizes: Self.textFontSizes
+        )
+        styleControl.translatesAutoresizingMaskIntoConstraints = false
+        styleControl.onColorChange = { [weak self, weak item] color in
+            guard let self,
+                  let item else {
+                return
+            }
 
-        let swatchPath = NSBezierPath(ovalIn: NSRect(x: 2, y: 2, width: 10, height: 10))
-        color.nsColor.setFill()
-        swatchPath.fill()
-        NSColor.separatorColor.withAlphaComponent(0.65).setStroke()
-        swatchPath.lineWidth = 1
-        swatchPath.stroke()
+            self.applyStyleControlColor(color, in: item)
+        }
+        styleControl.onSizeChange = { [weak self, weak item] size in
+            guard let self,
+                  let item else {
+                return
+            }
 
-        image.unlockFocus()
-        image.isTemplate = false
-        return image
+            self.applyStyleControlSize(size, in: item)
+        }
+        return styleControl
     }
 
     private func installLifecycleCallbacks(for item: ImageWorkspaceItem) {
@@ -644,57 +708,6 @@ final class ImageWorkspacePanelController: NSObject {
         return menu
     }
 
-    private func makeColorOptionsMenu(for item: ImageWorkspaceItem) -> NSMenu {
-        let menu = NSMenu()
-        addColorItems(to: menu, item: item)
-        updateMenuStates(menu, for: item)
-        return menu
-    }
-
-    private func makeThicknessOptionsMenu(for item: ImageWorkspaceItem) -> NSMenu {
-        let menu = NSMenu()
-        addLineWidthItems(to: menu, item: item)
-        updateMenuStates(menu, for: item)
-        return menu
-    }
-
-    private func makeFontSizeOptionsMenu(for item: ImageWorkspaceItem) -> NSMenu {
-        let menu = NSMenu()
-        addFontSizeItems(to: menu, item: item)
-        updateMenuStates(menu, for: item)
-        return menu
-    }
-
-    private func addColorItems(to menu: NSMenu, item: ImageWorkspaceItem) {
-        for color in Self.annotationColors {
-            let title = item.strings.workspaceColorTitle(color)
-            let menuItem = makeMenuItem(
-                title: title,
-                action: #selector(toolOptionMenuItemClicked),
-                representedObject: ImageWorkspaceToolOption(item: item, option: .strokeColor(color))
-            )
-            menuItem.image = colorSwatchImage(color: color, title: title)
-            menu.addItem(menuItem)
-        }
-    }
-
-    private func addLineWidthItems(to menu: NSMenu, item: ImageWorkspaceItem) {
-        for lineWidth in Self.annotationLineWidths {
-            menu.addItem(makeToolOptionItem(
-                item.strings.workspaceLineWidth(lineWidth),
-                item: item,
-                option: .lineWidth(lineWidth),
-                symbolName: "line.diagonal"
-            ))
-        }
-    }
-
-    private func addFontSizeItems(to menu: NSMenu, item: ImageWorkspaceItem) {
-        for fontSize in Self.textFontSizes {
-            menu.addItem(makeToolOptionItem(item.strings.workspaceFontSize(fontSize), item: item, option: .fontSize(fontSize), symbolName: "textformat.size"))
-        }
-    }
-
     private func makeToolOptionItem(
         _ title: String,
         item: ImageWorkspaceItem,
@@ -711,8 +724,11 @@ final class ImageWorkspacePanelController: NSObject {
     }
 
     private func updateOptionMenuStates(for item: ImageWorkspaceItem) {
-        updateMenuStates(item.colorButton?.menu, for: item)
-        updateMenuStates(item.styleButton?.menu, for: item)
+        guard let document = item.annotationCanvas?.documentForTesting else {
+            return
+        }
+
+        updateHeaderStyleControl(for: item, document: document)
     }
 
     private func updateMenuStates(_ menu: NSMenu?, for item: ImageWorkspaceItem) {
@@ -732,18 +748,8 @@ final class ImageWorkspacePanelController: NSObject {
 
     private func isOptionSelected(_ option: ImageWorkspaceToolOptionKind, in document: ImageAnnotationDocument) -> Bool {
         switch option {
-        case let .shapeKind(shapeKind):
-            document.editingOptions.shapeKind == shapeKind
         case let .mosaicMode(mosaicMode):
             document.editingOptions.mosaicMode == mosaicMode
-        case let .strokeColor(color):
-            document.editingOptions.style.strokeColor == color
-        case let .lineWidth(lineWidth):
-            abs(document.editingOptions.style.lineWidth - lineWidth) < 0.01
-        case let .fontSize(fontSize):
-            abs(document.editingOptions.style.fontSize - fontSize) < 0.01
-        case let .fontWeight(fontWeight):
-            document.editingOptions.style.fontWeight == fontWeight
         }
     }
 
@@ -783,36 +789,23 @@ final class ImageWorkspacePanelController: NSObject {
     }
 
     @objc private func saveEditedButtonClicked(_ sender: NSButton) {
-        guard sender.isEnabled else {
-            return
-        }
-
-        guard let menu = sender.menu else {
-            return
-        }
-
-        menu.popUp(
-            positioning: nil,
-            at: NSPoint(x: sender.bounds.minX, y: sender.bounds.maxY + 4),
-            in: sender
-        )
-    }
-
-    @objc private func toolbarMenuButtonClicked(_ sender: NSButton) {
         guard sender.isEnabled,
-              let menu = sender.menu else {
+              let item = workspaceItem(for: sender.window) else {
             return
         }
 
-        if let item = workspaceItem(for: sender.window) {
-            updateMenuStates(menu, for: item)
-        }
+        switch saveCurrentBehaviorProvider() {
+        case .askEveryTime:
+            guard let menu = sender.menu else {
+                return
+            }
 
-        menu.popUp(
-            positioning: nil,
-            at: NSPoint(x: sender.bounds.minX, y: sender.bounds.maxY + 4),
-            in: sender
-        )
+            presentSaveCurrentMenu(menu, sender)
+        case .replaceCurrent:
+            saveCurrentRendition(for: item)
+        case .saveAsNew:
+            _ = saveAsNewRendition(for: item)
+        }
     }
 
     @objc private func toolButtonClicked(_ sender: NSButton) {
@@ -945,29 +938,11 @@ final class ImageWorkspacePanelController: NSObject {
             return
         }
 
-        var style = canvas.documentForTesting.editingOptions.style
         switch option.option {
-        case let .shapeKind(shapeKind):
-            canvas.setShapeKind(shapeKind)
-            select(.shape, in: item)
-            updatePrimaryToolButtons(for: item)
         case let .mosaicMode(mosaicMode):
             canvas.setMosaicMode(mosaicMode)
             select(.mosaic, in: item)
             updatePrimaryToolButtons(for: item)
-        case let .strokeColor(color):
-            style.strokeColor = color
-            canvas.setStyle(style)
-            updatePrimaryToolButtons(for: item)
-        case let .lineWidth(lineWidth):
-            style.lineWidth = lineWidth
-            canvas.setStyle(style)
-        case let .fontSize(fontSize):
-            style.fontSize = fontSize
-            canvas.setStyle(style)
-        case let .fontWeight(fontWeight):
-            style.fontWeight = fontWeight
-            canvas.setStyle(style)
         }
 
         saveEditingOptions(for: item)
@@ -993,6 +968,61 @@ final class ImageWorkspacePanelController: NSObject {
         item.textSelectionOverlay?.setTextSelectionEnabled(tool == .select)
         updatePrimaryToolButtons(for: item)
         updateSelectionStates(for: item)
+    }
+
+    private func applyToolContext(_ context: ImageAnnotationCanvasToolContext, in item: ImageWorkspaceItem) {
+        guard let canvas = item.annotationCanvas else {
+            return
+        }
+
+        switch context {
+        case let .tool(tool):
+            select(tool, in: item)
+        case let .shape(shapeKind):
+            canvas.setShapeKind(shapeKind)
+            select(.shape, in: item)
+            saveEditingOptions(for: item)
+        case let .mosaic(mosaicMode):
+            canvas.setMosaicMode(mosaicMode)
+            select(.mosaic, in: item)
+            saveEditingOptions(for: item)
+        }
+
+        updateOptionMenuStates(for: item)
+    }
+
+    private func applyStyleControlColor(_ color: ImageAnnotationColor, in item: ImageWorkspaceItem) {
+        guard let canvas = item.annotationCanvas else {
+            return
+        }
+
+        var style = canvas.documentForTesting.editingOptions.style
+        style.strokeColor = color
+        canvas.setStyle(style)
+        saveEditingOptions(for: item)
+        updatePrimaryToolButtons(for: item)
+        updateOptionMenuStates(for: item)
+    }
+
+    private func applyStyleControlSize(_ size: CGFloat, in item: ImageWorkspaceItem) {
+        guard let canvas = item.annotationCanvas else {
+            return
+        }
+
+        var style = canvas.documentForTesting.editingOptions.style
+        switch styleControlMode(for: canvas.documentForTesting) {
+        case .lineWidth:
+            style.lineWidth = size
+        case .fontSize:
+            style.fontSize = size
+        case .disabled:
+            return
+        }
+
+        canvas.setStyle(style)
+        saveEditingOptions(for: item)
+        updatePrimaryToolButtons(for: item)
+        updateOptionMenuStates(for: item)
     }
 
     private func saveEditingOptions(for item: ImageWorkspaceItem) {
@@ -1022,7 +1052,9 @@ final class ImageWorkspacePanelController: NSObject {
 
     private func updateSelectionState(for button: NSButton, isSelected: Bool) {
         button.state = isSelected ? .on : .off
-        button.contentTintColor = isSelected ? .controlAccentColor : .labelColor
+        button.contentTintColor = isSelected
+            ? FrameHUDChrome.selectedIcon
+            : FrameHUDChrome.primaryIcon
         if let toolbarButton = button as? ImageWorkspaceToolbarButton {
             toolbarButton.isWorkspaceSelected = isSelected
         }
@@ -1042,8 +1074,7 @@ final class ImageWorkspacePanelController: NSObject {
             )
         }
 
-        updateColorButton(for: item, color: document.editingOptions.style.strokeColor)
-        updateStyleButton(for: item)
+        updateHeaderStyleControl(for: item, document: document)
     }
 
     private func updatePrimaryToolButton(_ button: NSButton, symbolName: String, title: String) {
@@ -1052,77 +1083,56 @@ final class ImageWorkspacePanelController: NSObject {
         button.setAccessibilityHelp(title)
     }
 
-    private func updateColorButton(for item: ImageWorkspaceItem, color: ImageAnnotationColor) {
-        guard let colorButton = item.colorButton else {
-            return
-        }
-
-        let title = item.strings.workspaceColorTitle(color)
-        colorButton.image = colorSwatchImage(color: color, title: title)
-        colorButton.contentTintColor = nil
-        colorButton.toolTip = title
-        colorButton.setAccessibilityHelp(title)
+    private func updateHeaderStyleControl(for item: ImageWorkspaceItem, document: ImageAnnotationDocument) {
+        let sizeMode = styleControlMode(for: document)
+        let isVisible = sizeMode != .disabled
+        item.styleControl?.isHidden = !isVisible
+        item.styleDivider?.isHidden = !isVisible
+        item.styleControl?.update(
+            color: document.editingOptions.style.strokeColor,
+            sizeMode: sizeMode,
+            style: document.editingOptions.style
+        )
     }
 
-    private func updateStyleButton(for item: ImageWorkspaceItem) {
-        guard let styleButton = item.styleButton else {
-            return
+    private func styleControlMode(for document: ImageAnnotationDocument) -> ImageWorkspaceStyleControlSizeMode {
+        if let selectedElementID = document.selectedElementID,
+           let selectedElement = document.elements.first(where: { $0.id == selectedElementID }) {
+            switch selectedElement.kind {
+            case .shape, .brush, .highlight:
+                return .lineWidth
+            case .text:
+                return .fontSize
+            case .mosaic:
+                return .disabled
+            }
         }
 
-        switch item.state.selectedTool {
-        case .text:
-            updateMenuButton(
-                styleButton,
-                title: item.strings.workspaceFontSizeOptions,
-                symbolName: "textformat.size",
-                menu: makeFontSizeOptionsMenu(for: item),
-                isEnabled: true
-            )
+        switch document.selectedTool {
         case .shape, .brush, .highlight:
-            updateMenuButton(
-                styleButton,
-                title: item.strings.workspaceThicknessOptions,
-                symbolName: "lineweight",
-                menu: makeThicknessOptionsMenu(for: item),
-                isEnabled: true
-            )
-        case .select, .mosaic, nil:
-            updateMenuButton(
-                styleButton,
-                title: item.strings.workspaceThicknessOptions,
-                symbolName: "lineweight",
-                menu: makeThicknessOptionsMenu(for: item),
-                isEnabled: false
-            )
+            return .lineWidth
+        case .text:
+            return .fontSize
+        case .select, .mosaic:
+            return .disabled
         }
-    }
-
-    private func updateMenuButton(
-        _ button: NSButton,
-        title: String,
-        symbolName: String,
-        menu: NSMenu,
-        isEnabled: Bool
-    ) {
-        button.image = toolbarImage(symbolName: symbolName, title: title)
-        button.menu = menu
-        button.isEnabled = isEnabled
-        button.contentTintColor = isEnabled ? .labelColor : .disabledControlTextColor
-        button.toolTip = title
-        button.setAccessibilityLabel(title)
-        button.setAccessibilityHelp(title)
     }
 
     private func updateDocumentControls(for item: ImageWorkspaceItem, document: ImageAnnotationDocument) {
         item.saveCurrentButton?.isEnabled = document.hasUncommittedEdits
-        item.saveCurrentButton?.contentTintColor = document.hasUncommittedEdits ? .labelColor : .disabledControlTextColor
+        item.saveCurrentButton?.contentTintColor = document.hasUncommittedEdits
+            ? FrameHUDChrome.primaryIcon
+            : FrameHUDChrome.disabledIcon
         updateHistoryButton(item.undoButton, isEnabled: document.canUndo)
         updateHistoryButton(item.redoButton, isEnabled: document.canRedo)
+        updateHeaderStyleControl(for: item, document: document)
     }
 
     private func updateHistoryButton(_ button: NSButton?, isEnabled: Bool) {
         button?.isEnabled = isEnabled
-        button?.contentTintColor = isEnabled ? .labelColor : .disabledControlTextColor
+        button?.contentTintColor = isEnabled
+            ? FrameHUDChrome.primaryIcon
+            : FrameHUDChrome.disabledIcon
     }
 
     private func toolButton(for tool: ImageAnnotationTool, in item: ImageWorkspaceItem) -> NSButton? {
@@ -1204,6 +1214,15 @@ final class ImageWorkspacePanelController: NSObject {
         }
 
         switch item.closeSaveChoice?() ?? presentCloseSaveChoice(for: item) {
+        case .save:
+            switch saveCurrentBehaviorProvider() {
+            case .replaceCurrent:
+                return saveCurrentRendition(for: item)
+            case .saveAsNew:
+                return saveAsNewRendition(for: item)
+            case .askEveryTime:
+                return false
+            }
         case .replaceCurrent:
             return saveCurrentRendition(for: item)
         case .saveAsNew:
@@ -1220,17 +1239,33 @@ final class ImageWorkspacePanelController: NSObject {
         alert.messageText = item.strings.workspaceUnsavedChangesTitle
         alert.informativeText = item.strings.workspaceUnsavedChangesMessage
         alert.alertStyle = .warning
-        alert.addButton(withTitle: item.strings.workspaceReplaceCurrent)
-        alert.addButton(withTitle: item.strings.workspaceSaveAsNew)
+
+        if saveCurrentBehaviorProvider() == .askEveryTime {
+            alert.addButton(withTitle: item.strings.workspaceReplaceCurrent)
+            alert.addButton(withTitle: item.strings.workspaceSaveAsNew)
+            alert.addButton(withTitle: item.strings.workspaceDiscardEdits)
+            alert.addButton(withTitle: item.strings.cancel)
+
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:
+                return .replaceCurrent
+            case .alertSecondButtonReturn:
+                return .saveAsNew
+            case .alertThirdButtonReturn:
+                return .discard
+            default:
+                return .cancel
+            }
+        }
+
+        alert.addButton(withTitle: item.strings.workspaceSaveCurrent)
         alert.addButton(withTitle: item.strings.workspaceDiscardEdits)
         alert.addButton(withTitle: item.strings.cancel)
 
         switch alert.runModal() {
         case .alertFirstButtonReturn:
-            return .replaceCurrent
+            return .save
         case .alertSecondButtonReturn:
-            return .saveAsNew
-        case .alertThirdButtonReturn:
             return .discard
         default:
             return .cancel
@@ -1418,8 +1453,8 @@ final class ImageWorkspacePanelController: NSObject {
     }
 
     private static let annotationLineWidths: [CGFloat] = [1, 2, 4, 8, 12, 16, 24]
-    private static let textFontSizes: [CGFloat] = [12, 14, 16, 18, 22, 28, 36, 48]
-    private static let annotationColors: [ImageAnnotationColor] = [.red, .yellow, .blue, .green]
+    private static let textFontSizes: [CGFloat] = [12, 14, 16, 18, 22, 28, 36, 48, 64, 80, 96]
+    private static let annotationColors: [ImageAnnotationColor] = [.red, .yellow, .blue, .green, .white, .black]
 }
 
 private final class ImageWorkspaceItem {
@@ -1439,8 +1474,8 @@ private final class ImageWorkspaceItem {
     var shapeKindButtons: [(shapeKind: ImageAnnotationShapeKind, button: NSButton)] = []
     weak var annotationCanvas: ImageAnnotationCanvasView?
     weak var saveCurrentButton: NSButton?
-    weak var colorButton: NSButton?
-    weak var styleButton: NSButton?
+    weak var styleControl: ImageWorkspaceHeaderStyleControlView?
+    weak var styleDivider: NSView?
     weak var undoButton: NSButton?
     weak var redoButton: NSButton?
     weak var textSelectionOverlay: ImageWorkspaceTextSelectionOverlayView?
@@ -1474,6 +1509,7 @@ private final class ImageWorkspaceItem {
 }
 
 enum ImageWorkspaceCloseSaveChoice {
+    case save
     case replaceCurrent
     case saveAsNew
     case discard
@@ -1522,12 +1558,333 @@ private final class ImageWorkspaceToolOption: NSObject {
 }
 
 private enum ImageWorkspaceToolOptionKind {
-    case shapeKind(ImageAnnotationShapeKind)
     case mosaicMode(ImageAnnotationMosaicMode)
-    case strokeColor(ImageAnnotationColor)
-    case lineWidth(CGFloat)
-    case fontSize(CGFloat)
-    case fontWeight(ImageAnnotationFontWeight)
+}
+
+private enum ImageWorkspaceStyleControlSizeMode {
+    case disabled
+    case lineWidth
+    case fontSize
+}
+
+private final class ImageWorkspaceHeaderStyleControlView: NSView {
+    var onColorChange: ((ImageAnnotationColor) -> Void)?
+    var onSizeChange: ((CGFloat) -> Void)?
+
+    private let strings: AppStrings
+    private let colors: [ImageAnnotationColor]
+    private let lineWidths: [CGFloat]
+    private let fontSizes: [CGFloat]
+    private var selectedColor: ImageAnnotationColor = .red
+    private var sizeMode: ImageWorkspaceStyleControlSizeMode = .disabled
+    private var currentSizeValues: [CGFloat] = []
+    private let colorMenuButton = NSButton()
+    private let colorMenu = NSMenu()
+    private var colorPaletteButtons: [(color: ImageAnnotationColor, button: NSButton)] = []
+    private let sizeIconView = NSImageView()
+    private let sizeSlider = NSSlider()
+
+    init(
+        strings: AppStrings,
+        colors: [ImageAnnotationColor],
+        lineWidths: [CGFloat],
+        fontSizes: [CGFloat]
+    ) {
+        self.strings = strings
+        self.colors = colors
+        self.lineWidths = lineWidths
+        self.fontSizes = fontSizes
+        super.init(frame: .zero)
+        configureColorMenu()
+        configureView()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    func update(
+        color: ImageAnnotationColor,
+        sizeMode: ImageWorkspaceStyleControlSizeMode,
+        style: ImageAnnotationStyle
+    ) {
+        selectedColor = color
+        self.sizeMode = sizeMode
+        updateColorSelection()
+
+        let values = sizeValues(for: sizeMode)
+        currentSizeValues = values
+        updateSizeControlMetadata(value: nil)
+        sizeSlider.isEnabled = !values.isEmpty
+        sizeSlider.alphaValue = values.isEmpty ? 0.45 : 1
+        sizeSlider.numberOfTickMarks = values.count
+        sizeSlider.maxValue = Double(max(0, values.count - 1))
+
+        guard !values.isEmpty else {
+            sizeSlider.doubleValue = 0
+            return
+        }
+
+        let currentSize: CGFloat
+        switch sizeMode {
+        case .lineWidth:
+            currentSize = style.lineWidth
+        case .fontSize:
+            currentSize = style.fontSize
+        case .disabled:
+            currentSize = values[0]
+        }
+
+        let valueIndex = index(for: currentSize, in: values)
+        sizeSlider.doubleValue = Double(valueIndex)
+        updateSizeControlMetadata(value: values[valueIndex])
+    }
+
+    private func configureView() {
+        wantsLayer = true
+        isHidden = true
+        setAccessibilityLabel("Image Workspace Header Style Control")
+
+        let stack = NSStackView()
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.distribution = .fill
+        stack.spacing = 6
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        colorMenuButton.isBordered = false
+        colorMenuButton.target = self
+        colorMenuButton.action = #selector(colorMenuButtonClicked)
+        colorMenuButton.imagePosition = .imageOnly
+        colorMenuButton.wantsLayer = true
+        colorMenuButton.layer?.cornerRadius = 7
+        colorMenuButton.layer?.cornerCurve = .continuous
+        colorMenuButton.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
+        colorMenuButton.menu = colorMenu
+        colorMenuButton.setAccessibilityLabel(strings.workspaceColorOptions)
+        colorMenuButton.widthAnchor.constraint(equalToConstant: 34).isActive = true
+        colorMenuButton.heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.headerStyleControlHeight).isActive = true
+        stack.addArrangedSubview(colorMenuButton)
+
+        let divider = NSView()
+        divider.wantsLayer = true
+        divider.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.3).cgColor
+        divider.translatesAutoresizingMaskIntoConstraints = false
+        divider.widthAnchor.constraint(equalToConstant: 1).isActive = true
+        divider.heightAnchor.constraint(equalToConstant: 18).isActive = true
+        stack.addArrangedSubview(divider)
+
+        sizeIconView.imageScaling = .scaleProportionallyDown
+        sizeIconView.contentTintColor = .secondaryLabelColor
+        sizeIconView.widthAnchor.constraint(equalToConstant: 16).isActive = true
+        sizeIconView.heightAnchor.constraint(equalToConstant: 16).isActive = true
+        stack.addArrangedSubview(sizeIconView)
+
+        sizeSlider.controlSize = .small
+        sizeSlider.target = self
+        sizeSlider.action = #selector(sizeSliderChanged)
+        sizeSlider.allowsTickMarkValuesOnly = true
+        sizeSlider.isContinuous = true
+        sizeSlider.widthAnchor.constraint(equalToConstant: 122).isActive = true
+        stack.addArrangedSubview(sizeSlider)
+
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.headerStyleControlWidth),
+            heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.headerStyleControlHeight),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    private func configureColorMenu() {
+        let paletteView = NSView(frame: NSRect(x: 0, y: 0, width: 124, height: 78))
+        let grid = NSStackView()
+        grid.orientation = .vertical
+        grid.alignment = .leading
+        grid.distribution = .fillEqually
+        grid.spacing = 4
+        grid.translatesAutoresizingMaskIntoConstraints = false
+        paletteView.addSubview(grid)
+
+        for rowColors in colors.chunked(into: 3) {
+            let row = NSStackView()
+            row.orientation = .horizontal
+            row.alignment = .centerY
+            row.distribution = .fillEqually
+            row.spacing = 4
+            grid.addArrangedSubview(row)
+
+            for color in rowColors {
+                let title = strings.workspaceColorTitle(color)
+                let button = NSButton(image: Self.colorSwatchImage(color: color, size: NSSize(width: 20, height: 20)), target: self, action: #selector(colorPaletteButtonClicked))
+                button.title = ""
+                button.imagePosition = .imageOnly
+                button.alignment = .center
+                button.isBordered = false
+                button.setButtonType(.toggle)
+                button.wantsLayer = true
+                button.layer?.cornerRadius = 6
+                button.layer?.cornerCurve = .continuous
+                button.toolTip = title
+                button.setAccessibilityLabel(title)
+                button.widthAnchor.constraint(equalToConstant: 34).isActive = true
+                button.heightAnchor.constraint(equalToConstant: 30).isActive = true
+                colorPaletteButtons.append((color: color, button: button))
+                row.addArrangedSubview(button)
+            }
+        }
+
+        NSLayoutConstraint.activate([
+            grid.leadingAnchor.constraint(equalTo: paletteView.leadingAnchor, constant: 6),
+            grid.trailingAnchor.constraint(equalTo: paletteView.trailingAnchor, constant: -6),
+            grid.topAnchor.constraint(equalTo: paletteView.topAnchor, constant: 6),
+            grid.bottomAnchor.constraint(equalTo: paletteView.bottomAnchor, constant: -6),
+        ])
+
+        let paletteItem = NSMenuItem()
+        paletteItem.view = paletteView
+        colorMenu.addItem(paletteItem)
+    }
+
+    @objc private func colorMenuButtonClicked(_ sender: NSButton) {
+        colorMenu.popUp(
+            positioning: nil,
+            at: NSPoint(x: sender.bounds.minX, y: sender.bounds.maxY + 4),
+            in: sender
+        )
+    }
+
+    @objc private func colorPaletteButtonClicked(_ sender: NSButton) {
+        guard let color = colorPaletteButtons.first(where: { $0.button === sender })?.color else {
+            return
+        }
+
+        selectedColor = color
+        updateColorSelection()
+        colorMenu.cancelTracking()
+        onColorChange?(color)
+    }
+
+    @objc private func sizeSliderChanged(_ sender: NSSlider) {
+        guard !currentSizeValues.isEmpty else {
+            return
+        }
+
+        let valueIndex = max(0, min(currentSizeValues.count - 1, Int(sender.doubleValue.rounded())))
+        sender.doubleValue = Double(valueIndex)
+        let value = currentSizeValues[valueIndex]
+        updateSizeControlMetadata(value: value)
+        onSizeChange?(value)
+    }
+
+    private func updateColorSelection() {
+        let selectedTitle = strings.workspaceColorTitle(selectedColor)
+        colorMenuButton.image = Self.colorSelectorImage(color: selectedColor)
+        colorMenuButton.title = ""
+        colorMenuButton.toolTip = selectedTitle
+        colorMenuButton.setAccessibilityHelp(selectedTitle)
+        for colorButton in colorPaletteButtons {
+            let isSelected = colorButton.color == selectedColor
+            colorButton.button.state = isSelected ? .on : .off
+            colorButton.button.layer?.backgroundColor = (isSelected ? NSColor.controlAccentColor : NSColor.clear)
+                .withAlphaComponent(isSelected ? 0.16 : 0)
+                .cgColor
+        }
+    }
+
+    private func updateSizeControlMetadata(value: CGFloat?) {
+        let title: String
+        let symbolName: String
+        let valueDescription: String?
+        switch sizeMode {
+        case .lineWidth:
+            title = strings.workspaceThicknessOptions
+            symbolName = "lineweight"
+            valueDescription = value.map { strings.workspaceLineWidth($0) }
+        case .fontSize:
+            title = strings.workspaceFontSizeOptions
+            symbolName = "textformat.size"
+            valueDescription = value.map { strings.workspaceFontSize($0) }
+        case .disabled:
+            title = strings.workspaceThicknessOptions
+            symbolName = "lineweight"
+            valueDescription = nil
+        }
+
+        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: title)
+        image?.isTemplate = true
+        sizeIconView.image = image
+        sizeIconView.contentTintColor = currentSizeValues.isEmpty ? .disabledControlTextColor : .secondaryLabelColor
+        sizeIconView.toolTip = title
+        sizeSlider.setAccessibilityLabel(title)
+        sizeSlider.toolTip = valueDescription.map { "\(title): \($0)" } ?? title
+    }
+
+    private func sizeValues(for mode: ImageWorkspaceStyleControlSizeMode) -> [CGFloat] {
+        switch mode {
+        case .lineWidth:
+            return lineWidths
+        case .fontSize:
+            return fontSizes
+        case .disabled:
+            return []
+        }
+    }
+
+    private func index(for value: CGFloat, in values: [CGFloat]) -> Int {
+        values
+            .enumerated()
+            .min { abs($0.element - value) < abs($1.element - value) }?
+            .offset ?? 0
+    }
+
+    private static func colorSelectorImage(color: ImageAnnotationColor) -> NSImage {
+        let image = NSImage(size: NSSize(width: 20, height: 20))
+        image.lockFocus()
+        NSColor.clear.setFill()
+        NSRect(origin: .zero, size: image.size).fill()
+
+        drawColorSwatch(color: color, in: NSRect(x: 2, y: 2, width: 16, height: 16))
+
+        image.unlockFocus()
+        image.isTemplate = false
+        return image
+    }
+
+    private static func colorSwatchImage(color: ImageAnnotationColor, size: NSSize) -> NSImage {
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor.clear.setFill()
+        NSRect(origin: .zero, size: image.size).fill()
+        drawColorSwatch(color: color, in: NSRect(x: 2, y: 2, width: size.width - 4, height: size.height - 4))
+        image.unlockFocus()
+        image.isTemplate = false
+        return image
+    }
+
+    private static func drawColorSwatch(color: ImageAnnotationColor, in rect: NSRect) {
+        let swatchPath = NSBezierPath(ovalIn: rect)
+        color.nsColor.setFill()
+        swatchPath.fill()
+        NSColor.separatorColor.withAlphaComponent(color == .white ? 0.9 : 0.5).setStroke()
+        swatchPath.lineWidth = 1
+        swatchPath.stroke()
+    }
+}
+
+private extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        stride(from: 0, to: count, by: size).map { startIndex in
+            Array(self[startIndex..<Swift.min(startIndex + size, count)])
+        }
+    }
 }
 
 private enum ImageWorkspaceLayout {
@@ -1542,10 +1899,14 @@ private enum ImageWorkspaceLayout {
     static let imageTopSpacing: CGFloat = 6
     static let imageBottomInset: CGFloat = 0
     static let editingToolSize: CGFloat = 28
-    static let toolOptionsButtonWidth: CGFloat = 14
+    static let toolOptionsButtonWidth: CGFloat = 20
+    static let mosaicSplitControlWidth = editingToolSize + toolOptionsButtonWidth
     static let editingToolSpacing: CGFloat = 4
-    static let outputButtonWidth: CGFloat = 30
+    static let outputButtonSize: CGFloat = 28
+    static let outputButtonSpacing: CGFloat = 2
     static let minimumSpacerWidth: CGFloat = 12
+    static let headerStyleControlWidth: CGFloat = 191
+    static let headerStyleControlHeight: CGFloat = 28
     static let baseMinimumContentWidth: CGFloat = 440
     static let pinnedMinimumContentWidth: CGFloat = 320
     static let initialWindowScreenMargin: CGFloat = 80
@@ -1577,21 +1938,27 @@ private enum ImageWorkspaceLayout {
     }
 
     private static var minimumToolbarWidth: CGFloat {
-        let splitToolCount: CGFloat = 1
         let toolbarItemCount = CGFloat(ImageWorkspaceToolbarToolOrder.items.count)
-        let globalOptionButtonCount: CGFloat = 2
-        let undoRedoButtonCount: CGFloat = 2
-        let toolButtonCount = undoRedoButtonCount + toolbarItemCount + globalOptionButtonCount
-        let editingToolsWidth = editingToolSize * toolButtonCount
-            + toolOptionsButtonWidth * splitToolCount
-            + editingToolSpacing * max(0, toolButtonCount - 1)
-        let arrangedSubviewSpacing = toolbarStackSpacing * 4
+        let historyButtonCount: CGFloat = 2
+        let historyWidth = editingToolSize * historyButtonCount
+            + editingToolSpacing * (historyButtonCount - 1)
+        let toolsWidth = editingToolSize * toolbarItemCount
+            + headerStyleControlWidth
+            + toolOptionsButtonWidth
+            + editingToolSpacing * (toolbarItemCount - 1)
+        let dividerCount: CGFloat = 3
+        let dividerWidth = dividerCount
+        let toolbarGroupGapCount: CGFloat = 7
+        let toolbarGroupSpacing = toolbarStackSpacing * toolbarGroupGapCount
+        let outputControlsWidth = outputButtonSize * 3 + outputButtonSpacing * 2
         return toolbarStackLeadingInset
             + toolbarStackTrailingInset
-            + editingToolsWidth
-            + arrangedSubviewSpacing
+            + historyWidth
+            + toolsWidth
+            + dividerWidth
+            + toolbarGroupSpacing
             + minimumSpacerWidth
-            + outputButtonWidth * 3
+            + outputControlsWidth
     }
 }
 
@@ -1672,6 +2039,38 @@ private final class ImageWorkspacePanel: NSPanel, NSWindowDelegate {
         }
 
         super.keyDown(with: event)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if let editCommand = standardEditCommand(for: event),
+           let firstResponder,
+           NSApp.sendAction(editCommand, to: firstResponder, from: self) {
+            return true
+        }
+
+        return super.performKeyEquivalent(with: event)
+    }
+
+    private func standardEditCommand(for event: NSEvent) -> Selector? {
+        guard event.type == .keyDown,
+              event.modifierFlags.contains(.command),
+              event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: .command),
+              let character = event.charactersIgnoringModifiers?.lowercased() else {
+            return nil
+        }
+
+        switch character {
+        case "a":
+            return #selector(NSText.selectAll(_:))
+        case "c":
+            return #selector(NSText.copy(_:))
+        case "x":
+            return #selector(NSText.cut(_:))
+        case "v":
+            return #selector(NSText.paste(_:))
+        default:
+            return nil
+        }
     }
 
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
@@ -1779,17 +2178,8 @@ private final class ImageWorkspaceToolbarView: NSVisualEffectView {
 
     init() {
         super.init(frame: .zero)
-        material = .hudWindow
-        blendingMode = .withinWindow
-        state = .active
         alphaValue = 1
-        wantsLayer = true
-        layer?.cornerRadius = toolbarHeight / 2
-        layer?.cornerCurve = .continuous
-        layer?.masksToBounds = true
-        layer?.borderWidth = 0.5
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.38).cgColor
-        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.04).cgColor
+        FrameHUDChrome.configure(self, surface: .toolbar, cornerRadius: toolbarHeight / 2)
     }
 
     @available(*, unavailable)
@@ -1804,12 +2194,161 @@ private final class ImageWorkspaceToolbarIconView: NSImageView {
     }
 }
 
-private final class ImageWorkspaceToolbarButton: NSButton {
-    private static let maximumIconSide: CGFloat = 16
+struct ImageWorkspaceToolbarIconMetrics {
+    let pointSize: CGFloat
+    let weight: NSFont.Weight
+    let iconSide: CGFloat
+    let imageScaling: NSImageScaling
 
+    var symbolConfiguration: NSImage.SymbolConfiguration {
+        NSImage.SymbolConfiguration(pointSize: pointSize, weight: weight)
+    }
+
+    static let primary = ImageWorkspaceToolbarIconMetrics(
+        pointSize: 12,
+        weight: .medium,
+        iconSide: 14,
+        imageScaling: .scaleProportionallyDown
+    )
+    static let auxiliary = ImageWorkspaceToolbarIconMetrics(
+        pointSize: 8,
+        weight: .semibold,
+        iconSide: 10,
+        imageScaling: .scaleProportionallyDown
+    )
+}
+
+private final class ImageWorkspaceSplitToolControl: NSView {
+    private let primaryButton: ImageWorkspaceToolbarButton
+    private let optionsButton: ImageWorkspaceToolbarButton
+    private let backgroundLayer = CALayer()
+    private let dividerLayer = CALayer()
+    private var trackingArea: NSTrackingArea?
+    private var isHovering = false {
+        didSet {
+            updateAppearance()
+        }
+    }
+
+    var isWorkspaceSelected = false {
+        didSet {
+            updateAppearance()
+        }
+    }
+
+    init(primaryButton: ImageWorkspaceToolbarButton, optionsButton: ImageWorkspaceToolbarButton) {
+        self.primaryButton = primaryButton
+        self.optionsButton = optionsButton
+        super.init(frame: .zero)
+        configure()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func layout() {
+        super.layout()
+
+        backgroundLayer.frame = bounds
+        dividerLayer.frame = CGRect(
+            x: ImageWorkspaceLayout.editingToolSize - 0.5,
+            y: 5,
+            width: 1,
+            height: max(0, bounds.height - 10)
+        )
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+
+        let newTrackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect],
+            owner: self
+        )
+        addTrackingArea(newTrackingArea)
+        trackingArea = newTrackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = true
+        super.mouseEntered(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+        super.mouseExited(with: event)
+    }
+
+    func showPressFeedback() {
+        animateBackground(opacity: isWorkspaceSelected ? 1 : 0.22)
+    }
+
+    private func configure() {
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.masksToBounds = false
+        backgroundLayer.cornerRadius = 8
+        backgroundLayer.cornerCurve = .continuous
+        backgroundLayer.opacity = 0
+        dividerLayer.backgroundColor = FrameHUDChrome.divider.cgColor
+        dividerLayer.opacity = 0.24
+        layer?.insertSublayer(backgroundLayer, at: 0)
+        layer?.addSublayer(dividerLayer)
+
+        primaryButton.splitToolControl = self
+        optionsButton.splitToolControl = self
+        addSubview(primaryButton)
+        addSubview(optionsButton)
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: ImageWorkspaceLayout.mosaicSplitControlWidth),
+            heightAnchor.constraint(equalToConstant: ImageWorkspaceLayout.editingToolSize),
+            primaryButton.leadingAnchor.constraint(equalTo: leadingAnchor),
+            primaryButton.topAnchor.constraint(equalTo: topAnchor),
+            primaryButton.bottomAnchor.constraint(equalTo: bottomAnchor),
+            optionsButton.leadingAnchor.constraint(equalTo: primaryButton.trailingAnchor),
+            optionsButton.topAnchor.constraint(equalTo: topAnchor),
+            optionsButton.trailingAnchor.constraint(equalTo: trailingAnchor),
+            optionsButton.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    private func updateAppearance() {
+        if isWorkspaceSelected {
+            backgroundLayer.backgroundColor = FrameHUDChrome.selectedFill.cgColor
+            dividerLayer.opacity = 0.52
+            animateBackground(opacity: 1)
+            return
+        }
+
+        backgroundLayer.backgroundColor = FrameHUDChrome.hoverFill.cgColor
+        dividerLayer.opacity = isHovering ? 0.36 : 0.24
+        animateBackground(opacity: isHovering ? 1 : 0)
+    }
+
+    private func animateBackground(opacity: Float) {
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = backgroundLayer.presentation()?.opacity ?? backgroundLayer.opacity
+        animation.toValue = opacity
+        animation.duration = 0.14
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        backgroundLayer.opacity = opacity
+        backgroundLayer.add(animation, forKey: "opacity")
+    }
+}
+
+private final class ImageWorkspaceToolbarButton: NSButton {
+    private let iconMetrics: ImageWorkspaceToolbarIconMetrics
     private let hoverLayer = CALayer()
     private let iconView = ImageWorkspaceToolbarIconView()
     private var trackingArea: NSTrackingArea?
+    weak var splitToolControl: ImageWorkspaceSplitToolControl?
     private var isHovering = false {
         didSet {
             updateHoverAppearance()
@@ -1817,6 +2356,11 @@ private final class ImageWorkspaceToolbarButton: NSButton {
     }
     var isWorkspaceSelected = false {
         didSet {
+            if let splitToolControl {
+                splitToolControl.isWorkspaceSelected = isWorkspaceSelected
+                return
+            }
+
             updateHoverAppearance()
         }
     }
@@ -1858,11 +2402,18 @@ private final class ImageWorkspaceToolbarButton: NSButton {
     }
 
     override init(frame frameRect: NSRect) {
+        iconMetrics = .primary
         super.init(frame: frameRect)
         configure()
     }
 
-    init(image: NSImage, target: AnyObject?, action: Selector?) {
+    init(
+        image: NSImage,
+        iconMetrics: ImageWorkspaceToolbarIconMetrics,
+        target: AnyObject?,
+        action: Selector?
+    ) {
+        self.iconMetrics = iconMetrics
         super.init(frame: .zero)
         self.image = image
         self.target = target
@@ -1891,7 +2442,7 @@ private final class ImageWorkspaceToolbarButton: NSButton {
         hoverLayer.bounds = CGRect(x: 0, y: 0, width: hoverDiameter, height: hoverDiameter)
         hoverLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
 
-        let iconSide = min(bounds.width, bounds.height, Self.maximumIconSide)
+        let iconSide = min(bounds.width, bounds.height, iconMetrics.iconSide)
         iconView.frame = CGRect(
             x: bounds.midX - iconSide / 2,
             y: bounds.midY - iconSide / 2,
@@ -1962,6 +2513,12 @@ private final class ImageWorkspaceToolbarButton: NSButton {
             return
         }
 
+        if let splitToolControl {
+            splitToolControl.showPressFeedback()
+            super.mouseDown(with: event)
+            return
+        }
+
         animateHoverLayer(opacity: 0.18)
         super.mouseDown(with: event)
         updateHoverAppearance()
@@ -1978,17 +2535,21 @@ private final class ImageWorkspaceToolbarButton: NSButton {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
         layer?.masksToBounds = false
-        iconView.imageScaling = .scaleNone
+        iconView.imageScaling = iconMetrics.imageScaling
         iconView.imageAlignment = .alignCenter
         iconView.translatesAutoresizingMaskIntoConstraints = true
         iconView.isEditable = false
         addSubview(iconView)
         hoverLayer.opacity = 0
-        hoverLayer.backgroundColor = NSColor.labelColor.withAlphaComponent(0.10).cgColor
+        hoverLayer.backgroundColor = FrameHUDChrome.hoverFill.cgColor
         layer?.insertSublayer(hoverLayer, at: 0)
     }
 
     private func updateHoverAppearance() {
+        if splitToolControl != nil {
+            return
+        }
+
         guard isEnabled else {
             animateHoverLayer(opacity: 0)
             return
@@ -2000,10 +2561,10 @@ private final class ImageWorkspaceToolbarButton: NSButton {
 
     private var hoverBackgroundColor: NSColor {
         if isWorkspaceSelected {
-            return NSColor.controlAccentColor.withAlphaComponent(0.18)
+            return FrameHUDChrome.selectedFill
         }
 
-        return NSColor.labelColor.withAlphaComponent(0.10)
+        return FrameHUDChrome.hoverFill
     }
 
     private func animateHoverLayer(opacity: Float) {

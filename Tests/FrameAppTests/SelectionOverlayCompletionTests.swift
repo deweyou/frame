@@ -475,6 +475,7 @@ final class SelectionOverlayCompletionTests: XCTestCase {
         XCTAssertTrue(window.performHUDActionForTesting(accessibilityLabel: "延迟截图"))
 
         let countdownFrame = try XCTUnwrap(window.countdownFrameForTesting())
+        XCTAssertTrue(window.isHUDHiddenForTesting())
         let localScreenBounds = CGRect(origin: .zero, size: screen.frame.size)
         let desiredCountdownCenterY = localScreenBounds.minY + localScreenBounds.height * 0.04
         let expectedCountdownCenterY = min(
@@ -540,6 +541,83 @@ final class SelectionOverlayCompletionTests: XCTestCase {
         XCTAssertEqual(window.activeSelectionForTesting()?.rect, candidate.bounds)
         XCTAssertEqual(window.activeSelectionForTesting()?.kind, .window(id: 42))
         XCTAssertFalse(window.placeholderIsVisibleForTesting())
+    }
+
+    @MainActor
+    func testInitialRememberedWindowSkipsHoverWindowPreselection() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        let candidate = WindowCandidate(
+            id: 42,
+            ownerProcessID: 100,
+            bounds: CGRect(
+                x: screen.frame.minX + 60,
+                y: screen.frame.minY + 80,
+                width: 320,
+                height: 180
+            )
+        )
+        var windowLookupCount = 0
+        let window = try makeOverlayWindowForTesting(
+            initialWindowCandidate: candidate,
+            onWindowSelectionRequested: { _, _ in
+                windowLookupCount += 1
+                return nil
+            }
+        )
+
+        XCTAssertEqual(window.activeSelectionForTesting()?.kind, .window(id: candidate.id))
+        window.moveMouseForTesting(toGlobalPoint: CGPoint(x: screen.frame.maxX - 12, y: screen.frame.maxY - 12))
+        XCTAssertEqual(windowLookupCount, 0)
+    }
+
+    @MainActor
+    func testInitialRememberedRegionSkipsHoverWindowPreselection() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        let selectionRect = CGRect(
+            x: screen.frame.minX + 60,
+            y: screen.frame.minY + 80,
+            width: 320,
+            height: 180
+        )
+        var windowLookupCount = 0
+        let window = try makeOverlayWindowForTesting(
+            initialGlobalRect: selectionRect,
+            onWindowSelectionRequested: { _, _ in
+                windowLookupCount += 1
+                return nil
+            }
+        )
+
+        XCTAssertEqual(window.activeSelectionForTesting()?.kind, .region)
+        XCTAssertEqual(window.activeSelectionForTesting()?.rect, selectionRect)
+        window.moveMouseForTesting(toGlobalPoint: CGPoint(x: screen.frame.maxX - 12, y: screen.frame.maxY - 12))
+        XCTAssertEqual(windowLookupCount, 0)
+    }
+
+    func testRememberedSelectionExpiresAfterTenMinutes() {
+        let recordedAt = Date(timeIntervalSinceReferenceDate: 1_000)
+        let memory = RememberedSelection(
+            windowID: 42,
+            bounds: CGRect(x: 20, y: 30, width: 320, height: 180),
+            recordedAt: recordedAt
+        )
+
+        XCTAssertTrue(memory.isValid(at: recordedAt.addingTimeInterval(599)))
+        XCTAssertFalse(memory.isValid(at: recordedAt.addingTimeInterval(600)))
+    }
+
+    func testRememberedSelectionKeepsRegionBoundsWithoutWindowID() {
+        let recordedAt = Date(timeIntervalSinceReferenceDate: 1_000)
+        let selection = SelectionCapture(
+            rect: CGRect(x: 20, y: 30, width: 320, height: 180),
+            kind: .region
+        )
+
+        let memory = RememberedSelection(selection: selection, recordedAt: recordedAt)
+
+        XCTAssertNil(memory.windowID)
+        XCTAssertEqual(memory.bounds, selection.rect)
+        XCTAssertEqual(memory.recordedAt, recordedAt)
     }
 
     @MainActor
@@ -687,6 +765,7 @@ final class SelectionOverlayCompletionTests: XCTestCase {
     @MainActor
     private func makeOverlayWindowForTesting(
         initialGlobalRect: CGRect? = nil,
+        initialWindowCandidate: WindowCandidate? = nil,
         initialMode: SelectionOverlayInitialMode = .screenshot,
         delayCountdownNanoseconds: UInt64 = 5_000_000_000,
         onComplete: @escaping (SelectionOverlayCompletion?) -> Void = { _ in },
@@ -698,6 +777,7 @@ final class SelectionOverlayCompletionTests: XCTestCase {
         return SelectionOverlayWindow(
             screen: screen,
             initialGlobalRect: initialGlobalRect,
+            initialWindowCandidate: initialWindowCandidate,
             initialMode: initialMode,
             showsCenteredHUDWhenEmpty: true,
             placeholderText: "Drag to select an area",

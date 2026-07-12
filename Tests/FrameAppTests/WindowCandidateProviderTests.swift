@@ -59,6 +59,24 @@ final class WindowCandidateProviderTests: XCTestCase {
         XCTAssertEqual(requests[1].1, kCGNullWindowID)
     }
 
+    func testCandidateLookupByIDFindsWindowAfterItMoves() {
+        let provider = WindowCandidateProvider(
+            currentProcessID: 100,
+            windowInfoProvider: { _, _ in
+                [Self.windowInfo(
+                    windowID: 42,
+                    ownerProcessID: 200,
+                    bounds: CGRect(x: 460, y: 520, width: 300, height: 200)
+                )]
+            }
+        )
+
+        let candidate = provider.candidate(id: 42)
+
+        XCTAssertEqual(candidate?.id, 42)
+        XCTAssertEqual(candidate?.bounds.size, CGSize(width: 300, height: 200))
+    }
+
     func testCocoaRectConvertsMainDisplayQuartzCoordinates() {
         let rect = WindowCandidateProvider.cocoaRect(
             fromQuartzWindowRect: CGRect(x: 209, y: 81, width: 1479, height: 1081),

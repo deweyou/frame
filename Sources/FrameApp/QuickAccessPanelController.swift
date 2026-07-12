@@ -328,29 +328,20 @@ final class QuickAccessPanelController: NSObject {
         imageView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
         let overlayView = NSVisualEffectView()
-        overlayView.material = .hudWindow
-        overlayView.blendingMode = .withinWindow
-        overlayView.state = .active
+        overlayView.identifier = NSUserInterfaceItemIdentifier("QuickAccessActionOverlay")
         overlayView.translatesAutoresizingMaskIntoConstraints = false
-        overlayView.wantsLayer = true
-        overlayView.layer?.cornerRadius = 14
-        overlayView.layer?.cornerCurve = .continuous
-        overlayView.layer?.masksToBounds = true
+        FrameHUDChrome.configure(overlayView, surface: .overlay, cornerRadius: 14)
         overlayView.alphaValue = 0
 
         let statusLabel = NSTextField(labelWithString: "")
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
         statusLabel.alignment = .center
         statusLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        statusLabel.textColor = .labelColor
+        statusLabel.textColor = FrameHUDChrome.primaryIcon
         statusLabel.lineBreakMode = .byTruncatingTail
         statusLabel.alphaValue = 0
         statusLabel.wantsLayer = true
-        statusLabel.layer?.cornerRadius = 10
-        statusLabel.layer?.cornerCurve = .continuous
-        statusLabel.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.88).cgColor
-        statusLabel.layer?.borderWidth = 0.5
-        statusLabel.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
+        FrameHUDChrome.configureAccessoryChip(statusLabel.layer, cornerRadius: 10)
         statusLabel.setAccessibilityLabel("OCR Status")
 
         let stackView = NSStackView()
@@ -488,16 +479,8 @@ final class QuickAccessPanelController: NSObject {
             contentView.hasThumbnailForTesting = true
         } else {
             let visualEffectView = NSVisualEffectView()
-            visualEffectView.material = .hudWindow
-            visualEffectView.blendingMode = .behindWindow
-            visualEffectView.state = .active
-            visualEffectView.wantsLayer = true
-            visualEffectView.layer?.cornerRadius = 12
-            visualEffectView.layer?.cornerCurve = .continuous
-            visualEffectView.layer?.masksToBounds = true
-            visualEffectView.layer?.borderWidth = 0.5
-            visualEffectView.layer?.borderColor = NSColor.white.withAlphaComponent(0.32).cgColor
-            visualEffectView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            visualEffectView.identifier = NSUserInterfaceItemIdentifier("QuickAccessPlaceholderSurface")
+            FrameHUDChrome.configure(visualEffectView, surface: .overlay, cornerRadius: 12)
             previewSurface = visualEffectView
         }
 
@@ -505,7 +488,7 @@ final class QuickAccessPanelController: NSObject {
             image: NSImage(systemSymbolName: "play.circle.fill", accessibilityDescription: strings.videoQuickAccessPreview) ?? NSImage()
         )
         playImageView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 34, weight: .medium)
-        playImageView.contentTintColor = .labelColor.withAlphaComponent(0.72)
+        playImageView.contentTintColor = FrameHUDChrome.primaryIcon.withAlphaComponent(0.82)
 
         let duration = DurationBadgeLabel(text: formattedDuration(recording.duration))
 
@@ -538,20 +521,15 @@ final class QuickAccessPanelController: NSObject {
         )
         if recording.format != .mp4 {
             editButton.isEnabled = false
-            editButton.contentTintColor = .disabledControlTextColor
+            editButton.contentTintColor = FrameHUDChrome.disabledIcon
             editButton.toolTip = strings.videoEditingMP4Only
             editButton.setAccessibilityHelp(strings.videoEditingMP4Only)
         }
         stackView.addArrangedSubview(editButton)
 
         let overlayView = NSVisualEffectView()
-        overlayView.material = .hudWindow
-        overlayView.blendingMode = .withinWindow
-        overlayView.state = .active
-        overlayView.wantsLayer = true
-        overlayView.layer?.cornerRadius = 14
-        overlayView.layer?.cornerCurve = .continuous
-        overlayView.layer?.masksToBounds = true
+        overlayView.identifier = NSUserInterfaceItemIdentifier("QuickAccessActionOverlay")
+        FrameHUDChrome.configure(overlayView, surface: .overlay, cornerRadius: 14)
         overlayView.alphaValue = 0
 
         let closeButton = makeIconButton(
@@ -605,7 +583,7 @@ final class QuickAccessPanelController: NSObject {
         button.toolTip = title
         let symbolPointSize = quickAccessSymbolPointSize(symbolName: symbolName, style: style)
         button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: symbolPointSize, weight: .semibold)
-        button.contentTintColor = .labelColor
+        button.contentTintColor = FrameHUDChrome.primaryIcon
         button.setButtonType(.momentaryPushIn)
         button.translatesAutoresizingMaskIntoConstraints = false
         button.setAccessibilityLabel(title)
@@ -616,14 +594,13 @@ final class QuickAccessPanelController: NSObject {
             button.drawsCenteredXMark = true
             button.ignoresHighlight = true
             button.controlSize = .mini
-            button.contentTintColor = NSColor.labelColor.withAlphaComponent(0.68)
+            button.contentTintColor = FrameHUDChrome.secondaryIcon
             button.wantsLayer = true
-            button.layer?.cornerRadius = floatingButtonRadius
-            button.layer?.cornerCurve = .continuous
-            button.layer?.masksToBounds = false
-            button.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.42).cgColor
-            button.layer?.borderWidth = 0.5
-            button.layer?.borderColor = NSColor.labelColor.withAlphaComponent(0.18).cgColor
+            FrameHUDChrome.configureAccessoryChip(
+                button.layer,
+                cornerRadius: floatingButtonRadius,
+                masksToBounds: false
+            )
             button.layer?.shadowColor = NSColor.black.cgColor
             button.layer?.shadowOpacity = 0.14
             button.layer?.shadowRadius = 3
@@ -1114,15 +1091,8 @@ private final class QuickAccessHoverPreviewController {
             width: panelSize.width,
             height: panelSize.height
         ))
-        container.material = .hudWindow
-        container.blendingMode = .withinWindow
-        container.state = .active
-        container.wantsLayer = true
-        container.layer?.cornerRadius = 12
-        container.layer?.cornerCurve = .continuous
-        container.layer?.masksToBounds = true
-        container.layer?.borderWidth = 0.5
-        container.layer?.borderColor = NSColor.white.withAlphaComponent(0.32).cgColor
+        container.identifier = NSUserInterfaceItemIdentifier("QuickAccessHoverPreviewChrome")
+        FrameHUDChrome.configure(container, surface: .overlay, cornerRadius: 12)
 
         let mediaView = makeMediaView(for: media)
         mediaView.frame = mediaFrame
@@ -1403,7 +1373,8 @@ private class ScreenshotPreviewView: NSView {
 }
 
 final class DurationBadgeLabel: NSTextField {
-    static let badgeSize = CGSize(width: 52, height: 22)
+    static let badgeSize = CGSize(width: 44, height: 18)
+    static let fontSize: CGFloat = 11
 
     var textDrawingRectForTesting: CGRect {
         textDrawingRect()
@@ -1412,8 +1383,8 @@ final class DurationBadgeLabel: NSTextField {
     init(text: String) {
         super.init(frame: CGRect(origin: .zero, size: Self.badgeSize))
         stringValue = text
-        font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
-        textColor = .labelColor
+        font = .monospacedDigitSystemFont(ofSize: Self.fontSize, weight: .semibold)
+        textColor = FrameHUDChrome.primaryIcon
         alignment = .center
         isEditable = false
         isSelectable = false
@@ -1422,9 +1393,7 @@ final class DurationBadgeLabel: NSTextField {
         backgroundColor = .clear
         focusRingType = .none
         wantsLayer = true
-        layer?.cornerRadius = 10
-        layer?.cornerCurve = .continuous
-        layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
+        FrameHUDChrome.configureAccessoryChip(layer, cornerRadius: Self.badgeSize.height / 2)
         setAccessibilityLabel(text)
     }
 
@@ -1441,7 +1410,7 @@ final class DurationBadgeLabel: NSTextField {
         NSAttributedString(
             string: stringValue,
             attributes: [
-                .font: font ?? NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
+                .font: font ?? NSFont.monospacedDigitSystemFont(ofSize: Self.fontSize, weight: .semibold),
                 .foregroundColor: textColor ?? NSColor.labelColor,
             ]
         )

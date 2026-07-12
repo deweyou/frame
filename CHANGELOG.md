@@ -2,7 +2,28 @@
 
 ## Unreleased
 
-- Add release notes here before the next version bump.
+- Improve the screenshot editor with a context-aware header style control, an
+  icon-only color swatch selector and tiled palette dropdown, canvas tool
+  shortcuts, and double-click object context switching.
+- Add a setting for the Save Current default behavior so edited screenshots can
+  replace the current preview or save as a new preview without prompting every
+  time.
+- Refine editor close prompts, expand text sizing through 96 pt, use an opaque
+  canvas backdrop, hide selection HUD controls during delayed capture, and
+  persist the last confirmed screenshot selection for ten minutes across Frame
+  restarts.
+- Remove the visible blue resize anchor from selected image annotations while
+  retaining the top-right resize target.
+- Make the image editor's Save Current, Copy, and Download controls a compact,
+  evenly sized group, with Save and Copy / Save and Download tooltips.
+- Rework the image editor toolbar with stable dark glass, clearer semantic
+  groups, centered normalized icon rendering, and an attached Mosaic split
+  control with a larger menu target.
+- Align image editing, video preview/editing, and Quick Access control chrome
+  around stable deep glass while keeping captured image and video pixels
+  unmodified.
+- Reduce the recording Quick Access duration badge so it stays legible without
+  competing with the preview.
 
 ## 0.1.1 - 2026-07-06
 

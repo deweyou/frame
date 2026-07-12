@@ -141,6 +141,18 @@ final class ZFrameCoreTests: XCTestCase {
         }
     }
 
+    func testImageWorkspaceSaveCurrentBehaviorUsesReplaceCurrentByDefault() {
+        XCTAssertEqual(ImageWorkspaceSaveCurrentBehavior.defaultBehavior, .replaceCurrent)
+        XCTAssertEqual(ImageWorkspaceSaveCurrentBehavior.allCases, [
+            .askEveryTime,
+            .replaceCurrent,
+            .saveAsNew,
+        ])
+        XCTAssertEqual(ImageWorkspaceSaveCurrentBehavior.askEveryTime.rawValue, "askEveryTime")
+        XCTAssertEqual(ImageWorkspaceSaveCurrentBehavior.replaceCurrent.rawValue, "replaceCurrent")
+        XCTAssertEqual(ImageWorkspaceSaveCurrentBehavior.saveAsNew.rawValue, "saveAsNew")
+    }
+
     func testScreenshotFilenameUsesFrameTimestampFormat() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

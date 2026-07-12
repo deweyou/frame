@@ -108,6 +108,92 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         XCTAssertEqual(editCallCount, 0)
     }
 
+    func testScreenshotQuickAccessKeepsMediaSurfaceSeparateFromDarkActionChrome() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+        let screenshot = CapturedScreenshot(
+            pngData: try makePNGData(),
+            image: NSImage(size: CGSize(width: 320, height: 180)),
+            rect: CGRect(x: 0, y: 0, width: 320, height: 180)
+        )
+
+        controller.show(
+            for: screenshot,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .en),
+            copy: { true },
+            save: { true },
+            recognizeText: { true },
+            openWorkspace: { true },
+            pin: { true },
+            close: {}
+        )
+
+        let panel = try XCTUnwrap(newPreviewPanels(excluding: windowsBeforeShow).first)
+        defer { panel.close() }
+        let contentView = try XCTUnwrap(panel.contentView)
+        let overlay = try XCTUnwrap(findView(identifier: "QuickAccessActionOverlay", in: contentView) as? NSVisualEffectView)
+        let mediaSurface = try XCTUnwrap(contentView.subviews.first)
+
+        XCTAssertEqual(overlay.appearance?.name, .vibrantDark)
+        XCTAssertEqual(overlay.material, .hudWindow)
+        XCTAssertEqual(
+            overlay.layer?.backgroundColor?.alpha ?? 0,
+            FrameHUDChrome.backgroundColor(for: .overlay).alphaComponent,
+            accuracy: 0.01
+        )
+        XCTAssertFalse(mediaSurface is NSVisualEffectView)
+    }
+
+    func testRecordingQuickAccessUsesDeepPlaceholderAndDurationChrome() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let recording = CapturedRecording(
+            id: UUID(),
+            fileURL: URL(fileURLWithPath: "/tmp/missing-recording.mp4"),
+            format: .mp4,
+            rect: .zero,
+            pixelSize: CGSize(width: 320, height: 240),
+            byteSize: 10,
+            duration: 24
+        )
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+
+        controller.show(
+            for: recording,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .en),
+            download: { true },
+            copy: { true },
+            preview: { true },
+            edit: { true },
+            close: {}
+        )
+
+        let panel = try XCTUnwrap(newPreviewPanels(excluding: windowsBeforeShow).first)
+        defer { panel.close() }
+        let contentView = try XCTUnwrap(panel.contentView)
+        let placeholder = try XCTUnwrap(findView(identifier: "QuickAccessPlaceholderSurface", in: contentView) as? NSVisualEffectView)
+        let duration = try XCTUnwrap(findView(of: DurationBadgeLabel.self, in: contentView))
+
+        XCTAssertEqual(placeholder.appearance?.name, .vibrantDark)
+        XCTAssertEqual(placeholder.material, .hudWindow)
+        XCTAssertEqual(
+            placeholder.layer?.backgroundColor?.alpha ?? 0,
+            FrameHUDChrome.backgroundColor(for: .overlay).alphaComponent,
+            accuracy: 0.01
+        )
+        XCTAssertEqual(duration.textColor, FrameHUDChrome.primaryIcon)
+        XCTAssertEqual(
+            duration.layer?.backgroundColor?.alpha ?? 0,
+            FrameHUDChrome.backgroundColor(for: .overlay).alphaComponent,
+            accuracy: 0.01
+        )
+    }
+
     func testRecordingQuickAccessClosesAfterSuccessfulDownload() throws {
         _ = NSApplication.shared
         let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
@@ -292,6 +378,9 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         let badge = try XCTUnwrap(findTextField(in: contentView, stringValue: "00:51") as? DurationBadgeLabel)
 
         XCTAssertEqual(badge.frame.size, DurationBadgeLabel.badgeSize)
+        XCTAssertEqual(DurationBadgeLabel.badgeSize, CGSize(width: 44, height: 18))
+        XCTAssertEqual(badge.font?.pointSize ?? 0, DurationBadgeLabel.fontSize, accuracy: 0.01)
+        XCTAssertEqual(badge.layer?.cornerRadius ?? 0, 9, accuracy: 0.01)
         XCTAssertEqual(badge.frame.maxX, contentView.bounds.maxX - 9, accuracy: 0.5)
         XCTAssertEqual(badge.frame.minY, contentView.bounds.minY + 9, accuracy: 0.5)
 
@@ -607,6 +696,19 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
         XCTAssertEqual(metrics.mediaFrame.width / metrics.mediaFrame.height, 16.0 / 9.0, accuracy: 0.01)
         XCTAssertEqual(metrics.mediaFrame.minX, 12, accuracy: 0.5)
         XCTAssertEqual(metrics.mediaFrame.minY, 12, accuracy: 0.5)
+
+        let hoverWindow = try XCTUnwrap(NSApp.windows.first {
+            $0.title == QuickAccessPanelController.hoverPreviewWindowTitle
+        })
+        let hoverContentView = try XCTUnwrap(hoverWindow.contentView)
+        let hoverChrome = try XCTUnwrap(findView(identifier: "QuickAccessHoverPreviewChrome", in: hoverContentView) as? NSVisualEffectView)
+        XCTAssertEqual(hoverChrome.appearance?.name, .vibrantDark)
+        XCTAssertEqual(hoverChrome.material, .hudWindow)
+        XCTAssertEqual(
+            hoverChrome.layer?.backgroundColor?.alpha ?? 0,
+            FrameHUDChrome.backgroundColor(for: .overlay).alphaComponent,
+            accuracy: 0.01
+        )
     }
 
     func testRecordingHoverPreviewUsesMutedPlayback() throws {
@@ -805,6 +907,34 @@ final class RecordingQuickAccessPanelControllerTests: XCTestCase {
 
     private func findPreviewSurface(in view: NSView) -> NSView? {
         view.subviews.first
+    }
+
+    private func findView<T: NSView>(of type: T.Type, in view: NSView) -> T? {
+        if let matchingView = view as? T {
+            return matchingView
+        }
+
+        for subview in view.subviews {
+            if let matchingView = findView(of: type, in: subview) {
+                return matchingView
+            }
+        }
+
+        return nil
+    }
+
+    private func findView(identifier: String, in view: NSView) -> NSView? {
+        if view.identifier?.rawValue == identifier {
+            return view
+        }
+
+        for subview in view.subviews {
+            if let matchingView = findView(identifier: identifier, in: subview) {
+                return matchingView
+            }
+        }
+
+        return nil
     }
 
     private func makeMouseButtonEvent(type: NSEvent.EventType, point: NSPoint, panel: NSPanel) throws -> NSEvent {
