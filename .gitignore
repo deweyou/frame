@@ -1,4 +1,6 @@
 .superpowers/
+.codex/config.toml
+.harness_local/
 .worktrees/
 .build/
 DerivedData/
