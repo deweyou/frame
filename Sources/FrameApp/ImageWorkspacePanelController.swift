@@ -94,6 +94,12 @@ final class ImageWorkspacePanelController: NSObject {
         )
 
         panel.contentView = makeContentView(for: item)
+        panel.contentView?.layoutSubtreeIfNeeded()
+        if panel.usesScrollableImageViewport,
+           let annotationCanvas = item.annotationCanvas,
+           let imageZoom = item.imageZoom {
+            imageZoom.fitWidth(imageSize: screenshot.image.size, bounds: annotationCanvas.bounds)
+        }
         workspaceItems.append(item)
         installLifecycleCallbacks(for: item)
         startAutomaticOCRIfNeeded(for: item)
@@ -111,7 +117,8 @@ final class ImageWorkspacePanelController: NSObject {
     private func makePanel(for screenshot: CapturedScreenshot, kind: ImageWorkspaceKind) -> ImageWorkspacePanel {
         let targetScreen = NSScreen.main ?? NSScreen.screens.first
         let visibleFrame = targetScreen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 900, height: 700)
-        let contentSize = initialContentSize(for: screenshot.image, in: visibleFrame, kind: kind)
+        let initialLayout = initialLayout(for: screenshot.image, in: visibleFrame, kind: kind)
+        let contentSize = initialLayout.contentSize
         let imageAspectRatio = ImageWorkspaceLayout.imageAspectRatio(for: screenshot.image)
         let contentRect = NSRect(
             x: visibleFrame.midX - contentSize.width / 2,
@@ -139,10 +146,11 @@ final class ImageWorkspacePanelController: NSObject {
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.isOpaque = false
-        panel.configureAspectLockedResize(
-            imageAspectRatio: imageAspectRatio,
+        panel.configureResize(
+            imageAspectRatio: initialLayout.usesScrollableViewport ? nil : imageAspectRatio,
             metrics: ImageWorkspaceLayout.resizeMetrics(for: kind)
         )
+        panel.usesScrollableImageViewport = initialLayout.usesScrollableViewport
         panel.onEscape = { [weak self, weak panel] in
             guard let panel,
                   let item = self?.workspaceItem(for: panel),
@@ -156,11 +164,11 @@ final class ImageWorkspacePanelController: NSObject {
         return panel
     }
 
-    private func initialContentSize(
+    private func initialLayout(
         for image: NSImage,
         in visibleFrame: NSRect,
         kind: ImageWorkspaceKind
-    ) -> CGSize {
+    ) -> ImageWorkspaceInitialLayout {
         let aspectRatio = ImageWorkspaceLayout.imageAspectRatio(for: image)
         let resizeMetrics = ImageWorkspaceLayout.resizeMetrics(for: kind)
         let maximumContentSize = CGSize(
@@ -177,9 +185,21 @@ final class ImageWorkspacePanelController: NSObject {
         let imageWidth = max(minimumImageWidth, fittedImageWidth)
         let fittedImageSize = CGSize(width: imageWidth, height: imageWidth / aspectRatio)
 
-        return CGSize(
+        let aspectLockedContentSize = CGSize(
             width: fittedImageSize.width + resizeMetrics.horizontalChromeWidth,
             height: fittedImageSize.height + resizeMetrics.fixedVerticalChromeHeight
+        )
+        let usesScrollableViewport = kind == .temporaryPreview
+            && aspectLockedContentSize.height > maximumContentSize.height
+
+        return ImageWorkspaceInitialLayout(
+            contentSize: usesScrollableViewport
+                ? CGSize(
+                    width: min(aspectLockedContentSize.width, maximumContentSize.width),
+                    height: maximumContentSize.height
+                )
+                : aspectLockedContentSize,
+            usesScrollableViewport: usesScrollableViewport
         )
     }
 
@@ -219,6 +239,7 @@ final class ImageWorkspacePanelController: NSObject {
         imageContainer.setAccessibilityLabel("Image Preview Container")
 
         let imageZoom = ImageWorkspaceImageZoom()
+        item.imageZoom = imageZoom
         let annotationCanvas = ImageAnnotationCanvasView(
             image: item.screenshot.image,
             document: ImageAnnotationDocument(editingOptions: editingOptionsProvider()),
@@ -1473,6 +1494,7 @@ private final class ImageWorkspaceItem {
     var toolButtons: [(tool: ImageAnnotationTool, button: NSButton)] = []
     var shapeKindButtons: [(shapeKind: ImageAnnotationShapeKind, button: NSButton)] = []
     weak var annotationCanvas: ImageAnnotationCanvasView?
+    var imageZoom: ImageWorkspaceImageZoom?
     weak var saveCurrentButton: NSButton?
     weak var styleControl: ImageWorkspaceHeaderStyleControlView?
     weak var styleDivider: NSView?
@@ -1887,6 +1909,11 @@ private extension Array {
     }
 }
 
+private struct ImageWorkspaceInitialLayout {
+    let contentSize: CGSize
+    let usesScrollableViewport: Bool
+}
+
 private enum ImageWorkspaceLayout {
     static let fallbackImageSize = CGSize(width: 640, height: 420)
     static let toolbarLeading: CGFloat = 0
@@ -1910,6 +1937,7 @@ private enum ImageWorkspaceLayout {
     static let baseMinimumContentWidth: CGFloat = 440
     static let pinnedMinimumContentWidth: CGFloat = 320
     static let initialWindowScreenMargin: CGFloat = 80
+    static let minimumScrollableViewportHeight: CGFloat = 260
 
     static var minimumContentWidth: CGFloat {
         max(baseMinimumContentWidth, toolbarLeading + minimumToolbarWidth + toolbarTrailing)
@@ -1994,14 +2022,22 @@ private final class ImageWorkspacePanel: NSPanel, NSWindowDelegate {
         horizontalChromeWidth: 0,
         minimumContentWidth: ImageWorkspaceLayout.pinnedMinimumContentWidth
     )
+    var usesScrollableImageViewport = false
 
-    func configureAspectLockedResize(
-        imageAspectRatio: CGFloat,
+    func configureResize(
+        imageAspectRatio: CGFloat?,
         metrics: ImageWorkspaceResizeMetrics
     ) {
         self.imageAspectRatio = imageAspectRatio
         resizeMetrics = metrics
-        minSize = frameSize(forContentSize: metrics.minimumContentSize(for: imageAspectRatio))
+        if let imageAspectRatio {
+            minSize = frameSize(forContentSize: metrics.minimumContentSize(for: imageAspectRatio))
+        } else {
+            minSize = frameSize(forContentSize: NSSize(
+                width: metrics.minimumContentWidth,
+                height: ImageWorkspaceLayout.minimumScrollableViewportHeight
+            ))
+        }
         delegate = self
     }
 

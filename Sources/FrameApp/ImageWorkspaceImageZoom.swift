@@ -10,6 +10,32 @@ final class ImageWorkspaceImageZoom {
     private var contentOffset: CGPoint = .zero
 
     @discardableResult
+    func fitWidth(imageSize: CGSize, bounds: CGRect) -> Bool {
+        guard imageSize.width > 0,
+              imageSize.height > 0,
+              bounds.width > 0,
+              bounds.height > 0 else {
+            return false
+        }
+
+        let fittedScale = baseScale(imageSize: imageSize, bounds: bounds)
+        let targetWidth = min(imageSize.width, bounds.width)
+        let updatedScale = Self.clamp(
+            targetWidth / (imageSize.width * fittedScale),
+            min: Self.minimumScale,
+            max: Self.maximumScale
+        )
+        guard abs(updatedScale - scale) > 0.0001 else {
+            return false
+        }
+
+        scale = updatedScale
+        contentOffset = .zero
+        onViewportChange?()
+        return true
+    }
+
+    @discardableResult
     func applyMagnification(
         _ magnification: CGFloat,
         imageSize: CGSize,

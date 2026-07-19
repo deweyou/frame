@@ -1,5 +1,14 @@
 # Screenshot Editor Design
 
+```mermaid
+flowchart LR
+    A[Open screenshot editor] --> B{Fits visible screen?}
+    B -->|Yes| C[Aspect-locked image window]
+    B -->|Extra tall| D[Screen-bounded viewport]
+    D --> E[Fit width and scroll vertically]
+    D --> F[Pinch out to whole-image fit]
+```
+
 > Superseded in part by
 > `docs/superpowers/specs/2026-07-09-image-editor-workflow-polish-design.md`
 > for the contextual header style control, canvas tool shortcuts, double-click
@@ -30,6 +39,10 @@ Ship Frame's first real screenshot editing workflow inside the existing Image Wo
 - The workspace opens with pointer/select active by default, while remembering
   the last selected color, thickness, font size, shape kind, and mosaic mode.
   The mosaic toolbar icon reflects the selected mosaic subtool.
+- Extra-tall screenshots that would push the editor below the visible screen use
+  a screen-bounded viewport instead of an oversized aspect-locked window. They
+  open fitted to width, support two-finger vertical navigation, and can pinch out
+  to the whole-image fit without resizing the window.
 
 ## Scope
 
@@ -132,6 +145,12 @@ The workspace should not recapture the screen. It edits the PNG/image already pr
   re-entry.
 - Manual smoke covers real mouse drawing, resizing handles, text editing, mosaic region/brush visual output, and saved PNG inspection.
 
+## Key Files
+
+- [ImageWorkspacePanelController.swift](../../../Sources/FrameApp/ImageWorkspacePanelController.swift#L111) owns screen-bounded workspace layout and resize policy.
+- [ImageWorkspaceImageZoom.swift](../../../Sources/FrameApp/ImageWorkspaceImageZoom.swift#L4) owns content zoom and clamped navigation.
+- [ImageWorkspacePanelControllerTests.swift](../../../Tests/FrameAppTests/ImageWorkspacePanelControllerTests.swift#L2134) covers initial sizing, zoom, scrolling, and long-image regressions.
+
 ## Acceptance Criteria
 
 - Capturing a screenshot still first shows Quick Access.
@@ -159,4 +178,10 @@ The workspace should not recapture the screen. It edits the PNG/image already pr
 - Closing with unsaved edits follows the Save Current preference: direct defaults
   offer Save, Don't Save, and Cancel, while Ask Every Time retains Replace
   Current / Save As New.
+- Extra-tall screenshots remain inside the visible screen and allow users to
+  reach the bottom through two-finger scrolling or view the whole image by
+  pinching out.
 - README English and Chinese product descriptions no longer say annotation tools are missing.
+
+---
+*Last updated: 2026-07-19 | Reason: define screen-bounded zoom and navigation for extra-tall screenshots*

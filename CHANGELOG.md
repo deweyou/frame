@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-- Add release notes here before the next version bump.
+- Prevent scrolling screenshots from repeating earlier page sections when the
+  captured page jumps back to a previously sampled position.
+- Keep extra-tall screenshots inside a screen-bounded editing viewport with
+  pinch-to-zoom and two-finger vertical navigation to reach the full image.
 
 ## 0.1.2 - 2026-07-12
 

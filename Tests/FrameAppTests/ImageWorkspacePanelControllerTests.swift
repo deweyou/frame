@@ -2167,6 +2167,45 @@ final class ImageWorkspacePanelControllerTests: XCTestCase {
         XCTAssertEqual(canvas.lastDrawRectForTesting.height, sourceSize.height, accuracy: 0.5)
     }
 
+    func testTallTemporaryWorkspaceUsesScreenBoundedScrollableViewport() throws {
+        _ = NSApplication.shared
+        let visibleFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let sourceSize = CGSize(width: 1_000, height: max(4_000, visibleFrame.height * 4))
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = ImageWorkspacePanelController()
+        retainedControllers.append(controller)
+
+        XCTAssertTrue(controller.show(
+            screenshot: try makeSolidScreenshot(color: .systemBlue, size: sourceSize),
+            kind: .temporaryPreview,
+            copy: { true },
+            save: { true }
+        ))
+
+        let panel = try XCTUnwrap(workspacePanels(excluding: windowsBeforeShow).first)
+        defer {
+            closePanel(panel)
+        }
+
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let canvas = try XCTUnwrap(findAnnotationCanvas(in: contentView))
+
+        XCTAssertLessThanOrEqual(panel.frame.height, visibleFrame.height + 1)
+        XCTAssertGreaterThan(canvas.lastDrawRectForTesting.height, canvas.bounds.height)
+
+        let initialDrawRect = canvas.lastDrawRectForTesting
+        canvas.scrollWheel(with: FakeScrollWheelEvent(deltaX: 0, deltaY: -120))
+        XCTAssertNotEqual(canvas.lastDrawRectForTesting.minY, initialDrawRect.minY)
+
+        let scrolledDrawRect = canvas.lastDrawRectForTesting
+        canvas.magnify(with: FakeMagnifyEvent(
+            magnification: -0.5,
+            locationInWindow: canvas.convert(canvas.bounds.center, to: nil)
+        ))
+        XCTAssertLessThan(canvas.lastDrawRectForTesting.height, scrolledDrawRect.height)
+    }
+
     func testPinnedWorkspaceOpensFittingImageAtOriginalWindowSize() throws {
         _ = NSApplication.shared
         let sourceSize = CGSize(width: 1040, height: 650)

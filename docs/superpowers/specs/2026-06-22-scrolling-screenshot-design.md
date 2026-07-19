@@ -1,5 +1,13 @@
 # Scrolling Screenshot Design
 
+```mermaid
+flowchart LR
+    A[Capture fixed region] --> B[Accept unique frames]
+    B --> C[Match vertical overlap]
+    C --> D[Create one long PNG]
+    B -->|Previously sampled position| E[Skip repeated frame]
+```
+
 ## Goal
 
 Ship the first scrolling screenshot workflow for Frame. Users select a fixed
@@ -128,8 +136,9 @@ Core behavior:
 - Accept an overlap only when its similarity is above a conservative threshold.
 - When overlap is accepted, crop the duplicate top part from the next frame and
   append the remaining pixels.
-- When a later frame is nearly identical to the previous accepted frame, treat it
-  as no scroll progress and skip it.
+- When a later frame is nearly identical to any frame already accepted in the
+  session, treat it as no scroll progress and skip it. This prevents a page that
+  jumps back to an earlier position from appending the same content cycle again.
 - When no usable overlap can be found for an adjacent frame, fail the stitching
   request with a user-facing error instead of producing a visibly broken long
   image.
@@ -194,6 +203,8 @@ because a broken long screenshot may look credible at a glance.
 - Stitch two images with a known vertical overlap.
 - Stitch multiple images with repeated overlap.
 - Skip identical frames as no progress.
+- Skip a previously captured frame after it falls outside the recent output
+  window.
 - Fail when there are fewer than two distinct frames.
 - Fail when adjacent frames do not have a reliable overlap.
 - Preserve expected final image dimensions after cropping duplicates.
@@ -253,4 +264,4 @@ overviews aligned.
   implementation is claimed ready.
 
 ---
-*Last updated: 2026-06-22 | Reason: define manual vertical scrolling screenshot v1*
+*Last updated: 2026-07-19 | Reason: prevent repeated page cycles after returning to an earlier sampled position*
