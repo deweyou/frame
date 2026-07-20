@@ -28,12 +28,14 @@ public final class ScrollingScreenshotStitcher {
 
         var acceptedFrames: [PixelFrame] = []
         for frame in try frames.map(PixelFrame.init) {
-            guard let previousFrame = acceptedFrames.last else {
+            guard !acceptedFrames.isEmpty else {
                 acceptedFrames.append(frame)
                 continue
             }
 
-            if previousFrame.hasSamePixels(as: frame) {
+            // A page can jump back to an earlier position after reaching its end.
+            // Deduplicating only the adjacent sample lets that entire cycle be appended again.
+            if acceptedFrames.contains(where: { $0.hasSamePixels(as: frame) }) {
                 continue
             }
 
@@ -166,7 +168,16 @@ private struct PixelFrame {
             return false
         }
 
-        return averageChannelDifference(from: pixels, to: otherFrame.pixels) <= Self.maximumAverageIdenticalChannelDifference
+        let maximumTotalDifference = Int(Self.maximumAverageIdenticalChannelDifference * Double(pixels.count))
+        var totalDifference = 0
+        for index in pixels.indices {
+            totalDifference += abs(Int(pixels[index]) - Int(otherFrame.pixels[index]))
+            if totalDifference > maximumTotalDifference {
+                return false
+            }
+        }
+
+        return true
     }
 
     static func verticalOverlap(
@@ -485,18 +496,6 @@ private struct PixelFrame {
         }
 
         return Double(totalDifference) / Double(byteCount)
-    }
-
-    private func averageChannelDifference(from firstPixels: [UInt8], to secondPixels: [UInt8]) -> Double {
-        guard firstPixels.count == secondPixels.count,
-              !firstPixels.isEmpty else {
-            return .infinity
-        }
-
-        let totalDifference = zip(firstPixels, secondPixels).reduce(0) { partialResult, channels in
-            partialResult + abs(Int(channels.0) - Int(channels.1))
-        }
-        return Double(totalDifference) / Double(firstPixels.count)
     }
 
     struct OverlapCandidate {

@@ -168,6 +168,23 @@ final class ScrollingScreenshotStitcherTests: XCTestCase {
         XCTAssertEqual(try rowColors(in: output), [.blue, .yellow, .cyan, .magenta, .white, .black])
     }
 
+    func testSkipsPreviouslyCapturedFrameAfterItFallsOutsideRecentOutputWindow() throws {
+        let expectedMarkerColumns = Array(1...24)
+        let frames = try stride(from: 0, through: 18, by: 2).map { firstMarkerIndex in
+            try makeSparseMarkerImage(
+                markerColumns: Array(expectedMarkerColumns[firstMarkerIndex..<(firstMarkerIndex + 6)]),
+                width: 120
+            )
+        }
+        let stitcher = ScrollingScreenshotStitcher()
+
+        let output = try stitcher.stitch(
+            (frames + [frames[0]]).map { ScrollingScreenshotFrame(image: $0, scale: 1) }
+        )
+
+        XCTAssertEqual(try markerColumns(in: output), expectedMarkerColumns)
+    }
+
     func testSkipsNearlyIdenticalFramesAsNoProgress() throws {
         let image = try makeStripedImage(rows: [.red, .green, .blue])
         let noisyImage = try makeStripedImage(rows: [.red, .green, .blue], pixelNoise: 2, noisyRows: 0..<3)
