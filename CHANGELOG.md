@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Show a fixed side preview during scrolling screenshots so users can see
+  successfully stitched progress and detect interrupted matching before Finish.
+- Build the full-resolution result incrementally from raw capture frames, avoid
+  per-sample PNG encoding and retained full-frame history, and encode once at
+  Finish without restitching the capture.
+- Run incremental ingest and final encoding through an explicit background-safe
+  worker boundary so starting a scrolling capture cannot violate MainActor
+  isolation.
+- Keep the last accepted preview and session available when a sample cannot be
+  matched, with bounded canvas memory and historical-position fingerprints.
+- Make automatic scrolling wait for each classified sample, confirm the bottom
+  across three no-motion samples, and stop on historical repeats or unreliable
+  overlap instead of bouncing back through the page.
+- Keep sparse white-background pages stitchable when only a small amount of
+  visible content moves between samples.
 - Prevent scrolling screenshots from repeating earlier page sections when the
   captured page jumps back to a previously sampled position.
 - Keep extra-tall screenshots inside a screen-bounded editing viewport with

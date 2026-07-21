@@ -198,6 +198,28 @@ final class ScrollingScreenshotStitcherTests: XCTestCase {
         }
     }
 
+    func testStitchesSparseWhitePageWhenSmallContentMoves() throws {
+        let first = try makeSparsePageImage(markers: [
+            (row: 30, column: 10),
+            (row: 60, column: 20),
+            (row: 90, column: 30),
+        ])
+        let second = try makeSparsePageImage(markers: [
+            (row: 10, column: 10),
+            (row: 40, column: 20),
+            (row: 70, column: 30),
+            (row: 90, column: 40),
+        ])
+        let stitcher = ScrollingScreenshotStitcher()
+
+        let output = try stitcher.stitch([
+            ScrollingScreenshotFrame(image: first, scale: 1),
+            ScrollingScreenshotFrame(image: second, scale: 1),
+        ])
+
+        XCTAssertEqual(output.height, 120)
+    }
+
     func testFailsWithFewerThanTwoFrames() throws {
         let stitcher = ScrollingScreenshotStitcher()
 
@@ -227,6 +249,36 @@ final class ScrollingScreenshotStitcherTests: XCTestCase {
             ScrollingScreenshotFrame(image: try makeStripedImage(rows: [.red, .green]), scale: 1),
             ScrollingScreenshotFrame(image: try makeStripedImage(rows: [.cyan, .magenta]), scale: 1),
         ])) { error in
+            XCTAssertEqual(error as? ScrollingScreenshotStitchingError, .noReliableOverlap)
+        }
+    }
+
+    func testRecoverySkipsOneIsolatedUnmatchedFrame() throws {
+        let first = try makeStripedImage(rows: [.red, .green, .blue, .yellow])
+        let unmatched = try makeStripedImage(rows: [.white, .red, .black, .green], width: 4)
+        let recovered = try makeStripedImage(rows: [.blue, .yellow, .cyan, .magenta])
+        let stitcher = ScrollingScreenshotStitcher()
+        let frames = [first, unmatched, recovered].map {
+            ScrollingScreenshotFrame(image: $0, scale: 1)
+        }
+
+        XCTAssertThrowsError(try stitcher.stitch(frames))
+        let output = try stitcher.stitchRecovering(frames, maximumSkippedFrames: 2)
+
+        XCTAssertEqual(try rowColors(in: output), [.red, .green, .blue, .yellow, .cyan, .magenta])
+    }
+
+    func testRecoveryFailsWhenItCannotReachOneOfFinalTwoFrames() throws {
+        let first = try makeStripedImage(rows: [.red, .green, .blue, .yellow])
+        let second = try makeStripedImage(rows: [.blue, .yellow, .cyan, .magenta])
+        let unmatched = try makeStripedImage(rows: [.white, .red, .black, .green], width: 4)
+        let anotherUnmatched = try makeStripedImage(rows: [.black, .cyan, .white, .red], width: 5)
+        let stitcher = ScrollingScreenshotStitcher()
+        let frames = [first, second, unmatched, anotherUnmatched].map {
+            ScrollingScreenshotFrame(image: $0, scale: 1)
+        }
+
+        XCTAssertThrowsError(try stitcher.stitchRecovering(frames, maximumSkippedFrames: 2)) { error in
             XCTAssertEqual(error as? ScrollingScreenshotStitchingError, .noReliableOverlap)
         }
     }
@@ -296,6 +348,30 @@ final class ScrollingScreenshotStitcherTests: XCTestCase {
         }
 
         return try makeImage(width: width, height: markerColumns.count, pixels: &pixels)
+    }
+
+    private func makeSparsePageImage(
+        markers: [(row: Int, column: Int)],
+        width: Int = 120,
+        height: Int = 100
+    ) throws -> CGImage {
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        var pixels = [UInt8](repeating: 255, count: height * bytesPerRow)
+        for marker in markers {
+            for rowOffset in 0..<3 {
+                for columnOffset in 0..<3 {
+                    let offset = (marker.row + rowOffset) * bytesPerRow
+                        + (marker.column + columnOffset) * bytesPerPixel
+                    pixels[offset] = 0
+                    pixels[offset + 1] = 0
+                    pixels[offset + 2] = 0
+                    pixels[offset + 3] = 255
+                }
+            }
+        }
+
+        return try makeImage(width: width, height: height, pixels: &pixels)
     }
 
     private func rowColors(in image: CGImage) throws -> [TestColor] {

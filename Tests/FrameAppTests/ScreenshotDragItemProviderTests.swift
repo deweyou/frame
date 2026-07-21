@@ -140,6 +140,53 @@ final class ScreenshotDragItemProviderTests: XCTestCase {
         }
     }
 
+    func testPendingScreenshotShowsProgressAndUnlocksActionsInPlace() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let screenshot = CapturedScreenshot(
+            pngData: Data(),
+            image: NSImage(size: NSSize(width: 200, height: 400)),
+            rect: CGRect(x: 0, y: 0, width: 200, height: 400)
+        )
+        let controller = QuickAccessPanelController()
+        retainedPreviewControllers.append(controller)
+
+        controller.show(
+            for: screenshot,
+            preferredAnchor: nil,
+            strings: AppStrings(language: .zhHans),
+            isPending: true,
+            copy: { true },
+            save: { true },
+            recognizeText: { true },
+            openWorkspace: { true },
+            pin: { true },
+            close: {}
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer { panel.close() }
+        let previewView = try XCTUnwrap(panel.contentView)
+        previewView.layoutSubtreeIfNeeded()
+        let progressIndicator = try XCTUnwrap(
+            previewView.subviews.compactMap { $0 as? NSProgressIndicator }.first {
+                $0.accessibilityLabel() == "Generating screenshot"
+            }
+        )
+        let closeButton = try XCTUnwrap(findButton(in: previewView, accessibilityLabel: "关闭"))
+        let closePoint = previewView.convert(
+            NSPoint(x: closeButton.bounds.midX, y: closeButton.bounds.midY),
+            from: closeButton
+        )
+
+        XCTAssertFalse(progressIndicator.isHidden)
+        XCTAssertIdentical(previewView.hitTest(closePoint), previewView)
+
+        XCTAssertTrue(controller.setScreenshotPending(false, for: screenshot))
+        XCTAssertTrue(progressIndicator.isHidden)
+        XCTAssertIdentical(previewView.hitTest(closePoint), closeButton)
+    }
+
     func testQuickAccessToolbarUsesReadableSymbolsWithConsistentScaling() throws {
         _ = NSApplication.shared
         let panel = try showPreview(

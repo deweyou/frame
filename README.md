@@ -34,7 +34,10 @@ The goal is simple: capture what you need, then get back to what you were doing.
 
 - Select an area with `Command+Shift+A`.
 - Capture a window.
-- Capture long content by scrolling.
+- Capture long content by scrolling, with a fixed side preview that follows
+  successfully stitched progress while capture is running, fast Finish without
+  restitching the whole capture, and automatic scrolling that waits for each
+  frame and stops at the bottom or when matching becomes unreliable.
 - Use Frame on multiple displays.
 - Save screenshots as PNG files.
 

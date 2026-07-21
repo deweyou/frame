@@ -31,6 +31,7 @@ final class QuickAccessPanelController: NSObject {
         for captured: CapturedScreenshot,
         preferredAnchor: CGRect?,
         strings: AppStrings = AppStrings.current(),
+        isPending: Bool = false,
         copy: @escaping () -> Bool,
         save: @escaping () -> Bool,
         recognizeText: @escaping () -> Bool,
@@ -39,7 +40,7 @@ final class QuickAccessPanelController: NSObject {
         close: @escaping () -> Void
     ) {
         let panel = makePanel(for: captured.image)
-        let content = makeContentView(for: captured, strings: strings)
+        let content = makeContentView(for: captured, strings: strings, isPending: isPending)
         panel.contentView = content.view
         previewItems.append(
             QuickAccessPreviewItem(
@@ -50,6 +51,8 @@ final class QuickAccessPanelController: NSObject {
                 ocrProgressIndicator: content.ocrProgressIndicator,
                 statusLabel: content.statusLabel,
                 screenshotImageView: content.imageView,
+                screenshotContentView: content.view,
+                pendingProgressIndicator: content.pendingProgressIndicator,
                 recordingContentView: nil,
                 copy: copy,
                 save: save,
@@ -107,6 +110,8 @@ final class QuickAccessPanelController: NSObject {
                 ocrProgressIndicator: nil,
                 statusLabel: nil,
                 screenshotImageView: nil,
+                screenshotContentView: nil,
+                pendingProgressIndicator: nil,
                 recordingContentView: content,
                 copy: nil,
                 save: nil,
@@ -149,6 +154,23 @@ final class QuickAccessPanelController: NSObject {
         item.hoverPreviewWorkItem?.cancel()
         item.hoverPreviewWorkItem = nil
         hoverPreviewController.close()
+        return true
+    }
+
+    @discardableResult
+    func setScreenshotPending(_ isPending: Bool, for screenshot: CapturedScreenshot) -> Bool {
+        guard let item = previewItems.first(where: { $0.screenshotID == screenshot.id }) else {
+            return false
+        }
+
+        item.screenshotContentView?.setActionsEnabled(!isPending)
+        if isPending {
+            item.pendingProgressIndicator?.isHidden = false
+            item.pendingProgressIndicator?.startAnimation(nil)
+        } else {
+            item.pendingProgressIndicator?.stopAnimation(nil)
+            item.pendingProgressIndicator?.isHidden = true
+        }
         return true
     }
 
@@ -305,8 +327,13 @@ final class QuickAccessPanelController: NSObject {
         return panel
     }
 
-    private func makeContentView(for screenshot: CapturedScreenshot, strings: AppStrings) -> QuickAccessContent {
+    private func makeContentView(
+        for screenshot: CapturedScreenshot,
+        strings: AppStrings,
+        isPending: Bool
+    ) -> QuickAccessContent {
         let contentView = ScreenshotPreviewView()
+        contentView.setActionsEnabled(!isPending)
         contentView.wantsLayer = true
         contentView.onHoverChanged = { [weak self, weak contentView] isHovered in
             contentView?.setActionsVisible(isHovered)
@@ -343,6 +370,17 @@ final class QuickAccessPanelController: NSObject {
         statusLabel.wantsLayer = true
         FrameHUDChrome.configureAccessoryChip(statusLabel.layer, cornerRadius: 10)
         statusLabel.setAccessibilityLabel("OCR Status")
+
+        let pendingProgressIndicator = NSProgressIndicator()
+        pendingProgressIndicator.translatesAutoresizingMaskIntoConstraints = false
+        pendingProgressIndicator.style = .spinning
+        pendingProgressIndicator.controlSize = .small
+        pendingProgressIndicator.isDisplayedWhenStopped = false
+        pendingProgressIndicator.isHidden = !isPending
+        pendingProgressIndicator.setAccessibilityLabel("Generating screenshot")
+        if isPending {
+            pendingProgressIndicator.startAnimation(nil)
+        }
 
         let stackView = NSStackView()
         stackView.orientation = .horizontal
@@ -407,6 +445,7 @@ final class QuickAccessPanelController: NSObject {
         contentView.addSubview(overlayView)
         contentView.addSubview(closeButton)
         contentView.addSubview(statusLabel)
+        contentView.addSubview(pendingProgressIndicator)
         overlayView.addSubview(stackView)
         overlayView.addSubview(ocrProgressIndicator)
 
@@ -425,6 +464,9 @@ final class QuickAccessPanelController: NSObject {
             statusLabel.bottomAnchor.constraint(equalTo: overlayView.topAnchor, constant: -6),
             statusLabel.widthAnchor.constraint(lessThanOrEqualTo: imageView.widthAnchor, constant: -24),
             statusLabel.heightAnchor.constraint(equalToConstant: 22),
+
+            pendingProgressIndicator.centerXAnchor.constraint(equalTo: imageView.centerXAnchor),
+            pendingProgressIndicator.centerYAnchor.constraint(equalTo: imageView.centerYAnchor),
 
             stackView.leadingAnchor.constraint(equalTo: overlayView.leadingAnchor, constant: 7),
             stackView.trailingAnchor.constraint(equalTo: overlayView.trailingAnchor, constant: -7),
@@ -447,7 +489,8 @@ final class QuickAccessPanelController: NSObject {
             imageView: imageView,
             ocrButton: ocrButton,
             ocrProgressIndicator: ocrProgressIndicator,
-            statusLabel: statusLabel
+            statusLabel: statusLabel,
+            pendingProgressIndicator: pendingProgressIndicator
         )
     }
 
@@ -675,6 +718,13 @@ final class QuickAccessPanelController: NSObject {
 
     func recordingCountForTesting() -> Int {
         previewItems.filter { $0.recordingID != nil }.count
+    }
+
+    func screenshotIsPendingForTesting(id: UUID) -> Bool {
+        guard let indicator = previewItems.first(where: { $0.screenshotID == id })?.pendingProgressIndicator else {
+            return false
+        }
+        return !indicator.isHidden
     }
 
     func recordingForTesting(id: UUID) -> CapturedRecording? {
@@ -960,11 +1010,12 @@ enum QuickAccessOCRStatus: Equatable {
 }
 
 private struct QuickAccessContent {
-    let view: NSView
+    let view: ScreenshotPreviewView
     let imageView: AspectFillImageView
     let ocrButton: NSButton
     let ocrProgressIndicator: NSProgressIndicator
     let statusLabel: NSTextField
+    let pendingProgressIndicator: NSProgressIndicator
 }
 
 private enum QuickAccessHoverPreviewMedia {
@@ -980,6 +1031,8 @@ private final class QuickAccessPreviewItem {
     let ocrProgressIndicator: NSProgressIndicator?
     let statusLabel: NSTextField?
     weak var screenshotImageView: AspectFillImageView?
+    weak var screenshotContentView: ScreenshotPreviewView?
+    weak var pendingProgressIndicator: NSProgressIndicator?
     weak var recordingContentView: RecordingQuickAccessContentView?
     let copy: (() -> Bool)?
     let save: (() -> Bool)?
@@ -1004,6 +1057,8 @@ private final class QuickAccessPreviewItem {
         ocrProgressIndicator: NSProgressIndicator?,
         statusLabel: NSTextField?,
         screenshotImageView: AspectFillImageView?,
+        screenshotContentView: ScreenshotPreviewView?,
+        pendingProgressIndicator: NSProgressIndicator?,
         recordingContentView: RecordingQuickAccessContentView?,
         copy: (() -> Bool)?,
         save: (() -> Bool)?,
@@ -1024,6 +1079,8 @@ private final class QuickAccessPreviewItem {
         self.ocrProgressIndicator = ocrProgressIndicator
         self.statusLabel = statusLabel
         self.screenshotImageView = screenshotImageView
+        self.screenshotContentView = screenshotContentView
+        self.pendingProgressIndicator = pendingProgressIndicator
         self.recordingContentView = recordingContentView
         self.copy = copy
         self.save = save
@@ -1215,6 +1272,7 @@ private class ScreenshotPreviewView: NSView {
     private var trackingArea: NSTrackingArea?
     private var pendingHideActionsWorkItem: DispatchWorkItem?
     private var areActionsVisible = false
+    private var areActionsEnabled = true
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1247,12 +1305,18 @@ private class ScreenshotPreviewView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
+        guard areActionsEnabled else {
+            return
+        }
         showActions()
         onHoverChanged?(true)
         updateCursor(for: event)
     }
 
     override func mouseExited(with event: NSEvent) {
+        guard areActionsEnabled else {
+            return
+        }
         scheduleActionsHide()
     }
 
@@ -1268,6 +1332,10 @@ private class ScreenshotPreviewView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard !isHidden, alphaValue > 0, bounds.contains(point) else {
             return nil
+        }
+
+        guard areActionsEnabled else {
+            return self
         }
 
         for actionsView in actionsViews.reversed() {
@@ -1300,6 +1368,17 @@ private class ScreenshotPreviewView: NSView {
                 actionsView.layer?.removeAnimation(forKey: "opacity")
                 actionsView.animator().alphaValue = isVisible ? 1 : 0
             }
+        }
+    }
+
+    func setActionsEnabled(_ isEnabled: Bool) {
+        areActionsEnabled = isEnabled
+        pendingHideActionsWorkItem?.cancel()
+        pendingHideActionsWorkItem = nil
+        if !isEnabled {
+            onHoverChanged?(false)
+            setActionsVisible(false)
+            NSCursor.arrow.set()
         }
     }
 
