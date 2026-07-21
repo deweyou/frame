@@ -281,28 +281,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startScrollingScreenshot(selection: SelectionCapture, anchor: CGRect?) {
+        var latestPreview: CapturedScreenshot?
+        var pendingPreview: CapturedScreenshot?
         scrollingScreenshotSessionController.start(
             selection: selection,
             strings: strings,
+            onPreviewUpdate: { [weak self] preview in
+                latestPreview = preview
+                guard let self,
+                      pendingPreview?.id == preview.id else {
+                    return
+                }
+
+                self.activeQuickAccessScreenshots[preview.id] = preview
+                self.quickAccessPanelController.updatePreview(for: preview)
+                pendingPreview = preview
+            },
+            onFinishStarted: { [weak self] preview in
+                guard let self,
+                      let preview = preview ?? latestPreview else {
+                    return
+                }
+
+                pendingPreview = preview
+                self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+                self.showQuickAccess(for: preview, anchor: anchor, isPending: true)
+            },
             onComplete: { [weak self] screenshot in
                 guard let self else {
                     return
                 }
 
                 self.storeInCaptureHistory(screenshot)
-                self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
-                self.showQuickAccess(for: screenshot, anchor: anchor)
+                if pendingPreview?.id == screenshot.id {
+                    self.activeQuickAccessScreenshots[screenshot.id] = screenshot
+                    self.quickAccessPanelController.updatePreview(for: screenshot)
+                    self.quickAccessPanelController.setScreenshotPending(false, for: screenshot)
+                } else {
+                    self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+                    self.showQuickAccess(for: screenshot, anchor: anchor)
+                }
+                pendingPreview = nil
                 NSLog("Frame 已完成滚动长截图：rect=\(screenshot.rect.debugDescription)")
             },
             onCancel: { [weak self] in
-                self?.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
+                guard let self else {
+                    return
+                }
+                if let pendingPreview {
+                    self.quickAccessPanelController.closePreview(for: pendingPreview, notify: false)
+                    self.endQuickAccessLifecycle(for: pendingPreview)
+                }
+                self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
                 NSLog("Frame 滚动长截图已取消")
+            },
+            onRetryableFailure: { [weak self] error in
+                guard let self else {
+                    return
+                }
+                if let pendingPreview {
+                    self.quickAccessPanelController.closePreview(for: pendingPreview, notify: false)
+                    self.endQuickAccessLifecycle(for: pendingPreview)
+                }
+                pendingPreview = nil
+                self.quickAccessPanelController.temporarilyHidePreviews()
+                NSLog("Frame 滚动长截图拼接失败，已恢复采样：\(error.localizedDescription)")
             },
             onFailure: { [weak self] error in
                 guard let self else {
                     return
                 }
 
+                if let pendingPreview {
+                    self.quickAccessPanelController.closePreview(for: pendingPreview, notify: false)
+                    self.endQuickAccessLifecycle(for: pendingPreview)
+                }
                 self.quickAccessPanelController.restoreTemporarilyHiddenPreviews()
                 self.showScrollingScreenshotFailedAlert(error)
             }
@@ -339,13 +392,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showQuickAccess(for screenshot: CapturedScreenshot, anchor: CGRect?) {
+    private func showQuickAccess(
+        for screenshot: CapturedScreenshot,
+        anchor: CGRect?,
+        isPending: Bool = false
+    ) {
         activeQuickAccessScreenshotIDs.insert(screenshot.id)
         activeQuickAccessScreenshots[screenshot.id] = screenshot
         quickAccessPanelController.show(
             for: screenshot,
             preferredAnchor: anchor,
             strings: strings,
+            isPending: isPending,
             copy: { [weak self] in
                 guard let self else {
                     return false
@@ -750,6 +808,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func quickAccessScreenshotCountForTesting() -> Int {
         activeQuickAccessScreenshotIDs.count
+    }
+
+    func quickAccessScreenshotIsPendingForTesting(id: UUID) -> Bool {
+        quickAccessPanelController.screenshotIsPendingForTesting(id: id)
     }
 
     func quickAccessRecordingForTesting(id: UUID) -> CapturedRecording? {

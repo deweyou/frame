@@ -245,6 +245,56 @@ final class AppDelegateRecordingTests: XCTestCase {
         XCTAssertEqual(delegate.quickAccessScreenshotCountForTesting(), 1)
     }
 
+    func testFinishingScrollingScreenshotShowsPendingPreviewThenUpgradesSameCard() async throws {
+        _ = NSApplication.shared
+        let selection = SelectionCapture(
+            rect: CGRect(x: 40, y: 60, width: 320, height: 180),
+            kind: .region
+        )
+        let selectionOverlay = SpySelectionOverlayController()
+        let scrollingController = SpyScrollingScreenshotSessionController()
+        let delegate = AppDelegate(
+            selectionOverlayController: selectionOverlay,
+            scrollingScreenshotSessionController: scrollingController,
+            captureHistoryStore: CaptureHistoryStore(rootDirectory: makeTemporaryDirectory()),
+            hasScreenRecordingAccess: { true },
+            showMissingScreenRecordingPermission: {},
+            playInvalidActionFeedback: {}
+        )
+        let screenshotID = UUID()
+        let preview = CapturedScreenshot(
+            id: screenshotID,
+            pngData: Data(),
+            image: NSImage(size: CGSize(width: 16, height: 64)),
+            rect: selection.rect
+        )
+        let completed = CapturedScreenshot(
+            id: screenshotID,
+            pngData: Data([1, 2, 3]),
+            image: NSImage(size: CGSize(width: 64, height: 256)),
+            rect: CGRect(origin: selection.rect.origin, size: CGSize(width: 320, height: 1_280))
+        )
+
+        XCTAssertTrue(delegate.startCaptureFlowForTesting())
+        selectionOverlay.emitCompletion(.scrollingScreenshot(selection))
+        try await waitUntil { scrollingController.startedSelections == [selection] }
+        scrollingController.updatePreview(with: preview)
+        scrollingController.startFinishing(with: preview)
+
+        try await waitUntil {
+            delegate.quickAccessScreenshotCountForTesting() == 1
+                && delegate.quickAccessScreenshotIsPendingForTesting(id: screenshotID)
+        }
+
+        scrollingController.complete(with: completed)
+
+        try await waitUntil {
+            delegate.quickAccessScreenshotCountForTesting() == 1
+                && !delegate.quickAccessScreenshotIsPendingForTesting(id: screenshotID)
+        }
+        XCTAssertEqual(delegate.quickAccessScreenshotCountForTesting(), 1)
+    }
+
     func testRecordingStartDoesNotShowStaticKeyboardHintOverlay() async throws {
         _ = NSApplication.shared
         let recordingService = SpyRecordingService()
@@ -547,23 +597,44 @@ private final class SpySelectionOverlayController: SelectionOverlayControlling {
 private final class SpyScrollingScreenshotSessionController: ScrollingScreenshotSessionControlling {
     var isActive = false
     private(set) var startedSelections: [SelectionCapture] = []
+    private var previewUpdate: ((CapturedScreenshot) -> Void)?
+    private var finishStarted: ((CapturedScreenshot?) -> Void)?
     private var completion: ((CapturedScreenshot) -> Void)?
+    private var retryableFailure: ((Error) -> Void)?
 
     func start(
         selection: SelectionCapture,
         strings: AppStrings,
+        onPreviewUpdate: @escaping (CapturedScreenshot) -> Void,
+        onFinishStarted: @escaping (CapturedScreenshot?) -> Void,
         onComplete: @escaping (CapturedScreenshot) -> Void,
         onCancel: @escaping () -> Void,
+        onRetryableFailure: @escaping (Error) -> Void,
         onFailure: @escaping (Error) -> Void
     ) {
         isActive = true
         startedSelections.append(selection)
+        previewUpdate = onPreviewUpdate
+        finishStarted = onFinishStarted
         completion = onComplete
+        retryableFailure = onRetryableFailure
+    }
+
+    func updatePreview(with screenshot: CapturedScreenshot) {
+        previewUpdate?(screenshot)
+    }
+
+    func startFinishing(with screenshot: CapturedScreenshot?) {
+        finishStarted?(screenshot)
     }
 
     func complete(with screenshot: CapturedScreenshot) {
         isActive = false
         completion?(screenshot)
+    }
+
+    func failRecoverably(with error: Error) {
+        retryableFailure?(error)
     }
 }
 

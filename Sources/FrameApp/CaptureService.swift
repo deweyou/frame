@@ -52,6 +52,29 @@ final class CaptureService {
     }
 
     func capture(rect: CGRect) throws -> CapturedScreenshot {
+        let cgImage = try captureImage(rect: rect)
+        let bitmapRepresentation = NSBitmapImageRep(cgImage: cgImage)
+        guard let pngData = bitmapRepresentation.representation(
+            using: .png,
+            properties: [:]
+        ) else {
+            throw CaptureServiceError.pngEncodingFailed
+        }
+
+        let image = NSImage(cgImage: cgImage, size: rect.size)
+        return CapturedScreenshot(pngData: pngData, image: image, rect: rect)
+    }
+
+    func captureScrollingFrame(rect: CGRect) throws -> CapturedScreenshot {
+        let cgImage = try captureImage(rect: rect)
+        return CapturedScreenshot(
+            pngData: Data(),
+            image: NSImage(cgImage: cgImage, size: rect.size),
+            rect: rect
+        )
+    }
+
+    private func captureImage(rect: CGRect) throws -> CGImage {
         guard !rect.isNull,
               !rect.isEmpty,
               rect.width > 0,
@@ -68,17 +91,7 @@ final class CaptureService {
         ) else {
             throw CaptureServiceError.captureFailed(rect: rect, captureRect: captureRect)
         }
-
-        let bitmapRepresentation = NSBitmapImageRep(cgImage: cgImage)
-        guard let pngData = bitmapRepresentation.representation(
-            using: .png,
-            properties: [:]
-        ) else {
-            throw CaptureServiceError.pngEncodingFailed
-        }
-
-        let image = NSImage(cgImage: cgImage, size: rect.size)
-        return CapturedScreenshot(pngData: pngData, image: image, rect: rect)
+        return cgImage
     }
 
     private func captureWindow(id: UInt32, rect: CGRect) async throws -> CapturedScreenshot {
