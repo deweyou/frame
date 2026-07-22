@@ -1,3 +1,7 @@
+## Development Workflow
+
+Use the repository's `ddev` skill as the default lifecycle owner for non-trivial development work. Load product, UI, coding, delivery, and memory modules through DDev from the global Dewey asset cache instead of installing those component skills in this repository.
+
 ## Project Context
 
 Frame is a native macOS screenshot utility. The current implemented scope focuses on the local screenshot loop:
