@@ -630,14 +630,14 @@ private final class OCRCutButton: NSButton {
     }
 
     private func updateLayerColors() {
-        let backgroundColor = isCutSelected
-            ? NSColor.controlAccentColor.withAlphaComponent(0.24)
-            : NSColor.controlBackgroundColor
-        let borderColor = isCutSelected
-            ? NSColor.controlAccentColor.withAlphaComponent(0.7)
-            : NSColor.separatorColor.withAlphaComponent(0.35)
-
         effectiveAppearance.performAsCurrentDrawingAppearance {
+            let backgroundColor = isCutSelected
+                ? NSColor.controlAccentColor.withAlphaComponent(0.24)
+                : NSColor.controlBackgroundColor
+            let borderColor = isCutSelected
+                ? NSColor.controlAccentColor.withAlphaComponent(0.7)
+                : NSColor.separatorColor.withAlphaComponent(0.35)
+
             layer?.backgroundColor = backgroundColor.cgColor
             layer?.borderColor = borderColor.cgColor
         }

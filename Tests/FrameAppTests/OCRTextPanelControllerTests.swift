@@ -38,10 +38,9 @@ final class OCRTextPanelControllerTests: XCTestCase {
             XCTAssertGreaterThan(button.intrinsicContentSize.width, button.attributedTitle.size().width)
             XCTAssertEqual(
                 button.layer?.borderColor,
-                resolvedCGColor(
-                    NSColor.separatorColor.withAlphaComponent(0.35),
-                    appearance: button.effectiveAppearance
-                )
+                resolvedCGColor(appearance: button.effectiveAppearance) {
+                    NSColor.separatorColor.withAlphaComponent(0.35)
+                }
             )
         }
 
@@ -76,16 +75,19 @@ final class OCRTextPanelControllerTests: XCTestCase {
 
         panel.appearance = aquaAppearance
         panel.contentView?.layoutSubtreeIfNeeded()
-        let aquaBackgroundColor = resolvedCGColor(.controlBackgroundColor, appearance: aquaAppearance)
+        let aquaBackgroundColor = resolvedCGColor(appearance: aquaAppearance) {
+            .controlBackgroundColor
+        }
         XCTAssertEqual(cutButton.layer?.backgroundColor, aquaBackgroundColor)
 
         panel.appearance = darkAppearance
         panel.contentView?.layoutSubtreeIfNeeded()
-        let darkBackgroundColor = resolvedCGColor(.controlBackgroundColor, appearance: darkAppearance)
-        let darkBorderColor = resolvedCGColor(
-            NSColor.separatorColor.withAlphaComponent(0.35),
-            appearance: darkAppearance
-        )
+        let darkBackgroundColor = resolvedCGColor(appearance: darkAppearance) {
+            .controlBackgroundColor
+        }
+        let darkBorderColor = resolvedCGColor(appearance: darkAppearance) {
+            NSColor.separatorColor.withAlphaComponent(0.35)
+        }
         XCTAssertEqual(cutButton.layer?.backgroundColor, darkBackgroundColor)
         XCTAssertEqual(cutButton.layer?.borderColor, darkBorderColor)
         XCTAssertNotEqual(darkBackgroundColor, aquaBackgroundColor)
@@ -678,10 +680,13 @@ final class OCRTextPanelControllerTests: XCTestCase {
         return buttons
     }
 
-    private func resolvedCGColor(_ color: NSColor, appearance: NSAppearance) -> CGColor {
-        var resolvedColor = color.cgColor
+    private func resolvedCGColor(
+        appearance: NSAppearance,
+        color: () -> NSColor
+    ) -> CGColor {
+        var resolvedColor = NSColor.clear.cgColor
         appearance.performAsCurrentDrawingAppearance {
-            resolvedColor = color.cgColor
+            resolvedColor = color().cgColor
         }
         return resolvedColor
     }
