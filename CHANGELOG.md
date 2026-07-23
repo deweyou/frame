@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep recognized-text cut labels readable when the OCR panel uses or switches
+  to macOS Dark Mode.
 - Show a fixed side preview during scrolling screenshots so users can see
   successfully stitched progress and detect interrupted matching before Finish.
 - Build the full-resolution result incrementally from raw capture frames, avoid

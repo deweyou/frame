@@ -36,13 +36,59 @@ final class OCRTextPanelControllerTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(button.intrinsicContentSize.height, 24)
             XCTAssertLessThan(button.intrinsicContentSize.height, 28)
             XCTAssertGreaterThan(button.intrinsicContentSize.width, button.attributedTitle.size().width)
-            XCTAssertEqual(button.layer?.borderColor, NSColor.separatorColor.withAlphaComponent(0.35).cgColor)
+            XCTAssertEqual(
+                button.layer?.borderColor,
+                resolvedCGColor(
+                    NSColor.separatorColor.withAlphaComponent(0.35),
+                    appearance: button.effectiveAppearance
+                )
+            )
         }
 
         let copyButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy Selected"))
         XCTAssertFalse(copyButton.isEnabled)
         let copyAllButton = try XCTUnwrap(findButton(in: contentView, accessibilityLabel: "Copy All"))
         XCTAssertTrue(copyAllButton.isEnabled)
+    }
+
+    func testOCRCutColorsFollowPanelAppearanceChanges() throws {
+        _ = NSApplication.shared
+        let windowsBeforeShow = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = OCRTextPanelController()
+        retainedControllers.append(controller)
+        let screenshot = try makeScreenshot()
+
+        controller.show(
+            layout: RecognizedTextLayout(lines: [
+                RecognizedTextLine(text: "hello", bounds: .zero, confidence: 0.9),
+            ]),
+            for: screenshot,
+            strings: AppStrings(language: .en),
+            copyText: { _ in true }
+        )
+
+        let panel = try XCTUnwrap(NSApp.windows.first { !windowsBeforeShow.contains(ObjectIdentifier($0)) } as? NSPanel)
+        defer { panel.close() }
+        let contentView = try XCTUnwrap(panel.contentView)
+        let cutButton = try XCTUnwrap(findButtons(in: contentView, accessibilityPrefix: "OCR Cut").first)
+        let aquaAppearance = try XCTUnwrap(NSAppearance(named: .aqua))
+        let darkAppearance = try XCTUnwrap(NSAppearance(named: .darkAqua))
+
+        panel.appearance = aquaAppearance
+        panel.contentView?.layoutSubtreeIfNeeded()
+        let aquaBackgroundColor = resolvedCGColor(.controlBackgroundColor, appearance: aquaAppearance)
+        XCTAssertEqual(cutButton.layer?.backgroundColor, aquaBackgroundColor)
+
+        panel.appearance = darkAppearance
+        panel.contentView?.layoutSubtreeIfNeeded()
+        let darkBackgroundColor = resolvedCGColor(.controlBackgroundColor, appearance: darkAppearance)
+        let darkBorderColor = resolvedCGColor(
+            NSColor.separatorColor.withAlphaComponent(0.35),
+            appearance: darkAppearance
+        )
+        XCTAssertEqual(cutButton.layer?.backgroundColor, darkBackgroundColor)
+        XCTAssertEqual(cutButton.layer?.borderColor, darkBorderColor)
+        XCTAssertNotEqual(darkBackgroundColor, aquaBackgroundColor)
     }
 
     func testOCRPanelReusesExistingWindowForSameScreenshot() throws {
@@ -630,5 +676,13 @@ final class OCRTextPanelControllerTests: XCTestCase {
         }
 
         return buttons
+    }
+
+    private func resolvedCGColor(_ color: NSColor, appearance: NSAppearance) -> CGColor {
+        var resolvedColor = color.cgColor
+        appearance.performAsCurrentDrawingAppearance {
+            resolvedColor = color.cgColor
+        }
+        return resolvedColor
     }
 }

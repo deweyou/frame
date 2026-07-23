@@ -313,14 +313,7 @@ final class OCRTextPanelController: NSObject {
     }
 
     private func applyCutButtonStyle(_ button: OCRCutButton, isSelected: Bool) {
-        button.contentTintColor = isSelected ? .controlAccentColor : .labelColor
-        button.layer?.backgroundColor = isSelected
-            ? NSColor.controlAccentColor.withAlphaComponent(0.24).cgColor
-            : NSColor.controlBackgroundColor.cgColor
-        button.layer?.borderColor = isSelected
-            ? NSColor.controlAccentColor.withAlphaComponent(0.7).cgColor
-            : NSColor.separatorColor.withAlphaComponent(0.35).cgColor
-        button.layer?.borderWidth = 1
+        button.applyStyle(isSelected: isSelected)
     }
 
     @objc private func cutButtonClicked(_ sender: OCRCutButton) {
@@ -546,6 +539,7 @@ private final class OCRCutButton: NSButton {
     let cutID: UUID
     private var hoverTrackingArea: NSTrackingArea?
     private var suppressesNextAction = false
+    private var isCutSelected = false
 
     init(cutID: UUID) {
         self.cutID = cutID
@@ -555,6 +549,17 @@ private final class OCRCutButton: NSButton {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         nil
+    }
+
+    func applyStyle(isSelected: Bool) {
+        isCutSelected = isSelected
+        contentTintColor = isSelected ? .controlAccentColor : .labelColor
+        updateLayerColors()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateLayerColors()
     }
 
     override func updateTrackingAreas() {
@@ -622,6 +627,21 @@ private final class OCRCutButton: NSButton {
         let shouldSuppress = suppressesNextAction
         suppressesNextAction = false
         return shouldSuppress
+    }
+
+    private func updateLayerColors() {
+        let backgroundColor = isCutSelected
+            ? NSColor.controlAccentColor.withAlphaComponent(0.24)
+            : NSColor.controlBackgroundColor
+        let borderColor = isCutSelected
+            ? NSColor.controlAccentColor.withAlphaComponent(0.7)
+            : NSColor.separatorColor.withAlphaComponent(0.35)
+
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = backgroundColor.cgColor
+            layer?.borderColor = borderColor.cgColor
+        }
+        layer?.borderWidth = 1
     }
 
     override var intrinsicContentSize: NSSize {
