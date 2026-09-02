@@ -1,6 +1,6 @@
 ## Development Workflow
 
-Use the repository's `ddev` skill as the default lifecycle owner for non-trivial development work. Load product, UI, coding, delivery, and memory modules through DDev from the global Dewey asset cache instead of installing those component skills in this repository.
+Use `harness.yaml` as the repository's durable agent-work configuration. Deweyou Harness owns Commitment, Plan, execution, Evidence, and delivery boundaries only when the user explicitly invokes it.
 
 ## Project Context
 
