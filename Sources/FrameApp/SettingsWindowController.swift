@@ -8,6 +8,11 @@ final class SettingsWindowController {
     private var window: NSWindow?
     private var settingsViewController: SettingsContentViewController?
     private weak var centeredTitleField: NSTextField?
+    private let launchAtLoginService: any LaunchAtLoginServicing
+
+    init(launchAtLoginService: any LaunchAtLoginServicing = LaunchAtLoginService()) {
+        self.launchAtLoginService = launchAtLoginService
+    }
 
     func show(
         strings: AppStrings,
@@ -37,7 +42,8 @@ final class SettingsWindowController {
             onLanguageChange: onLanguageChange,
             onChooseScreenshotDirectory: onChooseScreenshotDirectory,
             onResetScreenshotDirectory: onResetScreenshotDirectory,
-            onClearCaptureHistory: onClearCaptureHistory
+            onClearCaptureHistory: onClearCaptureHistory,
+            launchAtLoginService: launchAtLoginService
         )
 
         let window = NSWindow(
@@ -69,6 +75,10 @@ final class SettingsWindowController {
         window?.title = strings.settingsTitle
         centeredTitleField?.stringValue = strings.settingsTitle
         settingsViewController?.update(strings: strings)
+    }
+
+    func refreshPermissions() {
+        settingsViewController?.refreshPermissions()
     }
 
     private func installCenteredTitle(in window: NSWindow, title: String) {
@@ -166,6 +176,7 @@ private final class SettingsContentViewController: NSHostingController<AnyView> 
     private let onChooseScreenshotDirectory: @MainActor () -> URL?
     private let onResetScreenshotDirectory: @MainActor () -> Void
     private let onClearCaptureHistory: @MainActor () throws -> Void
+    private let launchAtLoginService: any LaunchAtLoginServicing
     private var strings: AppStrings
 
     init(
@@ -177,7 +188,8 @@ private final class SettingsContentViewController: NSHostingController<AnyView> 
         onLanguageChange: @escaping @MainActor (AppLanguage) -> Void,
         onChooseScreenshotDirectory: @escaping @MainActor () -> URL?,
         onResetScreenshotDirectory: @escaping @MainActor () -> Void,
-        onClearCaptureHistory: @escaping @MainActor () throws -> Void
+        onClearCaptureHistory: @escaping @MainActor () throws -> Void,
+        launchAtLoginService: any LaunchAtLoginServicing
     ) {
         self.strings = strings
         self.onShortcutChange = onShortcutChange
@@ -188,6 +200,7 @@ private final class SettingsContentViewController: NSHostingController<AnyView> 
         self.onChooseScreenshotDirectory = onChooseScreenshotDirectory
         self.onResetScreenshotDirectory = onResetScreenshotDirectory
         self.onClearCaptureHistory = onClearCaptureHistory
+        self.launchAtLoginService = launchAtLoginService
         super.init(rootView: AnyView(EmptyView()))
         updateRootView()
     }
@@ -202,6 +215,10 @@ private final class SettingsContentViewController: NSHostingController<AnyView> 
         updateRootView()
     }
 
+    func refreshPermissions() {
+        updateRootView()
+    }
+
     private func updateRootView() {
         rootView = AnyView(
             SettingsListView(
@@ -213,7 +230,8 @@ private final class SettingsContentViewController: NSHostingController<AnyView> 
                 onLanguageChange: onLanguageChange,
                 onChooseScreenshotDirectory: onChooseScreenshotDirectory,
                 onResetScreenshotDirectory: onResetScreenshotDirectory,
-                onClearCaptureHistory: onClearCaptureHistory
+                onClearCaptureHistory: onClearCaptureHistory,
+                launchAtLoginService: launchAtLoginService
             )
         )
     }
@@ -229,6 +247,7 @@ private struct SettingsListView: View {
     let onChooseScreenshotDirectory: @MainActor () -> URL?
     let onResetScreenshotDirectory: @MainActor () -> Void
     let onClearCaptureHistory: @MainActor () throws -> Void
+    let launchAtLoginService: any LaunchAtLoginServicing
 
     var body: some View {
         ScrollView {
@@ -240,7 +259,8 @@ private struct SettingsListView: View {
                     onShortcutRecordingChange: onShortcutRecordingChange,
                     onChooseScreenshotDirectory: onChooseScreenshotDirectory,
                     onResetScreenshotDirectory: onResetScreenshotDirectory,
-                    onLanguageChange: onLanguageChange
+                    onLanguageChange: onLanguageChange,
+                    launchAtLoginService: launchAtLoginService
                 )
 
                 ScreenshotSettingsView(strings: strings)
@@ -276,6 +296,7 @@ private struct GeneralSettingsView: View {
     let onChooseScreenshotDirectory: @MainActor () -> URL?
     let onResetScreenshotDirectory: @MainActor () -> Void
     let onLanguageChange: @MainActor (AppLanguage) -> Void
+    let launchAtLoginService: any LaunchAtLoginServicing
 
     @State private var selectedLanguage = SettingsStore.appLanguage()
     @State private var selectedShortcut = SettingsStore.screenshotShortcut()
@@ -283,6 +304,30 @@ private struct GeneralSettingsView: View {
     @State private var shortcutErrorText: String?
     @State private var recordingShortcutErrorText: String?
     @State private var screenshotDirectoryURL = GeneralSettingsView.currentScreenshotDirectory()
+    @State private var launchAtLoginState: LaunchAtLoginSettingState
+
+    init(
+        strings: AppStrings,
+        onShortcutChange: @escaping @MainActor (ScreenshotShortcut) -> Bool,
+        onRecordingShortcutChange: @escaping @MainActor (ScreenshotShortcut?) -> Bool,
+        onShortcutRecordingChange: @escaping @MainActor (Bool) -> Void,
+        onChooseScreenshotDirectory: @escaping @MainActor () -> URL?,
+        onResetScreenshotDirectory: @escaping @MainActor () -> Void,
+        onLanguageChange: @escaping @MainActor (AppLanguage) -> Void,
+        launchAtLoginService: any LaunchAtLoginServicing
+    ) {
+        self.strings = strings
+        self.onShortcutChange = onShortcutChange
+        self.onRecordingShortcutChange = onRecordingShortcutChange
+        self.onShortcutRecordingChange = onShortcutRecordingChange
+        self.onChooseScreenshotDirectory = onChooseScreenshotDirectory
+        self.onResetScreenshotDirectory = onResetScreenshotDirectory
+        self.onLanguageChange = onLanguageChange
+        self.launchAtLoginService = launchAtLoginService
+        _launchAtLoginState = State(
+            initialValue: LaunchAtLoginSettingState(service: launchAtLoginService)
+        )
+    }
 
     var body: some View {
         SettingsSectionGroup(title: strings.settingsGeneral) {
@@ -300,6 +345,43 @@ private struct GeneralSettingsView: View {
                     .onChange(of: selectedLanguage) { _, newLanguage in
                         SettingsStore.setAppLanguage(newLanguage)
                         onLanguageChange(newLanguage)
+                    }
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    strings.settingsLaunchAtLogin,
+                    verticalAlignment: .top,
+                    verticalPadding: 7
+                ) {
+                    VStack(alignment: .trailing, spacing: 5) {
+                        Toggle(
+                            "",
+                            isOn: Binding(
+                                get: { launchAtLoginState.isEnabled },
+                                set: { isEnabled in
+                                    updateLaunchAtLogin(isEnabled)
+                                }
+                            )
+                        )
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .accessibilityLabel(strings.settingsLaunchAtLogin)
+
+                        if launchAtLoginState.status == .requiresApproval {
+                            Text(strings.settingsLaunchAtLoginRequiresApproval)
+                                .font(.system(size: SettingsTypographyMetrics.secondaryFontSize))
+                                .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                                .multilineTextAlignment(.trailing)
+                        }
+
+                        if let errorDescription = launchAtLoginState.errorDescription {
+                            Text(strings.settingsLaunchAtLoginUpdateFailed(errorDescription: errorDescription))
+                                .font(.system(size: SettingsTypographyMetrics.secondaryFontSize))
+                                .foregroundStyle(Color(nsColor: .systemRed))
+                                .multilineTextAlignment(.trailing)
+                        }
                     }
                 }
 
@@ -381,6 +463,9 @@ private struct GeneralSettingsView: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            launchAtLoginState.refresh(using: launchAtLoginService)
+        }
     }
 
     private func changeShortcut(_ shortcut: ScreenshotShortcut) -> Bool {
@@ -391,6 +476,10 @@ private struct GeneralSettingsView: View {
         }
         shortcutErrorText = nil
         return true
+    }
+
+    private func updateLaunchAtLogin(_ isEnabled: Bool) {
+        launchAtLoginState.setEnabled(isEnabled, using: launchAtLoginService)
     }
 
     private func changeRecordingShortcut(_ shortcut: ScreenshotShortcut?) -> Bool {
@@ -439,6 +528,7 @@ enum SettingsListMetrics {
 }
 
 enum SettingsGeneralMetrics {
+    static let containsLaunchAtLogin = true
     static let containsScreenshotShortcut = true
     static let containsRecordingShortcut = true
     static let containsSaveLocation = true
@@ -1358,6 +1448,8 @@ private struct PermissionsSettingsView: View {
     let onCheckPermission: @MainActor () -> Void
 
     @State private var hasScreenRecordingAccess = ScreenRecordingPermission.hasAccess
+    @State private var hasAccessibilityAccess = AccessibilityPermission.hasAccess
+    @State private var hasInputMonitoringAccess = InputMonitoringPermission.hasAccess
 
     var body: some View {
         SettingsSectionGroup(title: strings.settingsPermissions) {
@@ -1379,6 +1471,46 @@ private struct PermissionsSettingsView: View {
                         }
                     }
                 }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    strings.settingsAccessibilityPermission,
+                    verticalAlignment: .top,
+                    verticalPadding: 12
+                ) {
+                    VStack(alignment: .trailing, spacing: 8) {
+                        Text(hasAccessibilityAccess ? strings.settingsPermissionGranted : strings.settingsPermissionMissing)
+                            .foregroundStyle(hasAccessibilityAccess ? .green : .secondary)
+
+                        HStack(spacing: 8) {
+                            Button(strings.settingsRequestPermission, action: requestAccessibilityPermission)
+                                .accessibilityLabel(strings.settingsRequestPermission)
+                            Button(strings.settingsOpenSystemSettings, action: AccessibilityPermission.openSettings)
+                                .accessibilityLabel(strings.settingsOpenSystemSettings)
+                        }
+                    }
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    strings.settingsInputMonitoringPermission,
+                    verticalAlignment: .top,
+                    verticalPadding: 12
+                ) {
+                    VStack(alignment: .trailing, spacing: 8) {
+                        Text(hasInputMonitoringAccess ? strings.settingsPermissionGranted : strings.settingsPermissionMissing)
+                            .foregroundStyle(hasInputMonitoringAccess ? .green : .secondary)
+
+                        HStack(spacing: 8) {
+                            Button(strings.settingsRequestPermission, action: requestInputMonitoringPermission)
+                                .accessibilityLabel(strings.settingsRequestPermission)
+                            Button(strings.settingsOpenSystemSettings, action: InputMonitoringPermission.openSettings)
+                                .accessibilityLabel(strings.settingsOpenSystemSettings)
+                        }
+                    }
+                }
             }
         }
     }
@@ -1386,6 +1518,14 @@ private struct PermissionsSettingsView: View {
     private func checkPermission() {
         onCheckPermission()
         hasScreenRecordingAccess = ScreenRecordingPermission.hasAccess
+    }
+
+    private func requestAccessibilityPermission() {
+        hasAccessibilityAccess = AccessibilityPermission.requestAccess()
+    }
+
+    private func requestInputMonitoringPermission() {
+        hasInputMonitoringAccess = InputMonitoringPermission.requestAccess()
     }
 }
 

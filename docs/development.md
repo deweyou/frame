@@ -3,10 +3,11 @@
 ```mermaid
 flowchart TD
     Edit[Edit code] --> Verify[swift test and swift build]
-    Verify --> Package[scripts/package-app.sh]
-    Package --> Sign[Stable local signing identity]
-    Sign --> Install[Replace ~/Applications/Frame.app]
-    Install --> Smoke[Manual screenshot smoke test]
+    Verify --> DevPackage[Package Frame Dev]
+    DevPackage --> DevSign[Stable local or Apple Development signing]
+    DevSign --> DevInstall[Install Frame Dev.app]
+    DevInstall --> Smoke[Manual screenshot smoke test]
+    Verify --> Production[Package production Frame.app]
 ```
 
 Frame development uses SwiftPM for verification, a local packaging script for app bundle creation, and a stable local signing path for repeat GUI testing without unnecessary Screen Recording permission churn.
@@ -16,6 +17,7 @@ Frame development uses SwiftPM for verification, a local packaging script for ap
 - macOS
 - Swift 6.2 toolchain
 - Xcode command line tools
+- Apple Developer Program membership only for Apple Development and public distribution signing
 
 ## Verify
 
@@ -27,7 +29,27 @@ swift build
 scripts/package-app.sh
 ```
 
-`scripts/package-app.sh` creates `.build/app/Frame.app`, writes `Info.plist`, copies the release executable, and signs the bundle. It uses ad-hoc signing by default so CI and fresh machines work without setup.
+`scripts/package-app.sh` writes `Info.plist`, copies the release executable, and signs the bundle. It uses ad-hoc signing by default so CI and fresh machines work without account setup.
+
+## App Variants
+
+The packaging script owns the registered app identity mapping. Callers select a variant instead of entering bundle identifiers manually:
+
+| Variant | App name | Bundle identifier | Output |
+| --- | --- | --- | --- |
+| `production` (default) | Frame | `dev.deweyou.frame` | `.build/app/Frame.app` |
+| `development` | Frame Dev | `dev.deweyou.frame.dev` | `.build/app/Frame Dev.app` |
+
+Inspect the resolved configuration without building:
+
+```sh
+scripts/package-app.sh --print-configuration
+FRAME_APP_VARIANT=development scripts/package-app.sh --print-configuration
+```
+
+The release tooling always requests the `production` variant, even if the calling shell has another `FRAME_APP_VARIANT` value.
+
+The different bundle identifiers isolate `UserDefaults` and macOS TCC permissions. Capture history is also isolated: production keeps the existing `Application Support/Frame/History` location, while development uses `Application Support/Frame Dev/History`.
 
 The packaging script also copies app resources from `Sources/FrameApp/Resources` into the app bundle. `Frame.icns` is written to `Contents/Resources` and referenced by `CFBundleIconFile`; menu bar PNG assets are copied so `StatusItemController` can load `FrameStatusIconTemplate` as a template image.
 
@@ -35,10 +57,20 @@ For stable local Screen Recording permission during development, sign with a sta
 
 ```sh
 export FRAME_CODESIGN_IDENTITY="Frame Local Dev CLI"
-scripts/package-app.sh
+FRAME_APP_VARIANT=development scripts/package-app.sh
 ```
 
 Use this pattern for day-to-day development even when a real Apple certificate is available. The goal is to keep local TCC identity stable while avoiding accidental use of distribution credentials in debug builds. Use Apple Development or Developer ID identities only when intentionally testing those signing paths.
+
+For a Team-backed development-signing check, copy the exact identity name from `security find-identity -v -p codesigning` and run:
+
+```sh
+FRAME_APP_VARIANT=development \
+FRAME_CODESIGN_IDENTITY="Apple Development: Your Name (IDENTIFIER)" \
+scripts/package-app.sh
+```
+
+This produces `Frame Dev.app` with the development App ID and keeps it separate from the production app. See [Signing and development-device migration](signing-and-device-migration.md) for certificate recovery and new-Mac setup.
 
 ## Manual Beta Release
 
@@ -219,28 +251,30 @@ Expected output should include `Frame Local Dev CLI` and at least `1 valid ident
 1. Build and package with the stable local signing identity:
 
    ```sh
-   FRAME_CODESIGN_IDENTITY="Frame Local Dev CLI" scripts/package-app.sh
+   FRAME_APP_VARIANT=development \
+   FRAME_CODESIGN_IDENTITY="Frame Local Dev CLI" \
+   scripts/package-app.sh
    ```
 
 2. Replace the stable local app path for permission testing:
 
    ```sh
    mkdir -p ~/Applications
-   rm -rf ~/Applications/Frame.app
-   ditto .build/app/Frame.app ~/Applications/Frame.app
-   open ~/Applications/Frame.app
+   rm -rf ~/Applications/Frame\ Dev.app
+   ditto ".build/app/Frame Dev.app" ~/Applications/Frame\ Dev.app
+   open ~/Applications/Frame\ Dev.app
    ```
 
 Agents should use this stable-sign-and-replace flow whenever the user asks to run a local GUI build, replace the local app, or test screenshot behavior manually. Do not use a bare ad-hoc `scripts/package-app.sh` for repeated local GUI testing unless the task is specifically testing ad-hoc signing.
 
 3. Grant Screen Recording permission when prompted.
-4. Quit and reopen `~/Applications/Frame.app`.
+4. Quit and reopen `~/Applications/Frame Dev.app`.
 5. Open `Frame -> 设置...` / `Frame -> Settings...`, then open it again from another display and confirm it centers on the current display.
-6. Change the language between Follow System, 中文, and English. Confirm the menu, settings window labels, alerts opened after the change, Quick Access tooltips, and capture placeholder use the selected language.
+6. Change the language between Follow System, 中文, and English. Confirm the menu, settings window labels, permission alerts opened after the change, Quick Access tooltips, and capture placeholder use the selected language. In General, turn Launch at Login on and confirm Frame appears under System Settings > General > Login Items & Extensions; turn it off and confirm the login item is removed. If macOS reports that approval is required, confirm Settings explains where to approve it. In Permissions, confirm Screen Recording, Accessibility, and Input Monitoring each show their current state; open System Settings from a row, return to Frame, and confirm the states refresh.
 7. In Settings, choose a custom screenshot save folder, quit and reopen Frame, and confirm the path persists.
 8. In Settings, change Window screenshot style between Soft Backdrop, Canvas Glow, Transparent Shadow, and Original. Change Edited screenshot save between Ask Every Time, Replace Current, and Save As New. Confirm the labels localize and the selected values persist after reopening Settings.
 9. Reset the screenshot save folder and confirm it returns to Desktop.
-10. Use the menu capture item or the configured keyboard shortcut.
+10. Confirm the menu has separate Capture Screenshot and Record Screen items, displays configured shortcuts, and keeps Record Screen available when its shortcut is unset. Start each flow from its menu item or configured keyboard shortcut.
 11. With no previous selection, confirm the active display shows a centered placeholder instead of a `0 x 0` HUD. After confirming a window capture, quit and reopen Frame, then start capture again within ten minutes. Confirm the same live window restores as the initial selection without hover preselection, even after moving the window. After confirming a region capture, reopen the overlay and confirm the same rectangle restores without hover preselection. A full-screen capture, closing a remembered window, or waiting for expiry returns to the empty state.
 12. Drag to create, move, or resize the region.
 13. Press Enter to capture.
@@ -284,7 +318,7 @@ Agents should use this stable-sign-and-replace flow whenever the user asks to ru
 51. Select an entire single display as the recording region and confirm the recording HUD remains usable but is absent from the output.
 52. Confirm local capture history lists recordings separately, opens playable recording files, copies file URLs, saves files, and deletes cached recording records.
 
-Keep using the same `FRAME_CODESIGN_IDENTITY` and the same `~/Applications/Frame.app` path while iterating. Changing either one can make macOS ask for Screen Recording permission again.
+Keep using the same `FRAME_CODESIGN_IDENTITY`, the `development` variant, and the same `~/Applications/Frame Dev.app` path while iterating. Changing any of them can make macOS ask for Screen Recording permission again.
 
 ## CI
 
@@ -305,10 +339,10 @@ CI does not grant Screen Recording permission or run full desktop GUI smoke test
 When testing repeated local builds, reset the app permission entry:
 
 ```sh
-tccutil reset ScreenCapture dev.dewey.frame
+tccutil reset ScreenCapture dev.deweyou.frame.dev
 ```
 
 Then reopen the exact app bundle you want to authorize.
 
 ---
-*Last updated: 2026-07-12 | Reason: add shared image, video, and Quick Access chrome smoke checks*
+*Last updated: 2026-09-02 | Reason: separate development and production app identities and add device-migration guidance*

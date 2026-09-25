@@ -56,7 +56,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recordingFileWriter: RecordingFileWriter = RecordingFileWriter(),
         videoEditingExporter: VideoEditingExporting = VideoEditingExporter(),
         hasScreenRecordingAccess: @escaping () -> Bool = { ScreenRecordingPermission.hasAccess },
-        showMissingScreenRecordingPermission: @escaping () -> Void = { ScreenRecordingPermission.showMissingPermissionAlert() },
+        showMissingScreenRecordingPermission: @escaping () -> Void = {
+            ScreenRecordingPermission.showMissingPermissionAlert(strings: .current())
+        },
         playInvalidActionFeedback: @escaping () -> Void = { NSSound.beep() }
     ) {
         self.selectionOverlayController = selectionOverlayController
@@ -81,6 +83,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             strings: strings,
             onCapture: { [weak self] in
                 self?.onCapture()
+            },
+            onRecord: { [weak self] in
+                self?.startRecordingCaptureFlow()
             },
             onHistory: { [weak self] in
                 self?.onHistory()
@@ -119,6 +124,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeyController?.unregister()
     }
 
+    func applicationDidBecomeActive(_ notification: Notification) {
+        settingsWindowController.refreshPermissions()
+    }
+
     @objc func onCapture() {
         startCaptureFlow()
     }
@@ -127,7 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ScreenRecordingPermission.hasAccess {
             showPermissionReadyAlert()
         } else {
-            ScreenRecordingPermission.showMissingPermissionAlert()
+            ScreenRecordingPermission.showMissingPermissionAlert(strings: strings)
         }
     }
 
@@ -1435,6 +1444,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func changeScreenshotShortcut(to shortcut: ScreenshotShortcut) -> Bool {
         guard let hotKeyController else {
             SettingsStore.setScreenshotShortcut(shortcut)
+            statusItemController?.updateShortcuts(
+                screenshotShortcut: shortcut,
+                recordingShortcut: SettingsStore.recordingShortcut()
+            )
             return true
         }
 
@@ -1443,6 +1456,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try hotKeyController.register(shortcut: shortcut)
             SettingsStore.setScreenshotShortcut(shortcut)
+            statusItemController?.updateShortcuts(
+                screenshotShortcut: shortcut,
+                recordingShortcut: hotKeyController.recordingShortcut
+            )
             NSLog("Frame 截图快捷键已更新为 \(shortcut.displayName)")
             return true
         } catch {
@@ -1460,6 +1477,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func changeRecordingShortcut(to shortcut: ScreenshotShortcut?) -> Bool {
         guard let hotKeyController else {
             SettingsStore.setRecordingShortcut(shortcut)
+            statusItemController?.updateShortcuts(
+                screenshotShortcut: SettingsStore.screenshotShortcut(),
+                recordingShortcut: shortcut
+            )
             return true
         }
 
@@ -1469,6 +1490,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try hotKeyController.register(shortcut: screenshotShortcut, recordingShortcut: .some(shortcut))
             SettingsStore.setRecordingShortcut(shortcut)
+            statusItemController?.updateShortcuts(
+                screenshotShortcut: screenshotShortcut,
+                recordingShortcut: shortcut
+            )
             NSLog("Frame 录屏快捷键已更新为 \(shortcut?.displayName ?? "未设置")")
             return true
         } catch {

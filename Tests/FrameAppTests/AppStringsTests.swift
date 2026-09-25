@@ -5,14 +5,26 @@ final class AppStringsTests: XCTestCase {
     func testExplicitEnglishStrings() {
         let strings = AppStrings(language: .en)
 
-        XCTAssertEqual(strings.menuCapture, "Capture")
+        XCTAssertEqual(strings.menuCapture, "Capture Screenshot")
+        XCTAssertEqual(strings.menuRecordScreen, "Record Screen")
         XCTAssertEqual(strings.menuCaptureHistory, "Capture History")
         XCTAssertEqual(strings.settingsTitle, "Settings")
         XCTAssertEqual(strings.settingsScreenshot, "Screenshots")
         XCTAssertEqual(strings.settingsRecording, "Recording")
         XCTAssertEqual(strings.settingsTextRecognition, "Text Recognition")
         XCTAssertEqual(strings.settingsPermissions, "Permissions")
+        XCTAssertEqual(strings.settingsAccessibilityPermission, "Accessibility permission")
+        XCTAssertEqual(strings.settingsInputMonitoringPermission, "Input Monitoring permission")
         XCTAssertEqual(strings.settingsSaveLocation, "Save location")
+        XCTAssertEqual(strings.settingsLaunchAtLogin, "Launch at login")
+        XCTAssertEqual(
+            strings.settingsLaunchAtLoginRequiresApproval,
+            "Allow Frame in Login Items & Extensions in System Settings."
+        )
+        XCTAssertEqual(
+            strings.settingsLaunchAtLoginUpdateFailed(errorDescription: "Denied"),
+            "Could not update login item: Denied"
+        )
         XCTAssertEqual(strings.settingsRestoreDefaultFolder, "Restore Default")
         XCTAssertEqual(strings.settingsCaptureHistory, "Local history")
         XCTAssertEqual(strings.settingsCaptureHistoryEnabled, "Keep recent captures")
@@ -40,19 +52,33 @@ final class AppStringsTests: XCTestCase {
         XCTAssertEqual(strings.captureHistoryTitle, "Capture History")
         XCTAssertEqual(strings.captureHistoryEmpty, "No local history yet")
         XCTAssertEqual(strings.captureHistoryRestore, "Restore")
+        XCTAssertEqual(strings.captureHistoryDeleteConfirmationTitle, "Delete this capture?")
+        XCTAssertEqual(strings.screenRecordingPermissionContinue, "Continue")
     }
 
     func testExplicitChineseStrings() {
         let strings = AppStrings(language: .zhHans)
 
-        XCTAssertEqual(strings.menuCapture, "截图")
+        XCTAssertEqual(strings.menuCapture, "截取屏幕")
+        XCTAssertEqual(strings.menuRecordScreen, "录制屏幕")
         XCTAssertEqual(strings.menuCaptureHistory, "捕获历史")
         XCTAssertEqual(strings.settingsTitle, "设置")
         XCTAssertEqual(strings.settingsScreenshot, "截图")
         XCTAssertEqual(strings.settingsRecording, "录屏")
         XCTAssertEqual(strings.settingsTextRecognition, "文字识别")
         XCTAssertEqual(strings.settingsPermissions, "权限")
+        XCTAssertEqual(strings.settingsAccessibilityPermission, "辅助功能权限")
+        XCTAssertEqual(strings.settingsInputMonitoringPermission, "输入监控权限")
         XCTAssertEqual(strings.settingsSaveLocation, "保存位置")
+        XCTAssertEqual(strings.settingsLaunchAtLogin, "登录时启动")
+        XCTAssertEqual(
+            strings.settingsLaunchAtLoginRequiresApproval,
+            "请在系统设置的“登录项与扩展”中允许 Frame。"
+        )
+        XCTAssertEqual(
+            strings.settingsLaunchAtLoginUpdateFailed(errorDescription: "已拒绝"),
+            "无法更新登录项：已拒绝"
+        )
         XCTAssertEqual(strings.settingsRestoreDefaultFolder, "恢复默认")
         XCTAssertEqual(strings.settingsCaptureHistory, "本地历史")
         XCTAssertEqual(strings.settingsCaptureHistoryEnabled, "保存最近捕获")
@@ -80,6 +106,8 @@ final class AppStringsTests: XCTestCase {
         XCTAssertEqual(strings.captureHistoryTitle, "捕获历史")
         XCTAssertEqual(strings.captureHistoryEmpty, "暂无本地历史")
         XCTAssertEqual(strings.captureHistoryRestore, "恢复")
+        XCTAssertEqual(strings.captureHistoryDeleteConfirmationTitle, "删除这条捕获记录？")
+        XCTAssertEqual(strings.screenRecordingPermissionContinue, "继续")
     }
 
     func testOCRStringsAreLocalized() {

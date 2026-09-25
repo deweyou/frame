@@ -71,6 +71,7 @@ final class SettingsWindowControllerTests: XCTestCase {
     }
 
     func testScreenshotShortcutSettingsUseInlineRecorder() {
+        XCTAssertTrue(SettingsGeneralMetrics.containsLaunchAtLogin)
         XCTAssertTrue(SettingsGeneralMetrics.containsScreenshotShortcut)
         XCTAssertTrue(SettingsGeneralMetrics.containsRecordingShortcut)
         XCTAssertFalse(SettingsScreenshotMetrics.containsShortcut)

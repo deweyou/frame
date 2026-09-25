@@ -25,6 +25,8 @@ your screenshots or recordings.
 Frame lives in the menu bar instead of opening a large window. After each
 screenshot or recording, a small preview appears in the corner of your screen.
 From there you can copy it, save it, edit it, keep it visible, or close it.
+The menu keeps Capture Screenshot and Record Screen as separate direct actions
+and shows each configured shortcut beside its action.
 
 The goal is simple: capture what you need, then get back to what you were doing.
 
@@ -72,10 +74,19 @@ The goal is simple: capture what you need, then get back to what you were doing.
 - Bring an older item back into the corner preview.
 - Choose how long Frame keeps recent items.
 
+### Start Automatically
+
+- Turn on Launch at Login in Settings to keep Frame available from the menu bar
+  after signing in to your Mac.
+
 ## Permissions
 
 Frame needs the macOS Screen Recording permission so it can see what is on your
 screen when you take a screenshot or recording. The name sounds broader than
 screenshots, but macOS uses this permission for screenshot apps too.
+
+Frame also lists Accessibility and Input Monitoring in Settings. Those optional
+permissions support automatic scrolling and live keyboard hints; their status
+refreshes after you return from System Settings.
 
 See [macOS Permissions](docs/permissions.md) for more detail.

@@ -22,6 +22,14 @@ final class CaptureHistoryStoreTests: XCTestCase {
         try super.tearDownWithError()
     }
 
+    func testDefaultRootDirectorySeparatesDevelopmentHistoryFromProduction() {
+        let production = CaptureHistoryStore.defaultRootDirectory(bundleIdentifier: "dev.deweyou.frame")
+        let development = CaptureHistoryStore.defaultRootDirectory(bundleIdentifier: "dev.deweyou.frame.dev")
+
+        XCTAssertTrue(production.path.hasSuffix("/Application Support/Frame/History"))
+        XCTAssertTrue(development.path.hasSuffix("/Application Support/Frame Dev/History"))
+    }
+
     func testAddScreenshotStoresMetadataAndPNGData() throws {
         let record = try XCTUnwrap(try store.addScreenshot(
             pngData: Data([1, 2, 3]),

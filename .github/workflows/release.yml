@@ -56,7 +56,7 @@ jobs:
         run: swift build
 
       - name: Package App
-        run: scripts/package-app.sh
+        run: FRAME_APP_VARIANT=production scripts/package-app.sh
 
       - name: Package Release
         run: scripts/package-release.sh
@@ -67,6 +67,7 @@ jobs:
           test -f "$release_dir/${{ steps.version.outputs.artifact_name }}.zip"
           test -f "$release_dir/${{ steps.version.outputs.artifact_name }}.dmg"
           test -f "$release_dir/SHA256SUMS"
+          test "$(plutil -extract CFBundleIdentifier raw .build/app/Frame.app/Contents/Info.plist)" = "dev.deweyou.frame"
           (cd "$release_dir" && shasum -a 256 -c SHA256SUMS)
           hdiutil verify "$release_dir/${{ steps.version.outputs.artifact_name }}.dmg"
 

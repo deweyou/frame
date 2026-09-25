@@ -109,6 +109,40 @@ final class ScrollingScreenshotSessionControllerTests: XCTestCase {
         controller.cancel()
     }
 
+    func testAutoScrollRequestsAccessibilityBeforeEnabling() throws {
+        let screenFrame = try XCTUnwrap(NSScreen.screens.first?.frame)
+        let selectionRect = CGRect(
+            x: screenFrame.minX + 40,
+            y: screenFrame.minY + 50,
+            width: min(120, screenFrame.width - 80),
+            height: min(90, screenFrame.height - 100)
+        )
+        var didRequestPermission = false
+        var didScroll = false
+        let controller = ScrollingScreenshotSessionController(
+            captureRegion: { rect in self.makeCapturedScreenshot(size: rect.size, rect: rect) },
+            scrollRegion: { _ in didScroll = true },
+            scheduleStep: { _, _ in },
+            canAutoScroll: { false },
+            requestAutoScrollPermission: { didRequestPermission = true }
+        )
+
+        controller.start(
+            selection: SelectionCapture(rect: selectionRect, kind: .region),
+            strings: AppStrings(language: .en),
+            onComplete: { _ in XCTFail("Should not complete") },
+            onCancel: {},
+            onFailure: { error in XCTFail("Unexpected failure: \(error)") }
+        )
+        controller.beginScrolling()
+        controller.toggleAutoScroll()
+
+        XCTAssertTrue(didRequestPermission)
+        XCTAssertFalse(didScroll)
+        XCTAssertFalse(controller.isAutoScrollingEnabledForTesting())
+        controller.cancel()
+    }
+
     func testFinishImmediatelyClosesCaptureHUDWhileFinalStitchRuns() throws {
         let screenFrame = try XCTUnwrap(NSScreen.screens.first?.frame)
         let selectionRect = CGRect(

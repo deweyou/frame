@@ -168,12 +168,16 @@ final class CaptureHistoryStore {
         decoder.dateDecodingStrategy = .iso8601
     }
 
-    static func defaultRootDirectory(fileManager: FileManager = .default) -> URL {
+    static func defaultRootDirectory(
+        fileManager: FileManager = .default,
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier
+    ) -> URL {
         let applicationSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first
             ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
+        let appDirectoryName = bundleIdentifier == "dev.deweyou.frame.dev" ? "Frame Dev" : "Frame"
         return applicationSupport
-            .appendingPathComponent("Frame", isDirectory: true)
+            .appendingPathComponent(appDirectoryName, isDirectory: true)
             .appendingPathComponent("History", isDirectory: true)
     }
 
