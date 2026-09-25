@@ -40,4 +40,5 @@ jobs:
           test -d .build/app/Frame.app
           test -x .build/app/Frame.app/Contents/MacOS/Frame
           plutil -lint .build/app/Frame.app/Contents/Info.plist
+          test "$(plutil -extract CFBundleIdentifier raw .build/app/Frame.app/Contents/Info.plist)" = "dev.deweyou.frame"
           codesign -dv .build/app/Frame.app

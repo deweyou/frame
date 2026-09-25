@@ -118,13 +118,71 @@ final class ReleaseToolingTests: XCTestCase {
             "bash",
             "-c",
             """
-            for script in scripts/package-release.sh scripts/prepare-release-version.sh; do
+            for script in scripts/package-app.sh scripts/package-release.sh scripts/prepare-release-version.sh; do
                 bash -n "$script" || exit 1
             done
             """,
         ])
 
         XCTAssertEqual(result.exitCode, 0, result.diagnosticOutput)
+    }
+
+    func testPackageAppUsesRegisteredProductionIdentityByDefault() throws {
+        let result = try run([
+            "bash",
+            repositoryRoot.appendingPathComponent("scripts/package-app.sh").path,
+            "--print-configuration",
+        ])
+
+        XCTAssertEqual(result.exitCode, 0, result.diagnosticOutput)
+        XCTAssertTrue(result.stdout.contains("FRAME_APP_VARIANT=production"), result.diagnosticOutput)
+        XCTAssertTrue(result.stdout.contains("FRAME_APP_NAME=Frame"), result.diagnosticOutput)
+        XCTAssertTrue(result.stdout.contains("FRAME_BUNDLE_ID=dev.deweyou.frame"), result.diagnosticOutput)
+        XCTAssertTrue(
+            result.stdout.contains("FRAME_APP_PATH=\(repositoryRoot.path)/.build/app/Frame.app"),
+            result.diagnosticOutput
+        )
+    }
+
+    func testPackageAppUsesRegisteredDevelopmentIdentityWhenRequested() throws {
+        let result = try run(
+            [
+                "bash",
+                repositoryRoot.appendingPathComponent("scripts/package-app.sh").path,
+                "--print-configuration",
+            ],
+            environment: ["FRAME_APP_VARIANT": "development"]
+        )
+
+        XCTAssertEqual(result.exitCode, 0, result.diagnosticOutput)
+        XCTAssertTrue(result.stdout.contains("FRAME_APP_VARIANT=development"), result.diagnosticOutput)
+        XCTAssertTrue(result.stdout.contains("FRAME_APP_NAME=Frame Dev"), result.diagnosticOutput)
+        XCTAssertTrue(result.stdout.contains("FRAME_BUNDLE_ID=dev.deweyou.frame.dev"), result.diagnosticOutput)
+        XCTAssertTrue(
+            result.stdout.contains("FRAME_APP_PATH=\(repositoryRoot.path)/.build/app/Frame Dev.app"),
+            result.diagnosticOutput
+        )
+    }
+
+    func testPackageAppRejectsUnknownVariant() throws {
+        let result = try run(
+            [
+                "bash",
+                repositoryRoot.appendingPathComponent("scripts/package-app.sh").path,
+                "--print-configuration",
+            ],
+            environment: ["FRAME_APP_VARIANT": "staging"]
+        )
+
+        XCTAssertNotEqual(result.exitCode, 0)
+        XCTAssertTrue(result.diagnosticOutput.contains("Unsupported FRAME_APP_VARIANT: staging"), result.diagnosticOutput)
+    }
+
+    func testPackageReleaseAlwaysUsesProductionVariant() throws {
+        let script = try String(contentsOf: repositoryRoot.appendingPathComponent("scripts/package-release.sh"))
+
+        XCTAssertTrue(script.contains("FRAME_APP_VARIANT=production"), script)
+        XCTAssertFalse(script.contains("FRAME_APP_VARIANT=development"), script)
     }
 
     func testManualReleaseWorkflowExposesVersionBumpChoices() throws {

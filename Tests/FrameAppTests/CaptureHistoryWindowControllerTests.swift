@@ -108,7 +108,7 @@ final class CaptureHistoryWindowControllerTests: XCTestCase {
         }?.contentView)
         contentView.layoutSubtreeIfNeeded()
 
-        let filterControl = try XCTUnwrap(findView(in: contentView, accessibilityLabel: "Capture History Filter"))
+        let filterControl = try XCTUnwrap(findView(in: contentView, accessibilityLabel: "捕获历史筛选"))
         let buttons = findButtons(in: filterControl)
         XCTAssertEqual(buttons.map(\.title), ["全部", "截图", "录屏"])
         XCTAssertLessThanOrEqual(filterControl.frame.width, 152)
@@ -127,7 +127,8 @@ final class CaptureHistoryWindowControllerTests: XCTestCase {
             restore: { restored = $0 },
             copy: { copied = $0 },
             save: { saved = $0 },
-            delete: { deleted = $0 }
+            delete: { deleted = $0 },
+            confirmDelete: { _, _ in true }
         )
 
         controller.show(strings: AppStrings(language: .en))
@@ -141,6 +142,26 @@ final class CaptureHistoryWindowControllerTests: XCTestCase {
         XCTAssertEqual(saved, record)
         XCTAssertEqual(deleted, record)
         controller.close()
+    }
+
+    @MainActor
+    func testDeleteDoesNotRunWhenConfirmationIsCancelled() throws {
+        let record = try addRecord(kind: .screenshot, date: Date(timeIntervalSince1970: 100))
+        var didDelete = false
+        let controller = CaptureHistoryWindowController(
+            store: store,
+            delete: { _ in didDelete = true },
+            confirmDelete: { _, _ in false }
+        )
+
+        controller.show(strings: AppStrings(language: .en))
+        defer {
+            controller.close()
+        }
+
+        XCTAssertFalse(controller.deleteRecord(record))
+        XCTAssertFalse(didDelete)
+        XCTAssertEqual(controller.visibleRecords(), [record])
     }
 
     @MainActor

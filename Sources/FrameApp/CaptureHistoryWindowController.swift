@@ -25,6 +25,7 @@ final class CaptureHistoryWindowController: NSObject {
     private let copy: (CaptureHistoryRecord) -> Void
     private let save: (CaptureHistoryRecord) -> Void
     private let delete: (CaptureHistoryRecord) -> Void
+    private let confirmDelete: (CaptureHistoryRecord, AppStrings) -> Bool
     private var window: NSWindow?
     private var gridView: CaptureHistoryGridView?
     private var emptyLabel: NSTextField?
@@ -42,7 +43,10 @@ final class CaptureHistoryWindowController: NSObject {
         restore: @escaping (CaptureHistoryRecord) -> Void = { _ in },
         copy: @escaping (CaptureHistoryRecord) -> Void = { _ in },
         save: @escaping (CaptureHistoryRecord) -> Void = { _ in },
-        delete: @escaping (CaptureHistoryRecord) -> Void = { _ in }
+        delete: @escaping (CaptureHistoryRecord) -> Void = { _ in },
+        confirmDelete: @escaping (CaptureHistoryRecord, AppStrings) -> Bool = { _, strings in
+            CaptureHistoryDeletionConfirmation.confirm(strings: strings)
+        }
     ) {
         self.store = store
         self.thumbnailProvider = thumbnailProvider
@@ -50,6 +54,7 @@ final class CaptureHistoryWindowController: NSObject {
         self.copy = copy
         self.save = save
         self.delete = delete
+        self.confirmDelete = confirmDelete
         super.init()
     }
 
@@ -183,10 +188,16 @@ final class CaptureHistoryWindowController: NSObject {
         save(record)
     }
 
-    func deleteRecord(_ record: CaptureHistoryRecord) {
+    @discardableResult
+    func deleteRecord(_ record: CaptureHistoryRecord) -> Bool {
+        guard confirmDelete(record, strings) else {
+            return false
+        }
+
         delete(record)
         reloadRecords()
         reloadGrid()
+        return true
     }
 
     private func makeContentView() -> NSView {
@@ -348,7 +359,7 @@ private final class CaptureHistoryFilterControl: NSVisualEffectView {
 
     init(strings: AppStrings) {
         super.init(frame: .zero)
-        setAccessibilityLabel("Capture History Filter")
+        setAccessibilityLabel(strings.captureHistoryFilterAccessibilityLabel)
         material = .hudWindow
         blendingMode = .withinWindow
         state = .active
@@ -420,6 +431,19 @@ private final class CaptureHistoryFilterControl: NSVisualEffectView {
         for button in buttons {
             button.isFilterSelected = button.filter == selectedFilter
         }
+    }
+}
+
+@MainActor
+private enum CaptureHistoryDeletionConfirmation {
+    static func confirm(strings: AppStrings) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = strings.captureHistoryDeleteConfirmationTitle
+        alert.informativeText = strings.captureHistoryDeleteConfirmationMessage
+        alert.addButton(withTitle: strings.captureHistoryDelete)
+        alert.addButton(withTitle: strings.cancel)
+        return alert.runModal() == .alertFirstButtonReturn
     }
 }
 

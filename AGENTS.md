@@ -1,6 +1,6 @@
 ## Development Workflow
 
-Use the repository's `ddev` skill as the default lifecycle owner for non-trivial development work. Load product, UI, coding, delivery, and memory modules through DDev from the global Dewey asset cache instead of installing those component skills in this repository.
+Use `harness.yaml` as the repository's durable agent-work configuration. Deweyou Harness owns Commitment, Plan, execution, Evidence, and delivery boundaries only when the user explicitly invokes it.
 
 ## Project Context
 
@@ -25,21 +25,21 @@ swift build
 scripts/package-app.sh
 ```
 
-The packaging script creates `.build/app/Frame.app` and signs it for local testing. It uses ad-hoc signing by default, or `FRAME_CODESIGN_IDENTITY` when a stable local Code Signing identity is available.
+The packaging script creates the production `.build/app/Frame.app` by default. Set `FRAME_APP_VARIANT=development` to create `.build/app/Frame Dev.app` with bundle identifier `dev.deweyou.frame.dev`. It uses ad-hoc signing by default, or `FRAME_CODESIGN_IDENTITY` when a stable local Code Signing identity is available.
 
 For user-facing GUI changes, final handoff must explicitly ask whether to replace the local test app unless the user already declined or replacement was already completed in the same turn.
 
 When replacing the user's local app or preparing a repeat GUI test build, do not use the default ad-hoc package. Always run this exact stable-signing flow:
 
 ```sh
-FRAME_CODESIGN_IDENTITY="Frame Local Dev CLI" scripts/package-app.sh
+FRAME_APP_VARIANT=development FRAME_CODESIGN_IDENTITY="Frame Local Dev CLI" scripts/package-app.sh
 mkdir -p ~/Applications
-rm -rf ~/Applications/Frame.app
-ditto .build/app/Frame.app ~/Applications/Frame.app
-open ~/Applications/Frame.app
+rm -rf ~/Applications/Frame\ Dev.app
+ditto ".build/app/Frame Dev.app" ~/Applications/Frame\ Dev.app
+open ~/Applications/Frame\ Dev.app
 ```
 
-After replacement, verify `codesign -dv --verbose=2 ~/Applications/Frame.app` reports `Authority=Frame Local Dev CLI` before telling the user it is ready.
+After replacement, verify `codesign -dv --verbose=2 ~/Applications/Frame\ Dev.app` reports `Authority=Frame Local Dev CLI` before telling the user it is ready.
 
 ## Knowledge Base
 
@@ -50,6 +50,7 @@ Use `docs/` as the project knowledge base:
 - `docs/overlay-interactions.md` explains screenshot overlay drag, cursor, handle, and HUD tooltip behavior.
 - `docs/testing.md` explains automated test layers, AppKit component e2e boundaries, and the expectation to cover new interactive requirements with e2e tests.
 - `docs/permissions.md` explains macOS Screen Recording/TCC behavior.
+- `docs/signing-and-device-migration.md` explains the development/production App IDs, Apple signing assets, and replacement-Mac recovery flow.
 - `DESIGN.md` explains durable interface principles and HUD/Quick Access behavior.
 - `docs/superpowers/specs/` stores approved product specs.
 - `docs/superpowers/plans/` stores implementation plans.
@@ -66,7 +67,7 @@ For user-facing features, behavior changes, bug fixes, and release workflow chan
 
 ## macOS Permission Notes
 
-Screen Recording permission is tied to the app identity and code signature. Local ad-hoc builds can require re-authorization after rebuilding because the binary signature changes. For repeat manual testing, prefer a stable local Code Signing identity such as `FRAME_CODESIGN_IDENTITY="Frame Local Dev CLI"`, copy the packaged app to a stable path such as `~/Applications/Frame.app`, and authorize that exact app. Keep this as the default local development path even after Apple signing certificates exist; reserve Apple Development or Developer ID identities for explicit signing-path or distribution tests.
+Screen Recording permission is tied to the app identity and code signature. Local ad-hoc builds can require re-authorization after rebuilding because the binary signature changes. For repeat manual testing, package the `development` variant with `FRAME_CODESIGN_IDENTITY="Frame Local Dev CLI"`, copy it to the stable `~/Applications/Frame Dev.app` path, and authorize that exact app. Keep this as the default local development path even after Apple signing certificates exist; reserve Apple Development or Developer ID identities for explicit signing-path or distribution tests.
 
 ## Git Hygiene
 

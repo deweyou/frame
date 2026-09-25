@@ -1,0 +1,108 @@
+version: 3
+strategy: worktree
+
+context:
+  project-rules:
+    source:
+      entry: AGENTS.md
+  architecture:
+    source:
+      entry: docs/architecture.md
+
+skills:
+  frame-gui-verification:
+    source:
+      entry: .agents/skills/frame-gui-verification
+
+nodes:
+  implement-change:
+    kind: agent
+    description: Implement one scoped Frame change under the active Commitment and task-owned Plan.
+    inputs:
+      task:
+        type: string
+        description: Scoped implementation assignment and acceptance boundary.
+    outputs:
+      implementation:
+        type: object
+        description: Structured summary of the files and behavior changed.
+      verification-evidence:
+        type: array
+        description: Evidence references produced while verifying the change.
+    authority: [read-workspace, write-workspace]
+
+  review-change:
+    kind: agent
+    description: Review a scoped Frame change for correctness, regressions, and repository contract compliance.
+    inputs:
+      implementation:
+        type: object
+        description: Structured summary of the implementation to review.
+    outputs:
+      review:
+        type: object
+        description: Review verdict, findings, and remaining risks.
+    authority: [read-workspace]
+
+  test:
+    kind: command
+    description: Run the complete local Swift test suite, including AppKit component tests.
+    command: swift test
+    outputs:
+      test-result:
+        type: object
+        description: Result of the complete local Swift test suite.
+
+  build:
+    kind: command
+    description: Build all Frame Swift package products.
+    command: swift build
+    outputs:
+      build-result:
+        type: object
+        description: Result of building the Swift package products.
+
+  package-app:
+    kind: command
+    description: Package and locally sign Frame.app for non-destructive bundle verification.
+    command: scripts/package-app.sh
+    outputs:
+      app-bundle:
+        type: object
+        description: Metadata and verification result for the packaged Frame.app bundle.
+
+  verify-gui-change:
+    kind: agent
+    description: Verify a user-facing Frame GUI change in the stable locally signed app and record live evidence.
+    skill: [frame-gui-verification]
+    inputs:
+      change-summary:
+        type: object
+        description: User-visible behavior changed and the live claims that require verification.
+      verification-evidence:
+        type: array
+        description: Current automated test, build, and package Evidence available for reuse.
+    outputs:
+      gui-verification:
+        type: object
+        description: Structured live verification result, installed bundle identity, observations, and remaining gaps.
+      verification-evidence:
+        type: array
+        description: Evidence references produced while verifying the installed app.
+    authority: [read-workspace, build-workspace, replace-local-test-app, launch-local-app]
+
+  summarize-delivery:
+    kind: agent
+    description: Summarize implemented changes, verification evidence, remaining risks, and explicit delivery gates.
+    inputs:
+      implementation:
+        type: object
+        description: Structured summary of the implemented change.
+      verification-evidence:
+        type: array
+        description: Evidence references produced by verification nodes.
+    outputs:
+      delivery-summary:
+        type: object
+        description: Final summary of changes, proof, risks, and delivery status.
+    authority: [read-workspace]

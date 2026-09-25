@@ -46,6 +46,10 @@ system tool, not a branded dashboard.
   show reset only for custom locations.
 - About/version/build metadata belongs in a small secondary English footer, not
   a primary settings section.
+- Permissions use one compact group with separate Screen Recording,
+  Accessibility, and Input Monitoring rows. Show the current state and direct
+  request/System Settings actions, then refresh state when Frame becomes active
+  again. Do not imply that optional feature permissions block basic capture.
 - Long option collections such as OCR language toggles should stay out of the
   main settings scroll. Use a whole-row entry with a selected-count summary that
   opens an attached sheet for detailed editing.
@@ -65,6 +69,10 @@ system tool, not a branded dashboard.
   they are selecting.
 
 ## Capture HUD
+
+- The menu bar menu exposes Capture Screenshot and Record Screen as separate
+  direct actions. Show configured shortcuts using native menu key equivalents;
+  keep Record Screen available even when its optional global shortcut is unset.
 
 - Use native glass/material effects first. In AppKit, prefer
   `NSVisualEffectView` with a HUD-appropriate material before drawing custom

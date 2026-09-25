@@ -49,6 +49,8 @@ final class ScrollingScreenshotSessionController: ScrollingScreenshotSessionCont
     typealias ScheduleStep = @MainActor (TimeInterval, @escaping @MainActor @Sendable () -> Void) -> Void
     typealias PerformStitch = (@escaping () -> Void) -> Void
     typealias IncrementalPipelineFactory = () -> any ScrollingScreenshotIncrementalProcessing
+    typealias PermissionCheck = @MainActor () -> Bool
+    typealias PermissionRequest = @MainActor () -> Void
 
     private let stepDelay: TimeInterval
     private let maximumScrollSteps: Int
@@ -67,6 +69,8 @@ final class ScrollingScreenshotSessionController: ScrollingScreenshotSessionCont
     private let usesDefaultFinalPipeline: Bool
     private let usesDefaultPreviewPipeline: Bool
     private let incrementalPipelineFactory: IncrementalPipelineFactory?
+    private let canAutoScroll: PermissionCheck
+    private let requestAutoScrollPermission: PermissionRequest
     private let previewPresenter: (any ScrollingScreenshotPreviewPresenting)?
     private let boundaryOverlayController = RecordingBoundaryOverlayController()
     private var activeSession: ScrollingScreenshotSession?
@@ -98,7 +102,9 @@ final class ScrollingScreenshotSessionController: ScrollingScreenshotSessionCont
         performStitch: PerformStitch? = nil,
         performPreviewStitch: PerformStitch? = nil,
         previewPresenter: (any ScrollingScreenshotPreviewPresenting)? = nil,
-        incrementalPipelineFactory: IncrementalPipelineFactory? = nil
+        incrementalPipelineFactory: IncrementalPipelineFactory? = nil,
+        canAutoScroll: PermissionCheck? = nil,
+        requestAutoScrollPermission: PermissionRequest? = nil
     ) {
         self.stepDelay = stepDelay
         self.maximumScrollSteps = maximumScrollSteps
@@ -123,6 +129,12 @@ final class ScrollingScreenshotSessionController: ScrollingScreenshotSessionCont
         self.usesDefaultPreviewPipeline = previewStitch == nil && performPreviewStitch == nil
         self.previewPresenter = previewPresenter ?? (showsInterface ? ScrollingScreenshotPreviewPanelController() : nil)
         self.incrementalPipelineFactory = incrementalPipelineFactory
+        self.canAutoScroll = canAutoScroll ?? {
+            scrollRegion != nil || AccessibilityPermission.hasAccess
+        }
+        self.requestAutoScrollPermission = requestAutoScrollPermission ?? {
+            _ = AccessibilityPermission.requestAccess()
+        }
     }
 
     convenience init(captureService: CaptureService = CaptureService()) {
@@ -252,6 +264,12 @@ final class ScrollingScreenshotSessionController: ScrollingScreenshotSessionCont
     func toggleAutoScroll() {
         guard var session = activeSession,
               session.phase == .running else {
+            return
+        }
+
+        if !session.isAutoScrollingEnabled,
+           !canAutoScroll() {
+            requestAutoScrollPermission()
             return
         }
 

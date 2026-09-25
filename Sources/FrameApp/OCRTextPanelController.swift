@@ -139,7 +139,7 @@ final class OCRTextPanelController: NSObject {
 
         let scrollView = OCRCutScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.hasVerticalScroller = false
+        scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.borderType = .noBorder
         scrollView.autohidesScrollers = true

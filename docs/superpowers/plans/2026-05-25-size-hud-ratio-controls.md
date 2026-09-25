@@ -809,7 +809,7 @@ Signed with identity: Frame Local Dev CLI
 Run:
 
 ```sh
-osascript -e 'tell application id "dev.dewey.frame" to quit' || true
+osascript -e 'tell application id "dev.deweyou.frame" to quit' || true
 sleep 1
 if pgrep -x Frame >/dev/null; then pkill -x Frame; fi
 mkdir -p ~/Applications

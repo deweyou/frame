@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Add a Launch at Login setting backed by macOS Service Management, with
+  approval and failure feedback that reflects the system's real login-item state.
+- Separate development and production packaging as `Frame Dev`
+  (`dev.deweyou.frame.dev`) and `Frame` (`dev.deweyou.frame`), and document
+  signing setup and recovery for a new development Mac.
+- Make screenshot and screen recording discoverable as separate menu actions,
+  with native shortcut labels that follow the configured shortcuts.
+- Show Screen Recording, Accessibility, and Input Monitoring together in
+  Settings, refresh their state after returning from System Settings, and fully
+  localize the Screen Recording permission flow.
+- Confirm before permanently deleting a capture-history item, and show a native
+  vertical scroller for long recognized-text results.
 - Keep recognized-text cut labels readable when the OCR panel uses or switches
   to macOS Dark Mode.
 - Show a fixed side preview during scrolling screenshots so users can see

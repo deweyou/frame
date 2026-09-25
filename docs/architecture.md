@@ -27,6 +27,7 @@ flowchart TD
     Settings --> QuickAccess
     Settings --> Output
     Settings --> History
+    Settings --> LoginItem[LaunchAtLoginService]
 ```
 
 Frame is a native macOS menu bar app. AppKit owns the runtime because the product depends on system-level behavior: status items, global hotkeys, Screen Recording permission, full-screen overlay windows, ScreenCaptureKit recording, pasteboard access, and local file output.
@@ -48,7 +49,7 @@ behavior.
 1. `FrameApplication` starts `NSApplication` with accessory activation policy.
 2. `AppDelegate` creates the menu bar item, hotkey controller, overlay controller, capture, scrolling screenshot, and recording services, active-screen resolver, preview controllers, and output writers. It rejects new capture shortcut entries while selection, scrolling screenshot, recording countdown, active recording, paused recording, or recording finalization is already in progress.
 3. `StatusItemController` exposes menu commands for screenshot, capture history, settings, and quit. While recording, it switches to a red recording icon and adds a stop-recording action.
-4. `SettingsWindowController` hosts the SwiftUI settings window, including custom screenshot and recording shortcut recorders, screenshot save location, window screenshot style selection, local history controls, language selection, Screen Recording permission checks, and about/version details.
+4. `SettingsWindowController` hosts the SwiftUI settings window, including Launch at Login, custom screenshot and recording shortcut recorders, screenshot save location, window screenshot style selection, local history controls, language selection, Screen Recording permission checks, and about/version details. `LaunchAtLoginService` keeps `SMAppService.mainApp` behind a testable project-owned boundary and reports the operating system's real registration or approval state instead of persisting a duplicate preference.
 5. `SettingsStore` persists user-facing app settings in `UserDefaults`: screenshot shortcut values, an optional recording shortcut, screenshot save directory, window screenshot style, remembered screenshot selection, local history preferences, recording options, OCR languages, and language preference. The recording shortcut defaults to unset, and the window screenshot style defaults to Original.
 6. `AppStrings` centralizes user-facing copy for Simplified Chinese and English. The language setting can follow the system language or force either supported language.
 7. `HotKeyController` registers the selected screenshot shortcut and, when configured, the recording shortcut through Carbon and routes them to separate screenshot and recording setup flows.
@@ -94,12 +95,13 @@ AppKit-specific code stays in `FrameApp`. Keep permission, capture, recording, p
 - Scrolling screenshots reuse the rectangular region capture path repeatedly. Manual scrolling is the default; optional automatic assist uses small generic scroll-wheel events rather than app-specific accessibility inspection, so it cannot reason about application-specific scroll containers. The incremental engine bounds retained state and rejects unreliable samples instead of corrupting the accepted canvas. A static footer is retained once, while repeated historical content stops automatic assist. Region capture remains behind `CaptureService` so its current CoreGraphics adapter can be migrated to ScreenCaptureKit without changing stitching or session control.
 - `RecordingService` is intentionally limited to one display per recording session. A full-screen recording is modeled as selecting the full screen on one display, not as a simultaneous multi-display recording.
 - Selection overlay windows, recording HUDs, recording boundary overlays, and transient Frame panels opt out of system capture sharing so Frame controls are visible to the user but absent from screenshot or recording output. Mouse click highlights and held-key keyboard hints are output enhancements and are composited into recording frames instead of relying on capturing Frame control windows.
-- Local development should use a stable self-signed Code Signing identity through `FRAME_CODESIGN_IDENTITY` to reduce TCC permission churn.
-- Screen Recording permission is sensitive to bundle identity, path, and signature. Keep local testing on a stable app path such as `~/Applications/Frame.app`.
+- Local development should use the `development` app variant and a stable self-signed Code Signing identity through `FRAME_CODESIGN_IDENTITY` to reduce TCC permission churn. Use Apple Development only for explicit Team-backed integration checks.
+- Launch at Login uses `SMAppService.mainApp`. Its source of truth is macOS Service Management rather than `UserDefaults`; a replacement Mac must enable the login item again, and a `requiresApproval` state remains visibly requested until the user approves Frame in System Settings.
+- Screen Recording permission is sensitive to bundle identity, path, and signature. Keep local testing on a stable app path such as `~/Applications/Frame Dev.app`, separate from the production `Frame.app`.
 - Localization currently uses the code-level `AppStrings` boundary instead of `.strings` resources to keep SwiftPM packaging simple for v0.1. Keep callers on `AppStrings` so a future resource-backed migration stays local.
-- Local history is a recovery cache, not the user's saved-file library. Its defaults are enabled, 7-day retention, and a 2 GB capacity limit. Cleanup deletes only Frame-owned cached files under Application Support.
+- Local history is a recovery cache, not the user's saved-file library. Its defaults are enabled, 7-day retention, and a 2 GB capacity limit. Cleanup deletes only Frame-owned cached files under Application Support. Production and development history use separate `Frame/History` and `Frame Dev/History` directories.
 - Screenshot and recording shortcut settings validate only local key/modifier shape, Frame-reserved shortcuts, and duplicates between Frame's two capture actions. The recording shortcut can be unset, so Frame only registers it when a value is configured. Frame does not proactively inspect system-wide macOS or third-party shortcut conflicts; Carbon registration failure rolls back to the previous working shortcuts.
 - Audio recording is reserved in the recording options model but not implemented yet.
 
 ---
-*Last updated: 2026-07-21 | Reason: document the incremental scrolling engine and closed-loop automatic assist*
+*Last updated: 2026-09-02 | Reason: add the Service Management boundary for Launch at Login*

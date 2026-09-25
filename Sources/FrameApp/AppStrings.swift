@@ -58,8 +58,15 @@ struct AppStrings {
 
     var menuCapture: String {
         switch language {
-        case .zhHans: "截图"
-        case .en: "Capture"
+        case .zhHans: "截取屏幕"
+        case .en: "Capture Screenshot"
+        }
+    }
+
+    var menuRecordScreen: String {
+        switch language {
+        case .zhHans: "录制屏幕"
+        case .en: "Record Screen"
         }
     }
 
@@ -102,6 +109,27 @@ struct AppStrings {
         switch language {
         case .zhHans: "通用"
         case .en: "General"
+        }
+    }
+
+    var settingsLaunchAtLogin: String {
+        switch language {
+        case .zhHans: "登录时启动"
+        case .en: "Launch at login"
+        }
+    }
+
+    var settingsLaunchAtLoginRequiresApproval: String {
+        switch language {
+        case .zhHans: "请在系统设置的“登录项与扩展”中允许 Frame。"
+        case .en: "Allow Frame in Login Items & Extensions in System Settings."
+        }
+    }
+
+    func settingsLaunchAtLoginUpdateFailed(errorDescription: String) -> String {
+        switch language {
+        case .zhHans: "无法更新登录项：\(errorDescription)"
+        case .en: "Could not update login item: \(errorDescription)"
         }
     }
 
@@ -220,6 +248,27 @@ struct AppStrings {
         switch language {
         case .zhHans: "屏幕录制权限"
         case .en: "Screen Recording permission"
+        }
+    }
+
+    var settingsAccessibilityPermission: String {
+        switch language {
+        case .zhHans: "辅助功能权限"
+        case .en: "Accessibility permission"
+        }
+    }
+
+    var settingsInputMonitoringPermission: String {
+        switch language {
+        case .zhHans: "输入监控权限"
+        case .en: "Input Monitoring permission"
+        }
+    }
+
+    var settingsRequestPermission: String {
+        switch language {
+        case .zhHans: "请求权限"
+        case .en: "Request Permission"
         }
     }
 
@@ -933,6 +982,27 @@ struct AppStrings {
         }
     }
 
+    var captureHistoryDeleteConfirmationTitle: String {
+        switch language {
+        case .zhHans: "删除这条捕获记录？"
+        case .en: "Delete this capture?"
+        }
+    }
+
+    var captureHistoryDeleteConfirmationMessage: String {
+        switch language {
+        case .zhHans: "这会永久删除 Frame 缓存的文件，无法撤销。"
+        case .en: "This permanently deletes the cached file from Frame and cannot be undone."
+        }
+    }
+
+    var captureHistoryFilterAccessibilityLabel: String {
+        switch language {
+        case .zhHans: "捕获历史筛选"
+        case .en: "Capture History Filter"
+        }
+    }
+
     var captureHistoryEmpty: String {
         switch language {
         case .zhHans: "暂无本地历史"
@@ -1141,6 +1211,43 @@ struct AppStrings {
         switch language {
         case .zhHans: "Frame 屏幕录制权限已开启"
         case .en: "Frame Screen Recording permission is enabled"
+        }
+    }
+
+    var screenRecordingPermissionRequiredTitle: String {
+        switch language {
+        case .zhHans: "Frame 需要屏幕录制权限"
+        case .en: "Frame Needs Screen Recording Permission"
+        }
+    }
+
+    var screenRecordingPermissionRequiredMessage: String {
+        switch language {
+        case .zhHans:
+            "macOS 要求截图工具获得屏幕录制授权。点击继续后，Frame 会向系统请求权限；如果系统没有弹窗，请在系统设置的“屏幕与系统音频录制”或“屏幕录制”中允许 Frame，授权后重新打开 Frame。"
+        case .en:
+            "macOS requires permission before Frame can capture the screen. Continue to request access. If no system prompt appears, allow Frame under Screen & System Audio Recording or Screen Recording in System Settings, then reopen Frame."
+        }
+    }
+
+    var screenRecordingPermissionContinue: String {
+        switch language {
+        case .zhHans: "继续"
+        case .en: "Continue"
+        }
+    }
+
+    var screenRecordingPermissionGrantedTitle: String {
+        switch language {
+        case .zhHans: "Frame 屏幕录制权限已开启"
+        case .en: "Screen Recording Permission Granted"
+        }
+    }
+
+    var screenRecordingPermissionRestartMessage: String {
+        switch language {
+        case .zhHans: "请重新打开 Frame 后再使用截图或录屏。"
+        case .en: "Reopen Frame before taking a screenshot or recording the screen."
         }
     }
 

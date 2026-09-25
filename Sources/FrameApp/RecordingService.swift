@@ -142,7 +142,7 @@ final class ScreenCaptureRecordingService: RecordingServicing {
 final class ScreenCaptureRecordingSession: NSObject, RecordingSessionControlling, @unchecked Sendable {
     private let request: RecordingRequest
     private let resolvedSelection: RecordingDisplaySelection
-    private let sampleQueue = DispatchQueue(label: "dev.dewey.frame.recording.samples")
+    private let sampleQueue = DispatchQueue(label: "dev.deweyou.frame.recording.samples")
     private let stateLock = NSLock()
     private var stream: SCStream?
     private var encoder: RecordingFrameEncoding?
@@ -490,7 +490,7 @@ final class RecordingKeyboardEventTap: @unchecked Sendable {
 
     func start() -> Bool {
         stop()
-        promptForAccessibilityIfNeeded()
+        requestInputMonitoringIfNeeded()
 
         let mask =
             (1 << CGEventType.keyDown.rawValue)
@@ -640,9 +640,12 @@ final class RecordingKeyboardEventTap: @unchecked Sendable {
         }
     }
 
-    private func promptForAccessibilityIfNeeded() {
-        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
+    private func requestInputMonitoringIfNeeded() {
+        guard !CGPreflightListenEventAccess() else {
+            return
+        }
+
+        _ = CGRequestListenEventAccess()
     }
 
     private static let handleEvent: CGEventTapCallBack = { _, type, event, userInfo in
